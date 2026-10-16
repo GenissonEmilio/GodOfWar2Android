@@ -15,6 +15,25 @@ Memoria compartida del equipo: todo hallazgo va aquí (regla 3 de CLAUDE.md).
 
 Las direcciones de este archivo solo valen para el ELF con ese SHA1.
 
+## Estado del repositorio (DaniSBR1, 2026-10-16, ~02:10)
+
+Foto de dónde lo dejé, para quien siga (y su Claude). Lo de abajo, en "Bloqueos", explica cada paso.
+
+| Qué | Estado |
+|---|---|
+| Fase 0 | cxldsakeb y DaniSBR1, hecha. Falta Ale |
+| Fase 1 | Hecha (mapa de funciones, 76 stubs, `[mmio]`; el runner compila) |
+| Fase 2, objetivo 1 (arranca y carga los IRX) | **Hecho**: cargan los 8 IRX y el juego se conecta a sus servidores |
+| Fase 2, objetivo 2 (inicialización y lectura del disco) | **En curso**: 5 bloqueos resueltos (override); el 6.º tiene arreglo **sin probar** en el fork |
+| `main` del repo | Todo lo de arriba. El submódulo sigue en `godofwar2` (`083a286`), sin cambios |
+| Fork, rama `godofwar2-ioman` (`b14b951`) | `open`/`close`/`read`/`lseek` de `ioman` para `cdrom0:` (bloqueo 6). **Compila; no se llegó a probar en el juego.** No está fusionada en `godofwar2` |
+| Configuración | Las 733 funciones del escáner pasaron de `entry_points` a `funcmap.csv` (bloqueo 4). **Hay que volver a ejecutar `recompile.ps1`** tras el `git pull` |
+| Compilación | No se llegó a compilar el runner con estos dos últimos cambios (`funcmap.csv` + `ioman`): la compilación se paró a mitad. `recompile.ps1` sí terminó sin errores y el código generado ya registra los puntos de reanudación (`0x1857F8` → `cfn_00185748`) |
+
+**Siguiente paso:** probar el bloqueo 6 con la rama `godofwar2-ioman` (instrucciones en CLAUDE.md, "Estado actual"). Si funciona, fusionarla en `godofwar2`, subir y mover el puntero del submódulo aquí. Si sigue colgándose en `0x27D7E8`, la causa no era (solo) el índice: mirar qué intenta leer SMPD y qué devuelve.
+
+**Parches TEMPORALES vivos:** `0x1875E0` (argumentos de `main`; sobra cuando `SetupThread` los rellene en el runtime).
+
 ## Datos del ELF y del disco
 
 - **Punto de entrada `0x100008`** (como GoW1). Un solo segmento cargable: `0x100000`, 0x1FBDA8 bytes en el archivo y 0x27FE00 en memoria (hasta `0x37FE00`). Sin tabla de símbolos.
@@ -26,7 +45,7 @@ Las direcciones de este archivo solo valen para el ELF con ese SHA1.
 ## Mapa de funciones (fase 1)
 
 - **Ghidra** (`ghidra-analyze.ps1`, 2026-10-15): 5 874 funciones y 31 986 etiquetas de código. El CSV del export mezcla las dos cosas (`entry_XXXX`, `caseD_*`, `default*` son etiquetas dentro de funciones); `tools/make_funcmap.py` deja **solo las 5 874 funciones** en `config/funcmap.csv` (sin duplicados ni solapes). Con las etiquetas, `ps2_recomp` habría generado ~38 000 funciones solapadas. GoW1 también usaba solo funciones.
-- **Escáner** (`scan_missing_functions.py --csv config/funcmap.csv`): **733 funciones que Ghidra no ve** (607 `vfn_`, 12 `fn_`, 114 `cfn_`; en GoW1 fueron 634). Van en `entry_points` de la plantilla. Muestreo: 525 de los 607 `vfn_` son funciones hoja cortas (típico de métodos virtuales) y los `cfn_` revisados a mano empiezan tras un `jr ra` o un epílogo.
+- **Escáner** (`scan_missing_functions.py --csv config/funcmap.csv`): **733 funciones que Ghidra no ve** (607 `vfn_`, 12 `fn_`, 114 `cfn_`; en GoW1 fueron 634). Desde la fase 2 van en `funcmap.csv` (`make_funcmap.py --extra`), no en `entry_points`: ahí el recompilador no registraba sus puntos de reanudación (ver "Bloqueos"). Muestreo: 525 de los 607 `vfn_` son funciones hoja cortas (típico de métodos virtuales) y los `cfn_` revisados a mano empiezan tras un `jr ra` o un epílogo.
 - **Primer `recompile.ps1`**: 5 874 funciones + 733 entradas = **6 607 funciones generadas, 0 errores**. 2 300 avisos, todos `control-flow ... unresolved JR/JALR` (saltos indirectos que el recompilador cubre con entradas de respaldo).
 - No hay que meter los 47 envoltorios de syscalls que exporta Ghidra en `stubs`: GoW1 no lo hacía (`patch_syscalls = false`, el runtime trata la instrucción `syscall`).
 
@@ -87,12 +106,21 @@ Solo se activan con la variable de entorno; sin ella no cambian nada.
 - Del runtime, sin recompilar: `PS2X_TRACE_RPC=<prefijo>` registra las llamadas RPC que llegan al IOP (p. ej. `8` para los servidores de Sony).
 - Para probar un override sin recompilar todo: copiar solo `overrides/gow2_overrides.cpp` a `PS2Recomp/ps2xRuntime/src/runner/`, `touch` y `cmake --build` (~1 min; solo cambia su bloque del unity build). `recompile.ps1 -SyncOnly` vuelve a fechar los 6 600 archivos y recompila todo (~50 min). Ejecutar CMake desde Bash: en PowerShell, con `_common.ps1` cargado, el primer aviso por stderr aborta el comando.
 
+## DeepSeek en la fase 2
+
+Regla 1: DeepSeek solo lee material público (el runtime y `referencia/gow1/`), nunca desensamblado ni logs de GoW II. Lo que ha funcionado: trocear los archivos grandes (~60 KB) y lanzar un agente por trozo en paralelo, con una tabla de salida exacta (6 agentes en 1–3 min). Resultado útil: un catálogo de los overrides de GoW1 por tipo (`arranque`, `memoria`, `gráficos`…) para reconocer cada bloqueo; lo comprobado a mano coincide con el código (`gowCdReadDvdDualInfo`, `gowLoadStartModuleBuffer`). Candidatos de arranque que aún no han hecho falta en GoW II: `DelayThread` y el timer 2 (`gowDelayThread`, `gowTimerSystemNoop`). Los archivos pequeños (<10 KB) es más rápido leerlos directamente.
+
 ## Funciones identificadas
 
 Dirección = inicio de la función en el ELF de referencia.
 
 | Dirección | Nombre | Qué hace | Equivalente en GoW1 | Estado | Quién |
 |---|---|---|---|---|---|
+| `0x002D4850` | `sceSifLoadStartModuleBuffer` | Arranca un módulo ya copiado a la memoria del IOP | `0x298CE8` (`gowLoadStartModuleBuffer`) | reimplementada | DaniSBR1 |
+| `0x002BF660` | `loadEmbeddedIopModule` (nombre nuestro) | Copia al IOP el módulo de `0x2DB590` (`sceSifAllocIopHeap` + `sceSifSetDma`) y lo arranca; resultado en `0x2D7FE4`, id en `0x2D7FE0` | — | investigando | DaniSBR1 |
+| `0x00146318` | `initMainHeap` (nombre nuestro) | Antes de `main`: heap principal del final del `.bss` a `0x1FF7FF8`, con `0x0BADC0DE` en `0x1FF7FFC` | — | investigando | DaniSBR1 |
+| `0x00183330` | `rbTreeFind` (nombre nuestro) | Búsqueda en un árbol rojo-negro con nodos del "RB NODE Heap" (pool en `[0x2D7FC8]`, centinela en `[0x2D7FC0]`, hijos como índices de 16 bits) | — | investigando | DaniSBR1 |
+| `0x0027D6B0` / `0x0027D788` / `0x0027CE10` | push / pop / top de la pila de estados (nombres nuestros) | Pila en `objeto+0x48` (contador `int8` en `+0xC8`); métodos virtuales `vtable[0x84]`/`[0x8C]`/`[0x94]` del objeto `tabla[22]` (`0x362CA0`; tabla de objetos en `0x362C48`) | — | investigando | DaniSBR1 |
 | `0x002B6BF0` | `sceCdReadDvdDualInfo` | libcdvd: informa de si el disco es de doble capa y dónde empieza la capa 1 | `0x27AB00` (`gowCdReadDvdDualInfo`) | reimplementada | DaniSBR1 |
 | `0x001875E0` | `bootDeviceFromArgs` (nombre nuestro) | Mira `argv[0]` y guarda en `0x2D7FE8` si se arrancó desde `cdrom` (0) o desde `host0:` (1) | — | binding temporal (TEMPORAL) | DaniSBR1 |
 | `0x00187630` | `makeDevicePath` (nombre nuestro) | Ruta → `"cdrom0:\RUTA;1"` (mayúsculas, `\`) o `"host0:ruta"` según `0x2D7FE8`; con otro valor devuelve el búfer sin escribir | — | investigando | DaniSBR1 |
@@ -107,7 +135,10 @@ Los más recientes arriba. Un bloqueo = el primer error del log que impide avanz
 
 | Fecha | Síntoma (línea del log) | Causa | Solución / PR | Quién |
 |---|---|---|---|---|
-| 2026-10-16 | Tras cargar los IRX, el hilo principal se queda en `pc=0x1833C8 ra=0x181568` (`GOW2_THREAD_WATCH`) | Por investigar: es el **siguiente** bloqueo (fase 2, objetivo 2) | — | — |
+| 2026-10-16 | **Pendiente de probar.** Bucle activo en `0x27D7E8` (`ra=0x1EAAB8`): recorre una lista en `0x38` | `0x27D788` (método virtual `vtable[0x8C]`, "pop") saca de una pila de estados **vacía** (`obj = NULL`, `cabeza = 0x38`). El push de `0x18D5BC` no ocurre porque `top()` (`0x27CE10`, `vtable[0x94]`) ya devuelve NULL. **Causa probable de fondo:** SMPD abre `cdrom0:\GODOFWAR.TOC` con `ioman` (`open`/`lseek`/`read`/`close`, ordinales 4/8/6/5), que el IOP del runtime no implementa (solo `AddDrv`/`DelDrv`; un import sin implementar devuelve 0): carga un índice vacío y no hay recursos | `open`/`close`/`read`/`lseek` de `ioman` implementadas en el fork para el dispositivo `cdrom`, sobre los archivos del disco (`IopCdvd::findDiscFile`/`readDiscFile`); rama `godofwar2-ioman` del fork, **compila pero falta probarla en el juego**; ver "Cambios necesarios en PS2Recomp" | DaniSBR1 |
+| 2026-10-16 | Cuelgue deliberado en `0x18D5A0` (`nop`/`b` en bucle) | Error fatal de arranque: `0x2BF660` carga en el IOP un módulo mínimo que va dentro del ELF (`0x2DB590`) con `sceSifLoadStartModuleBuffer` y exige `id >= 0` y `(resultado & ~3) == 0`. El runtime no ejecuta módulos cargados desde la memoria del IOP | Override de `0x2D4850`: cargado y terminado con `NO_RESIDENT_END`, como en GoW1 | DaniSBR1 |
+| 2026-10-16 | `[guest-branch:missing-target] kind=DirectJump op=EE scheduler target=0x1857f8` y `main thread dormant` | El hilo se reanuda tras una llamada virtual de la función del escáner `0x185748`. `ps2_recomp` llama `entry_XXXX` a las funciones de `entry_points` e `isEntryFunctionName` (`ps2_recompiler.cpp:283`) las excluye del registro de puntos de reanudación: **afecta a las 735** | Las funciones del escáner van ahora en `funcmap.csv` con su nombre (`vfn_`/`cfn_`/`fn_`; `tools/make_funcmap.py --extra`), no en `entry_points`: el recompilador registra sus puntos de reanudación (169 986 en total; `0x1857F8` → `cfn_00185748`). Sin tocar el fork. Hubo un TEMPORAL mientras tanto, ya retirado | DaniSBR1 |
+| 2026-10-16 | Bucle activo en `0x1833C8` (`ra=0x181568`) | Búsqueda en el árbol rojo-negro del "RB NODE Heap" (`0x183330`) que no termina: nodos en `0x84000010`. El heap interno del runtime nacía en la misma zona que el heap principal del juego (`0x146318`: del final del `.bss` a `0x1FF7FF8`) y se pisaban | `runtime.setPrivateGuestHeap(0xA0000, 0xFF000)` en el override, como en GoW1 | DaniSBR1 |
 | 2026-10-16 | Silencio tras `[SifInitRpc] Initialized`; `GOW2_THREAD_WATCH`: bucle activo en `0x2B6E58` (`sceSifBindRpc(0x80001300)` en bucle). `GOW2_BOOT_TRACE`: los 8 `sceSifLoadModule("")` devuelven -1 | El `SetupThread` del runtime ignora el bloque de argumentos (`$a3 = 0x2FBE00`): `main` recibe `argc = 0`, `0x1875E0` deja `0x2D7FE8 = -1` (valor de `.data`), `0x187630` devuelve rutas vacías, no se carga DBCMAN y su servidor nunca aparece | Override **TEMPORAL** de `0x1875E0`: con `argc = 0` hace como una consola (`argv[0] = "cdrom0:\SCUS_974.81;1"`). Cargan los 8 IRX y se enlazan sus servidores | DaniSBR1 |
 | 2026-10-16 | Silencio tras `[SifInitRpc] Initialized` | El arranque (`0x188738`) repite `sceCdReadDvdDualInfo` mientras devuelva 0, y esta devuelve 0 sin llamar al IOP si el servidor S del CDVD no está listo (`0x2B67A8`). Como en GoW1 | Override de `0x2B6BF0`: doble capa, capa 1 en 2 083 872 | DaniSBR1 |
 
@@ -117,4 +148,5 @@ Lo que haya que cambiar en el runtime (rama `godofwar2`) y por qué. Si también
 
 | Commit | Qué | ¿Vale para GoW1? |
 |---|---|---|
+| `b14b951` (rama `godofwar2-ioman`, **sin probar ni fusionar**) | `ioman` del IOP (`ps2xIOP/src/emulator/imports/iop_ioman.cpp`): `open`/`close`/`read`/`lseek` (ordinales 4/5/6/8) para `cdrom0:`, de solo lectura, sobre el disco a través de `IopCdvd` (nuevos `findDiscFile`/`readDiscFile`). Otros dispositivos (`host1:`) devuelven `-ENOENT`, como en una consola. Antes solo existían `AddDrv`/`DelDrv` y lo demás devolvía 0 | Sí, si algún IRX de GoW1 usa `ioman` (su SMPD lee por sectores con `cdvdman`, así que probablemente no le afecte) |
 | (propuesta, sin hacer) | `SetupThread` (syscall `0x3C`, `ps2xRuntime/src/lib/Kernel/Syscalls/System.cpp`) debería rellenar el bloque de argumentos de `$a3` como el kernel de la PS2 (`argc = 1`, `argv[0] = "cdrom0:\<ELF>;1"`). Con eso sobraría el override TEMPORAL de `0x1875E0` | Probablemente: cualquier juego que mire `argv` |

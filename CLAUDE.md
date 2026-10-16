@@ -62,17 +62,28 @@ Igual que en GoW1: **DeepSeek V4.1 Flash, gratis en OpenCode**, para trabajo de 
 
 > Actualizar esta sección al cerrar cada hito, para que la vean las sesiones de todos.
 
-### Fase 2 en marcha: arranca y carga los IRX (DaniSBR1, 2026-10-16)
+### Fase 2 en marcha: arranca, carga los IRX y empieza a leer el disco (DaniSBR1, 2026-10-16)
 
-**Hecho:** el juego arranca, **carga sus 8 IRX** en el intérprete del IOP (`SIO2MAN`, `DBCMAN`, `SIO2D`, `MC2_D`, `DS2U_D`, `LIBSD`, `989NOMID`, `SMPD`) y se enlaza a sus servidores RPC. Hicieron falta dos overrides en `overrides/gow2_overrides.cpp` (el primer archivo de overrides de GoW II, registrado para `SCUS_974.81`):
-- `sceCdReadDvdDualInfo` (`0x2B6BF0`), como en GoW1: el arranque la repetía para siempre.
-- **TEMPORAL** `0x1875E0`: el `SetupThread` del runtime ignora el bloque de argumentos, `main` recibe `argc = 0` y las rutas de los IRX salían vacías. El arreglo de verdad sería en el runtime (propuesta en NOTES.md, "Cambios necesarios en PS2Recomp"); quien toque el fork, que lo avise antes.
+**Para el Claude de quien siga: lee primero "Estado del repositorio" en `docs/NOTES.md`.** Resumen:
 
-**Siguiente bloqueo** (objetivo 2 de la fase 2): tras cargar los IRX, el hilo principal se queda en `pc=0x1833C8` (`ra=0x181568`). Para investigarlo: `GOW2_THREAD_WATCH=5` y `GOW2_BOOT_TRACE=1` (ver NOTES.md, "Diagnóstico de bloqueos", que explica también cómo probar un override en ~1 min sin recompilar todo).
+**Hecho (en `main`):** el juego arranca, carga sus 8 IRX en el intérprete del IOP (`SIO2MAN`, `DBCMAN`, `SIO2D`, `MC2_D`, `DS2U_D`, `LIBSD`, `989NOMID`, `SMPD`), se enlaza a sus servidores RPC y empieza a leer el disco. Cinco bloqueos resueltos, todos en `overrides/gow2_overrides.cpp` (registrado para `SCUS_974.81`):
+1. `sceCdReadDvdDualInfo` (`0x2B6BF0`), como en GoW1.
+2. **TEMPORAL** `0x1875E0`: el `SetupThread` del runtime ignora el bloque de argumentos y `main` recibe `argc = 0`; las rutas de los IRX salían vacías. Arreglo de verdad: que el runtime rellene los argumentos (propuesta en NOTES.md).
+3. `setPrivateGuestHeap(0xA0000, 0xFF000)`: el heap interno del runtime pisaba el heap principal del juego (como en GoW1).
+4. Puntos de reanudación: `ps2_recomp` no los registra en las funciones de `entry_points` (las llama `entry_XXXX`). **Las 733 funciones del escáner van ahora en `config/funcmap.csv`** (`tools/make_funcmap.py --extra`), no en `entry_points`.
+5. `sceSifLoadStartModuleBuffer` (`0x2D4850`): el módulo del IOP que va dentro del ELF (como en GoW1).
+
+**Siguiente paso (pendiente de probar):** el bloqueo 6. SMPD lee `cdrom0:\GODOFWAR.TOC` con `ioman` (`open`/`read`/`lseek`/`close`) y el IOP del runtime no lo implementaba: carga un índice vacío y el juego se cuelga en `0x27D7E8` (pila de estados vacía). **La implementación está en la rama `godofwar2-ioman` del fork** (`b14b951`, sin fusionar en `godofwar2`): compila, pero no se llegó a probar en el juego. Para probarla:
+1. `git pull`, `git submodule update --init --recursive` y luego `git -C PS2Recomp fetch` + `git -C PS2Recomp switch godofwar2-ioman`.
+2. `.\scripts\recompile.ps1` (hay que regenerar: `funcmap.csv` cambió) y `.\scripts\run.ps1 -Config RelWithDebInfo` (~50 min la primera vez).
+3. En el log, sin `unhandled import ioman`. Con `GOW2_THREAD_WATCH=5`, el hilo 1 ya no debe quedarse en `pc=0x0027d7e8`.
+4. Si funciona: fusionar `godofwar2-ioman` en `godofwar2` del fork, push, y commit del nuevo puntero del submódulo aquí (regla 5). Si no: el siguiente bloqueo, con el mismo método.
+
+Para investigar: `GOW2_THREAD_WATCH=5` y `GOW2_BOOT_TRACE=1` (NOTES.md, "Diagnóstico de bloqueos", que explica también cómo probar un override en ~1 min sin recompilar todo). DeepSeek solo sirve para leer material público (el runtime, `referencia/gow1/`): NOTES.md, "DeepSeek en la fase 2".
 
 ### Fase 1 cerrada: primera configuración que recompila y compila (DaniSBR1 y cxldsakeb, 2026-10-15)
 
-**Hecho:** fase 0 de DaniSBR1 (mismo SHA1). Ghidra → 5 874 funciones; `tools/make_funcmap.py` → `config/funcmap.csv` (solo funciones: el export trae además 31 986 etiquetas internas que no deben ir); escáner → 733 funciones más en `entry_points` (no en `funcmap.csv`, como en GoW1). `recompile.ps1` genera 6 607 funciones **sin errores** y **el runner compila y enlaza** (0 símbolos sin resolver). Arreglados restos de GoW1: `$ConfigToml` sin definir en `_common.ps1` y los scripts de `tools/` apuntando al ELF de GoW1.
+**Hecho:** fase 0 de DaniSBR1 (mismo SHA1). Ghidra → 5 874 funciones; `tools/make_funcmap.py` → `config/funcmap.csv` (solo funciones: el export trae además 31 986 etiquetas internas que no deben ir); escáner → 733 funciones más (al principio en `entry_points`, como en GoW1; **desde la fase 2 van en `funcmap.csv`**, ver arriba). `recompile.ps1` genera 6 607 funciones **sin errores** y **el runner compila y enlaza** (0 símbolos sin resolver). Arreglados restos de GoW1: `$ConfigToml` sin definir en `_common.ps1` y los scripts de `tools/` apuntando al ELF de GoW1.
 
 **Pendiente para cerrar la fase 1:**
 1. ~~Stubs de Sony~~ **hecho: 76 de 79** (los otros 3, `exit`, `read` y `sceTtyRead`, no están enlazados en GoW II). **GoW II usa el SDK 3.0.0**: las librerías están desplazadas en bloque respecto a GoW1 (+0x3C0E8 libmpeg, +0x3C0F0 ipu/graph/dma/cdvd, +0x3BB68 sif/deci2) y cada stub se verificó en el ELF de GoW II. Método en NOTES.md ("Stubs de librerías de Sony"). Ojo: en el SDK 3.0, `StartThread`, `iWakeupThread` e `InitTLB` son funciones en C delante del envoltorio de la syscall, y el stub va en la función en C.

@@ -106,8 +106,34 @@ namespace
                 std::fprintf(stderr, "[gow2-watch] running=%d cycle=%llu\n", snapshot.runningThreadId,
                              static_cast<unsigned long long>(snapshot.eeCycle));
                 for (const EeThreadSnapshot &t : snapshot.threads)
-                    std::fprintf(stderr, "[gow2-watch]   thread id=%d prio=%d status=%d wait=%d/%d pc=%08x ra=%08x\n", t.id,
-                                 t.currentPriority, int(t.status), int(t.waitReason), t.waitId, t.pc, t.ra);
+                {
+                    std::fprintf(stderr, "[gow2-watch]   thread id=%d prio=%d status=%d wait=%d/%d pc=%08x ra=%08x sp=%08x\n", t.id,
+                                 t.currentPriority, int(t.status), int(t.waitReason), t.waitId, t.pc, t.ra, t.sp);
+                    if (t.pc == 0x0027D7E8u) // bucle de lista de 0x27D788: [sp] = cabeza, [sp+4] = iterador, nodo: +0 next, +8 objeto
+                    {
+                        const uint8_t *ram = runtime.memory().getRDRAM();
+                        auto word = [ram](uint32_t a) { uint32_t v; std::memcpy(&v, ram + (a & 0x01FFFFFFu), 4); return v; };
+                        const uint32_t head = word(t.sp), it = word(t.sp + 4u);
+                        std::fprintf(stderr, "[gow2-watch]     list head=%08x it=%08x nodes:", head, it);
+                        uint32_t node = word(head);
+                        for (int i = 0; i < 8; ++i, node = word(node))
+                            std::fprintf(stderr, " %08x(obj=%08x)", node, word(node + 8u));
+                        std::fprintf(stderr, "\n");
+                        // 0x18D5BC: obj22 = [0x362CA0]; estado = obj22->vtable[0x94]() → [0x2D814C]; si estado, push
+                        const uint32_t obj22 = word(0x00362CA0u), vt = obj22 ? word(obj22 + 0x20u) : 0u;
+                        std::fprintf(stderr, "[gow2-watch]     obj22=%08x vtable=%08x vt[0x94]=%08x adj=%d state=[0x2D814C]=%08x\n",
+                                     obj22, vt, vt ? word(vt + 0x94u) : 0u,
+                                     vt ? static_cast<int16_t>(word(vt + 0x90u) & 0xFFFFu) : 0, word(0x002D814Cu));
+                    }
+                }
+                {
+                    // árbol de 0x183330: centinela [0x2D7FC0], base del pool de nodos [0x2D7FC8] (hijos = índices de 16 bits)
+                    const uint8_t *ram = runtime.memory().getRDRAM();
+                    auto word = [ram](uint32_t a) { uint32_t v; std::memcpy(&v, ram + (a & 0x01FFFFFFu), 4); return v; };
+                    const uint32_t sentinel = word(0x002D7FC0u), pool = word(0x002D7FC8u);
+                    std::fprintf(stderr, "[gow2-watch]   tree sentinel=%08x pool=%08x distance=0x%x heap=[%08x,%08x)\n", sentinel, pool,
+                                 sentinel - pool, runtime.guestHeapBase(), runtime.guestHeapLimit());
+                }
                 if (bootTrace)
                     for (const Gow2BootCall &call : g_gow2BootCalls)
                         std::fprintf(stderr, "[gow2-watch]   boot %-18s %08x calls=%u last_v0=%d\n", call.name, call.address,
@@ -165,6 +191,18 @@ namespace
         ctx->pc = GPR_U32(ctx, 31);
     }
 
+    // 0x2D4850 int sceSifLoadStartModuleBuffer(iopAddr, argLen, args, int *result)
+    // El arranque (0x1887E4 → 0x2BF660) copia a la memoria del IOP un módulo mínimo que va dentro del ELF (0x2DB590,
+    // ~0x360 bytes) y lo arranca con esta función; luego exige id >= 0 y (*result & ~3) == 0, o se cuelga a propósito
+    // en 0x18D5A0 (bloqueo 5 de la fase 2). El runtime aún no ejecuta módulos cargados desde la memoria del IOP, así
+    // que se responde como una consola: cargado (id válido) y terminado con NO_RESIDENT_END (1). Como en GoW1.
+    void gow2LoadStartModuleBuffer(uint8_t *rdram, R5900Context *ctx, PS2Runtime *)
+    {
+        gow2WriteGuest32(rdram, GPR_U32(ctx, 7), 1u); // NO_RESIDENT_END
+        SET_GPR_U32(ctx, 2, 0x40001000u);
+        ctx->pc = GPR_U32(ctx, 31);
+    }
+
     void applyGow2Overrides(PS2Runtime &runtime)
     {
         const bool bootTrace = std::getenv("GOW2_BOOT_TRACE") != nullptr;
@@ -177,9 +215,17 @@ namespace
         if (const char *watch = std::getenv("GOW2_THREAD_WATCH"))
             gow2StartWatch(runtime, std::max(1.0, std::atof(watch)), bootTrace);
 
+        // El juego crea su heap principal (0x146318, antes de main) desde el final del .bss hasta 0x01FF7FF8. El heap
+        // interno del runtime nacía en la misma zona (con el SetupHeap del crt0: [0x37F4D0, 0x1F00000)), así que lo que
+        // reservaban los stubs pisaba las estructuras del juego: el "RB NODE Heap" daba nodos en 0x84000010 y la búsqueda
+        // de 0x183330 no terminaba nunca (bloqueo 3 de la fase 2). Como en GoW1, a la memoria libre bajo el ELF (0x100000).
+        runtime.setPrivateGuestHeap(0x000A0000u, 0x000FF000u);
+
         const bool dualInfo = runtime.replaceFunction(0x002B6BF0u, gow2CdReadDvdDualInfo);
         const bool bootDevice = runtime.replaceFunction(0x001875E0u, gow2BootDeviceFromArgs);
-        std::fprintf(stderr, "[gow2-override] sceCdReadDvdDualInfo=%d bootDevice=%d\n", dualInfo, bootDevice);
+        const bool moduleBuffer = runtime.replaceFunction(0x002D4850u, gow2LoadStartModuleBuffer);
+        std::fprintf(stderr, "[gow2-override] sceCdReadDvdDualInfo=%d bootDevice=%d moduleBuffer=%d\n", dualInfo, bootDevice,
+                     moduleBuffer);
     }
 }
 
