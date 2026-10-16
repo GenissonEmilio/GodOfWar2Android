@@ -74,7 +74,9 @@ Ahora el juego carga (`R_PermA`, `SBP_general`…), entra en su bucle principal 
 
 **Después (bloqueo 10):** salía el aviso "no hay mando conectado". Se arregló con el override de `libpad2` (adaptado de GoW1, direcciones de GoW II verificadas). Sin mando funciona el teclado: `Intro` = Start, `X` = cruz, flechas, `WASD`… (el mapa completo está en NOTES.md, "Estado del repositorio").
 
-**Fase 3 empezada:** sale la pantalla de título completa (a pocos FPS), el menú responde y, al empezar partida nueva, se reproduce el primer vídeo. Para eso hizo falta el bloqueo 11: el stub genérico de `sceIpuInit` del runtime lleva direcciones de otro juego, y se sustituyó por un override con las de GoW II. **Siguiente:** confirmar que el vídeo se ve bien y llegar al gameplay. Sin teclado, `GOW2_PAD_SCRIPT=15:start,20-60/3:x` (NOTES.md, "Diagnóstico de bloqueos"). Vigilar el sonido, que ahora pasa por las sustituciones de LIBSD de GoW II.
+**Fase 3: se llega al gameplay, con sonido** (cxldsakeb, 2026-10-16). El escenario sale **verde** (bloqueo 12, abierto). El juego cuenta las sombras de los personajes en el canal verde y lo restaura con copias de 16 bits con máscara de bits que el backend del GS (`tryShuffle`) aún no hace; el diagnóstico completo, con capturas que lo comprueban, está en NOTES.md. **Siguiente tarea: implementar esas copias en `gs_hw_backend.cpp` (fork).** Un apaño desde el juego (anular `0x16EDB8`) deja la pantalla negra: descartado.
+
+**Antes:** sale la pantalla de título completa (a pocos FPS), el menú responde y, al empezar partida nueva, se reproduce el primer vídeo. Para eso hizo falta el bloqueo 11: el stub genérico de `sceIpuInit` del runtime lleva direcciones de otro juego, y se sustituyó por un override con las de GoW II. **Siguiente:** confirmar que el vídeo se ve bien y llegar al gameplay. Sin teclado, `GOW2_PAD_SCRIPT=15:start,20-60/3:x` (NOTES.md, "Diagnóstico de bloqueos"). Vigilar el sonido, que ahora pasa por las sustituciones de LIBSD de GoW II.
 
 ### Fase 2: bloqueos 6 y 7 resueltos en el runtime; el juego pide recursos a SMPD (cxldsakeb, 2026-10-16)
 
