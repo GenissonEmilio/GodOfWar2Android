@@ -42,3 +42,6 @@ desktop.ini
 # Archivos que crea el runner al ejecutarse desde la raíz
 imgui.ini
 ps2_log.txt
+
+# Capturas del runtime (GOW_HOST_SHOT): imágenes del juego, nunca se suben (regla 1)
+host_shot.png
