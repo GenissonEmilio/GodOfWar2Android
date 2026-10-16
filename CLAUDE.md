@@ -62,6 +62,14 @@ Igual que en GoW1: **DeepSeek V4.1 Flash, gratis en OpenCode**, para trabajo de 
 
 > Actualizar esta sección al cerrar cada hito, para que la vean las sesiones de todos.
 
+### Fase 4: el escenario ya no sale verde (DaniSBR1, 2026-10-16)
+
+**Para el Claude de quien siga: lee primero "Estado del repositorio" en `docs/NOTES.md`.** Tras el `git pull`: `git submodule update --init --recursive` (el submódulo apunta a **`8a4abab`**) y recompilar el runner (solo cambia `gs_hw_backend.cpp`: `cmake --build`, unos minutos, si `generated/` ya está al día).
+
+**Hecho, bloqueo 12:** el backend del GS descartaba las copias por columnas con las que el juego restaura el canal verde, porque **acaban en una fracción de píxel** (`y = 895.4375`) y `tryShuffle` exigía extremos enteros. La máscara parcial que se sospechaba no era la causa (`0x3FFF` cubre bytes enteros). Arreglado en el fork: el escenario sale bien y se dibuja la sombra de Kratos (comprobado con captura). Las fases 2 y 3 están cerradas en el ROADMAP.
+
+**Siguiente:** (1) un polígono azul translúcido en el cielo; (2) la copia Z16 → framebuffer de las sombras, que el backend aún descarta (`shuffleWhy=13`); (3) la velocidad (VU1 e IOP nativos). Método para el GS: un contador local de los motivos de rechazo del backend (no se sube al fork), descrito en NOTES.md. DeepSeek ayuda a leer PCSX2 y el backend (material público), nunca capturas ni logs del juego.
+
 ### Fase 2, inicialización superada: el juego carga sus recursos y dibuja (cxldsakeb, 2026-10-16)
 
 **Para el Claude de quien siga: lee primero "Estado del repositorio" en `docs/NOTES.md`.** Tras el `git pull`: `git submodule update --init --recursive` (el submódulo apunta a `9ccffe1`) y recompilar el runner (si `generated/` ya está al día, `cmake --build`, unos minutos).
