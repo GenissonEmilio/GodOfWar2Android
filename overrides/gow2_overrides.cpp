@@ -221,13 +221,6 @@ namespace
         // de 0x183330 no terminaba nunca (bloqueo 3 de la fase 2). Como en GoW1, a la memoria libre bajo el ELF (0x100000).
         runtime.setPrivateGuestHeap(0x000A0000u, 0x000FF000u);
 
-        // TEMPORAL: el hilo principal se suspende dentro de una llamada virtual hecha desde la función del escáner
-        // 0x185748 (cfn_) y al reanudarse en 0x1857F8 no había función registrada ([guest-branch:missing-target],
-        // bloqueo 4 de la fase 2). ps2_recomp llama "entry_XXXX" a las funciones de entry_points y su filtro
-        // isEntryFunctionName las excluye del registro de puntos de reanudación: les pasa a las 735. Sobra cuando
-        // las funciones del escáner vayan en funcmap.csv con su nombre (docs/NOTES.md, "Bloqueos").
-        runtime.replaceFunction(0x001857F8u, entry_185748_0x185968);
-
         const bool dualInfo = runtime.replaceFunction(0x002B6BF0u, gow2CdReadDvdDualInfo);
         const bool bootDevice = runtime.replaceFunction(0x001875E0u, gow2BootDeviceFromArgs);
         const bool moduleBuffer = runtime.replaceFunction(0x002D4850u, gow2LoadStartModuleBuffer);
