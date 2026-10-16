@@ -20,37 +20,41 @@ Cada fase tiene un criterio de "hecho" comprobable.
 ### Fase 1: mapa de funciones y primera configuración — ✅ hecha (2026-10-15)
 
 - [x] Ghidra (`ghidra-analyze.ps1`) → `config/gow_functions.csv` y `config/gow.toml`. (DaniSBR1: 5 874 funciones)
-- [x] Funciones que Ghidra no ve (`scan_missing_functions.py`). (DaniSBR1: 733, en `entry_points`)
+- [x] Funciones que Ghidra no ve (`scan_missing_functions.py`). (DaniSBR1: 733; desde la fase 2 van en `funcmap.csv`)
 - [x] `config/funcmap.csv` (`Name,Start,End,Size`) y `config/recomp.template.toml` con `@ELF@`, `@MAP@` y `@OUT@`, tomando como modelo los de `referencia/gow1/config/`. (DaniSBR1: primera versión; `recompile.ps1` genera C++ sin errores)
 - [x] Stubs de las librerías de Sony (`sceMpeg*`, `sceIpu*`, `sceGs*`, `sceCd*`, `sceDma*`, libkernel…): localizar cada una en GoW II (las cadenas y los patrones de llamada ayudan; DeepSeek puede cruzar listas). (DaniSBR1: 76 de 79; los otros 3 no están enlazados en GoW II. SDK 3.0.0, ver NOTES.md)
 - [x] Tabla `[mmio]`: los accesos del juego a registros del hardware que el runtime convierte en llamadas nativas. (DaniSBR1: 240 entradas de `ps2_analyzer`, equivalentes a la tabla de GoW1; cxldsakeb confirmó que el runner compila y enlaza con ella)
 
 **Hecho cuando:** `recompile.ps1` genera C++ sin errores y el runner compila. **Hecho** (2026-10-15): con stubs y `[mmio]`, `recompile.ps1` sin errores y el runner `RelWithDebInfo` enlaza sin símbolos sin resolver (cxldsakeb).
 
-### Fase 2: primer arranque — en curso
+### Fase 2: primer arranque — ✅ hecha (2026-10-16)
 
-**Método** (el de GoW1): `.\scripts\run.ps1 -Config RelWithDebInfo -NoBuild`, leer el **primer** error del log en `out/logs/`, arreglarlo y repetir. Cada bloqueo va a la tabla "Bloqueos" de [NOTES.md](NOTES.md). Los overrides de GoW II van en `overrides/` y se registran con su propio `PS2_REGISTER_GAME_OVERRIDE` (`"SCUS_974.81"`, entrada `0x00100008`): los de GoW1 no se activan aquí, porque están atados a `SCUS_973.99`.
+**Método** (el de GoW1): `.\scripts\run.ps1 -Config RelWithDebInfo -NoBuild`, leer el **primer** error del log en `out/logs/`, arreglarlo y repetir. Cada bloqueo va a la tabla "Bloqueos" de [NOTES.md](NOTES.md). Los overrides de GoW II van en `overrides/gow2_overrides.cpp` y se registran con su propio `PS2_REGISTER_GAME_OVERRIDE` (`"SCUS_974.81"`, entrada `0x00100008`): los de GoW1 no se activan aquí, porque están atados a `SCUS_973.99`.
 
-- [ ] **Cada uno compila su runner** (`recompile.ps1` + `run.ps1`, ~40–50 min la primera vez). (cxldsakeb y DaniSBR1: hecho) El `.exe` y `generated/` no se suben (regla 1), así que no se pueden compartir.
-- [x] **Arranca** y carga los IRX en el intérprete del IOP (`IOPRP300.IMG`, `989NOMID`, `SMPD`, `LIBSD`…; en el log, cada módulo sale con su `base=`).
-  - **Hecho** (DaniSBR1, 2026-10-16): cargan los 8 IRX (`SIO2MAN`, `DBCMAN`, `SIO2D`, `MC2_D`, `DS2U_D`, `LIBSD`, `989NOMID`, `SMPD`) y se enlazan sus servidores. Hicieron falta dos overrides: `sceCdReadDvdDualInfo` y uno **TEMPORAL** de `0x1875E0`, porque el runtime le pasa `argc = 0` a `main` (ver NOTES.md, "Bloqueos").
-  - En GoW1, `sceSifLoadStartModuleBuffer` (un módulo mínimo, "ck01", que va dentro del ELF) necesitó override. En GoW II es `0x2D4850` (verificada); de momento no ha hecho falta.
-- [x] **Pasa la inicialización** y empieza a leer datos del disco (`GODOFWAR.TOC`, `PART*.PAK` a través de `.disc_layout`). **Hecho** (cxldsakeb, 2026-10-16): el juego carga sus recursos, entra en su bucle principal y dibuja (bloqueos 6 a 9, ver NOTES.md).
-  - Resueltos (DaniSBR1, 2026-10-16): el heap del runtime pisaba el del juego (`setPrivateGuestHeap`), los puntos de reanudación de las funciones del escáner (ahora en `funcmap.csv`) y el módulo del IOP que va dentro del ELF (`sceSifLoadStartModuleBuffer`). El juego ya empieza a leer el disco (SMPD arranca).
-  - SMPD lee `cdrom0:\GODOFWAR.TOC` con `ioman` (`open`/`read`/`lseek`/`close`), que el IOP del runtime no implementaba: cargaba un índice vacío y el juego se colgaba en `0x27D7E8`. Implementado en el fork (DaniSBR1) y **probado** (cxldsakeb, 2026-10-16).
-  - SMPD troceaba sus rutas con `strtok`, que el runtime dejaba en 0, y usaba `GetSystemTimeLow`, que no existía (cxldsakeb, 2026-10-16, fork `df2a082`). Con eso, el EE ya pide recursos (`R_PermA…`) y SMPD lee `PART1.PAK`.
-  - Bloqueo 8: el registro `Count` del EE no avanzaba y el cargador (que trabaja con un presupuesto de tiempo por frame) no terminaba nunca. Bloqueo 9: en GoW II no se aplicaba ninguna sustitución nativa del IOP (nombres con `;1` y un LIBSD distinto del de GoW1), así que la subida de bancos de sonido esperaba un DMA de la SPU2 inexistente. Los dos, arreglados en el fork (`9ccffe1`).
-- [ ] **Overrides imprescindibles**, solo cuando el log los pida y con direcciones de GoW II. Candidatos según GoW1: `sceIpuInit` (tablas del IPU), la configuración de pantalla y la interrupción FINISH del GS, `DelayThread` y el timer 2, `libpad2` (mando) y el envío de comandos a 989snd.
-- Resuelto sin override: `sceSifInitRpc` e `iWakeupThread`. En GoW1 el recompilador las descartaba; en GoW II Ghidra las detecta y van a los manejadores del runtime.
+- [x] **Cada uno compila su runner** (`recompile.ps1` + `run.ps1`, ~40–50 min la primera vez). El `.exe` y `generated/` no se suben (regla 1), así que no se pueden compartir. (cxldsakeb y DaniSBR1)
+- [x] **Arranca y carga los 8 IRX** en el intérprete del IOP (`SIO2MAN`, `DBCMAN`, `SIO2D`, `MC2_D`, `DS2U_D`, `LIBSD`, `989NOMID`, `SMPD`) y se conecta a sus servidores. Bloqueos 1–2: `sceCdReadDvdDualInfo` y el **TEMPORAL** de `0x1875E0` (el runtime le pasa `argc = 0` a `main`). (DaniSBR1)
+- [x] **Pasa la inicialización y lee el disco.** Bloqueos 3–5 (DaniSBR1): el heap del runtime pisaba el del juego, los puntos de reanudación de las funciones del escáner (ahora en `funcmap.csv`) y el módulo del IOP que va dentro del ELF. Bloqueos 6–9 (DaniSBR1 y cxldsakeb, en el fork): `ioman` para leer `GODOFWAR.TOC`, `strtok`/`GetSystemTimeLow` de SMPD, el registro `Count` del EE y las sustituciones nativas del LIBSD de GoW II.
+- [x] **Overrides imprescindibles**, con direcciones de GoW II: `sceIpuInit` (bloqueo 11) y `libpad2`, el mando (bloqueo 10; sin mando, el teclado). No han hecho falta `DelayThread` ni el timer 2.
+- Resuelto sin override: `sceSifInitRpc` e `iWakeupThread`. En GoW1 el recompilador las descartaba; en GoW II Ghidra las detecta.
 
-### Fase 3: menú y vídeos
+**Hecho cuando:** llega a la primera pantalla (logos). **Hecho:** pantalla de título completa.
+
+### Fase 3: menú y vídeos — ✅ hecha (2026-10-16)
+
+- [x] El menú responde (con el mando, el teclado o `GOW2_PAD_SCRIPT`).
+- [x] Al empezar partida nueva se reproduce el primer vídeo (bloqueo 11, `sceIpuInit`). (cxldsakeb)
 
 **Hecho cuando:** se llega al menú y la intro se reproduce.
 
-### Fase 4: jugable
+### Fase 4: jugable — en curso
 
-- [ ] Partida, combate, HUD.
-- [ ] VU1 e IOP nativos (capturas propias de GoW II).
-- [ ] Guardar y cargar.
+Se llega a la **primera zona jugable (Rodas), con sonido** (cxldsakeb, 2026-10-16). Lo que falta:
+
+- [x] **Bloqueo 12, el escenario verde.** El juego cuenta las sombras de los personajes en el canal verde del framebuffer y lo restaura con copias por columnas de 8 px a través de una vista de 16 bits. Esas copias acaban en una fracción de píxel (`y = 895.4375`) y el backend del GS las descartaba. Arreglado en el fork (`8a4abab`, DaniSBR1, 2026-10-16): el escenario sale bien y **se dibuja la sombra de Kratos**.
+- [ ] Otros fallos de imagen: un **polígono azul translúcido en el cielo** (probablemente el "cielo plano"), la copia Z16 → framebuffer de las sombras que el backend aún descarta (`shuffleWhy=13`) y un "fantasma" pegado a Kratos que vio cxldsakeb. Detalle en NOTES.md, "Estado del repositorio".
+- [ ] **Velocidad completa:** ahora va a pocos FPS. VU1 e IOP nativos con capturas propias de GoW II (sección 7b de [SETUP.md](SETUP.md)); en GoW1 fue el salto de 7–8 a ~60 FPS. Los microprogramas de la VU van dentro del ELF (`.DVP.overlay`): quizá se puedan sacar de ahí.
+- [ ] Partida, combate y HUD, revisados en pantalla.
+- [ ] Guardar y cargar (memory card).
+- [ ] Retirar el TEMPORAL de `0x1875E0` (que `SetupThread` rellene los argumentos en el runtime).
 
 **Hecho cuando:** se juega el primer nivel a velocidad completa.
