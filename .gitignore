@@ -45,3 +45,5 @@ ps2_log.txt
 
 # Capturas del runtime (GOW_HOST_SHOT): imágenes del juego, nunca se suben (regla 1)
 host_shot.png
+# raylib guarda capturas con F12 (screenshotNNN.png) si el runtime se compila sin desactivarlo: también son imágenes del juego
+screenshot*.png

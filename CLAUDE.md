@@ -62,6 +62,14 @@ Igual que en GoW1: **DeepSeek V4.1 Flash, gratis en OpenCode**, para trabajo de 
 
 > Actualizar esta sección al cerrar cada hito, para que la vean las sesiones de todos.
 
+### Fase 4: cielo arreglado, F12/F10 y velocidad medida (DaniSBR1, 2026-10-16, tarde)
+
+**Tras el `git pull`:** `git submodule update --init --recursive` (submódulo en **`3b71410`**), `cmake -S PS2Recomp -B out/build` (opciones nuevas de raylib) y **recompilar el runner entero** (~45 min: cambió `gs_frontend.h`, que lo incluye todo).
+
+**Hecho:** bloqueo 13 (un polígono azul sobre el cielo: la copia Z16 de las sombras leía el target de profundidad equivocado, fork `d0b6162`). **F12** = pantalla completa sin bordes / ventana; **F10** = contador de FPS como el de PCSX2 (`GOW_SHOW_FPS=1` lo muestra al arrancar). Con él se midió la primera zona en el PC de DaniSBR1: **~58–60 FPS reales y velocidad 100 %** (`FPS … [B]`: GoW II copia cada frame a un único búfer de pantalla). Se desactivó la captura F12 de serie de raylib, que dejaba `screenshotNNN.png` (imágenes del juego) en la raíz del repo.
+
+**Siguiente:** los contornos azules finos contra el cielo a escala 2 (comparar la misma escena a `PS2X_GS_HW_SCALE=1`), el "fantasma" de Kratos, y revisar combate, HUD y guardar/cargar jugando. Detalle en NOTES.md, "Estado del repositorio".
+
 ### Fase 4: el escenario ya no sale verde (DaniSBR1, 2026-10-16)
 
 **Para el Claude de quien siga: lee primero "Estado del repositorio" en `docs/NOTES.md`.** Tras el `git pull`: `git submodule update --init --recursive` (el submódulo apunta a **`8a4abab`**) y recompilar el runner (solo cambia `gs_hw_backend.cpp`: `cmake --build`, unos minutos, si `generated/` ya está al día).
