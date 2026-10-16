@@ -62,7 +62,21 @@ Igual que en GoW1: **DeepSeek V4.1 Flash, gratis en OpenCode**, para trabajo de 
 
 > Actualizar esta sección al cerrar cada hito, para que la vean las sesiones de todos.
 
-### Fase 0: entorno (2026-10-15, repo creado por cxldsakeb)
+### Traspaso a DaniSBR1: fase 1, mapa de funciones y primera configuración (cxldsakeb, 2026-10-15)
 
-- Repo creado con los scripts y las herramientas de GoW1, el submódulo en `godofwar2` y la configuración y overrides de GoW1 en `referencia/gow1/`.
-- **Siguiente:** cada uno extrae su copia de GoW II y apuntamos el **SHA1 del ELF de referencia** en NOTES.md (regla 2); luego, la fase 1 de `docs/ROADMAP.md` (Ghidra y la primera configuración).
+cxldsakeb cerró la fase 0 por su parte y le pasa la fase 1 a Daniel. Claude de Daniel: guíale paso a paso y explica el porqué.
+
+**Hecho (fase 0, cxldsakeb):** repo creado (scripts y herramientas de GoW1, submódulo en `godofwar2`, `referencia/gow1/`), disco extraído, **ELF de referencia en NOTES.md** (`SCUS_974.81` v1.01, SHA1 `E6A62A0F3E781C29513F563F4625B9B3A9103C56`) y `build-tools.ps1` compilando. Hallazgos: el disco tiene la misma estructura que GoW1 (solo cambia `SMPD.IRX`) y los microprogramas de la VU van dentro del ELF (`.DVP.overlay`).
+
+**Pasos para Daniel, en orden:**
+1. Aceptar la invitación al repo y clonarlo con submódulos (`docs/SETUP.md`, pasos 1–5). Con su ISO, `.\scripts\extract-iso.ps1` y **comprobar que el SHA1 coincide**. Si no coincide (por ejemplo, una v1.00), parar y avisar: las direcciones no valdrían.
+2. Ghidra (SETUP, paso 6) y `.\scripts\ghidra-analyze.ps1` → `config/gow.toml` y `config/gow_functions.csv`. Después, `py -3 tools/scan_missing_functions.py` para las funciones que Ghidra no ve (en GoW1 fueron 634, sobre todo métodos virtuales).
+3. **`config/funcmap.csv`**: el CSV de Ghidra (mismo formato, `Name,Start,End,Size`) más las funciones del escáner.
+4. **`config/recomp.template.toml`**, tomando como modelo `referencia/gow1/config/recomp.template.toml`:
+   - `[general]` con `input = "@ELF@"`, `ghidra_output = "@MAP@"`, `output = "@OUT@"` (los rellena `recompile.ps1`);
+   - **stubs**: cada función de librería de Sony de la plantilla de GoW1 (`sceMpeg*`, `sceIpu*`, `sceGs*`, `sceCd*`, `sceDma*`, libkernel…) hay que **encontrarla en GoW II** y poner su dirección. Pistas: cadenas cercanas, el patrón de instrucciones de la función en GoW1 (`tools/elf_dis.py`), y quién la llama (`tools/elf_xref.py`). Una lista que no se encuentre, mejor dejarla fuera y anotarla en NOTES.md que poner una dirección dudosa;
+   - `[mmio]`: igual, los accesos a registros del hardware, buscando en GoW II los equivalentes de GoW1. Puede ir después del primer arranque si cuesta.
+   - **DeepSeek puede ayudar** a cruzar listas (por ejemplo, la tabla de stubs de GoW1 contra un listado de funciones de GoW II que solo contenga nombres y patrones públicos), pero **nunca con desensamblado ni datos del ELF** (regla 1).
+5. `.\scripts\recompile.ps1` hasta que genere C++ **sin errores**, y compilar el runner: es el criterio de "hecho" de la fase 1. Apuntar en NOTES.md las funciones identificadas y los problemas, y actualizar esta sección.
+
+Lo de GoW1 que no se ha llevado aquí: sus overrides se rehacen con direcciones de GoW II solo cuando un bloqueo lo pida (fase 2).

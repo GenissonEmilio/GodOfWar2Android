@@ -12,8 +12,8 @@ Cada fase tiene un criterio de "hecho" comprobable.
 
 ### Fase 0: entorno (todos)
 
-- [ ] Cada uno sigue [SETUP.md](SETUP.md) hasta `build-tools.ps1`.
-- [ ] Cada uno extrae su copia con `extract-iso.ps1` y todos tenemos el **mismo SHA1 del ELF**, apuntado en [NOTES.md](NOTES.md).
+- [ ] Cada uno sigue [SETUP.md](SETUP.md) hasta `build-tools.ps1`. (cxldsakeb: hecho)
+- [ ] Cada uno extrae su copia con `extract-iso.ps1` y todos tenemos el **mismo SHA1 del ELF**, apuntado en [NOTES.md](NOTES.md). (cxldsakeb: hecho, `E6A62A0F…`)
 
 **Hecho cuando:** los 3 compilamos las herramientas y tenemos el ELF de referencia.
 
