@@ -9,7 +9,7 @@ Memoria compartida del equipo: todo hallazgo va aquí (regla 3 de CLAUDE.md).
 | Juego | God of War II |
 | Región / serie | USA, SCUS-97481, **versión 1.01** (`VER = 1.01` en `SYSTEM.CNF`), NTSC |
 | ELF | `SCUS_974.81`, 2 125 688 bytes |
-| SHA1 del ELF | **`E6A62A0F3E781C29513F563F4625B9B3A9103C56`** (cxldsakeb, 2026-10-15). Daniel y Ale: comprobad que `extract-iso.ps1` os da el mismo |
+| SHA1 del ELF | **`E6A62A0F3E781C29513F563F4625B9B3A9103C56`** (cxldsakeb, 2026-10-15; DaniSBR1 lo confirma el mismo día). Ale: comprueba que `extract-iso.ps1` te da el mismo |
 | ISO | DVD-9, capa 1 en el sector 2 083 872 |
 | Runtime | fork `DaniSBR1/PS2Recomp`, rama `godofwar2` (base de Waffle565, `083a286`) |
 
