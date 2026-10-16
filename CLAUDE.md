@@ -72,7 +72,9 @@ Igual que en GoW1: **DeepSeek V4.1 Flash, gratis en OpenCode**, para trabajo de 
 
 Ahora el juego carga (`R_PermA`, `SBP_general`…), entra en su bucle principal y el GS dibuja de forma estable. El protocolo con SMPD y el cargador están en NOTES.md ("Cargador de recursos y protocolo con SMPD"). Herramientas nuevas en el override: `GOW2_CALL_PROFILE` (funciones más llamadas) y `GOW2_PEEK` (variables en memoria).
 
-**Siguiente: empezar la fase 3.** Ver **qué** dibuja (¿logos, vídeo, menú, carga?) mirando la ventana, y arreglar lo primero que falle. Vigilar el sonido, que ahora pasa por las sustituciones de LIBSD de GoW II.
+**Después (bloqueo 10):** salía el aviso "no hay mando conectado". Se arregló con el override de `libpad2` (adaptado de GoW1, direcciones de GoW II verificadas). Sin mando funciona el teclado: `Intro` = Start, `X` = cruz, flechas, `WASD`… (el mapa completo está en NOTES.md, "Estado del repositorio").
+
+**Siguiente: empezar la fase 3.** Ver **qué** dibuja ahora (¿logos, vídeo, título, menú?) mirando la ventana, y arreglar lo primero que falle. Vigilar el sonido, que ahora pasa por las sustituciones de LIBSD de GoW II.
 
 ### Fase 2: bloqueos 6 y 7 resueltos en el runtime; el juego pide recursos a SMPD (cxldsakeb, 2026-10-16)
 
