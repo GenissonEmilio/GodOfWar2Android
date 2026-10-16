@@ -18,6 +18,7 @@
 #include <string>
 #include <thread>
 #include <utility>
+#include <vector>
 
 namespace
 {
@@ -278,6 +279,35 @@ namespace
         ctx->pc = GPR_U32(ctx, 31);
     }
 
+    // 0x2B56F0 sceIpuInit (bloqueo 11). El stub genérico del runtime (Kernel/Stubs/IPU.cpp) lleva direcciones fijas de
+    // otro juego: llama a SetD4_CHCR en 0x126428 y carga las tablas de cuantización de la IPU desde 0x1721E0/0x172230,
+    // que en GoW II son otra cosa. Con ellas, al empezar el primer vídeo la cadena de DMA del VIF1 se desincronizaba
+    // ("[vif1] unhandled VIFcode", etiquetas basura) y el juego esperaba para siempre el FINISH del GS (0x18ADD0);
+    // con este override, el vídeo se reproduce y el juego sigue leyendo el mando.
+    // Adaptado de gowIpuInit de GoW1 (referencia/gow1/overrides/gow_overrides.cpp, Waffle565 vía KIexster, GPLv3). La
+    // secuencia es la del sceIpuInit de GoW II (decodificada de sus lq/sq): tabla IQ en 0x2D9550 (GoW1 0x2A1610) con los
+    // qwords 0,1,2,3,4,4,4,4, y tabla VQ en 0x2D95A0 (GoW1 0x2A1660).
+    void gow2IpuInit(uint8_t *rdram, R5900Context *ctx, PS2Runtime *runtime)
+    {
+        auto &memory = runtime->memory();
+        memory.write32(0x1000B400u, 1u);        // D4_CHCR: lo que hace SetD4_CHCR (0x2B5678)
+        memory.write32(0x10002010u, 0x40000000u); // IPU_CTRL: reset
+        memory.write32(0x10002000u, 0u);          // IPU_CMD: BCLR
+        for (uint32_t offset : {0u, 16u, 32u, 48u, 64u, 64u, 64u, 64u})
+            memory.write128(0x10007010u, runtime->Load128(rdram, ctx, 0x002D9550u + offset));
+        memory.write32(0x10002000u, 0x50000000u); // SETIQ (intra)
+        memory.write32(0x10002000u, 0x58000000u); // SETIQ (no intra)
+        for (uint32_t offset : {0u, 16u})
+            memory.write128(0x10007010u, runtime->Load128(rdram, ctx, 0x002D95A0u + offset));
+        memory.write32(0x10002000u, 0x60000000u); // SETVQ
+        memory.write32(0x10002000u, 0x90000000u); // SETTH
+        memory.write32(0x10002010u, 0x40000000u);
+        memory.write32(0x10002000u, 0u);
+        std::fprintf(stderr, "[gow2-ipu] sceIpuInit con las tablas de SCUS-97481\n");
+        SET_GPR_S32(ctx, 2, 0);
+        ctx->pc = GPR_U32(ctx, 31);
+    }
+
     // ---- Mando: libpad2 en el EE ----
     // Adaptado de GoW1 (referencia/gow1/overrides/gow_overrides.cpp y gow_pad2_packet.h, Waffle565 vía KIexster, GPLv3).
     // God of War II lee el mando en el EE con libpad2 (sockets y un paquete de 18 bytes), que habla con el driver
@@ -373,6 +403,83 @@ namespace
         gow2PadReturn(ctx, 4u);
     }
 
+    // GOW2_PAD_SCRIPT (diagnóstico): pulsaciones a tiempos fijos, en segundos desde la primera lectura del mando, para
+    // repetir una secuencia sin teclado (como GOW_PAD_GUION en GoW1). Elementos separados por comas:
+    //   "T:boton"         pulsa en T (0,3 s)
+    //   "T1-T2/P:boton"   pulsa cada P segundos entre T1 y T2
+    // Botones: start, select, x, o, sq, tri, up, down, left, right, l1, r1, l2, r2. Ej.: "20:start,25-90/3:x".
+    struct Gow2PadPress
+    {
+        double from, to, period;
+        uint16_t mask;
+    };
+
+    std::vector<Gow2PadPress> gow2ParsePadScript(const char *text)
+    {
+        static const std::pair<const char *, uint16_t> kButtons[] = {
+            {"select", 0x0001}, {"start", 0x0008}, {"up", 0x0010}, {"right", 0x0020}, {"down", 0x0040}, {"left", 0x0080},
+            {"l2", 0x0100}, {"r2", 0x0200}, {"l1", 0x0400}, {"r1", 0x0800}, {"tri", 0x1000}, {"o", 0x2000}, {"x", 0x4000},
+            {"sq", 0x8000}};
+        std::vector<Gow2PadPress> presses;
+        std::string item;
+        for (const char *c = text;; ++c)
+        {
+            if (*c != ',' && *c != '\0')
+            {
+                item.push_back(*c);
+                continue;
+            }
+            const size_t colon = item.find(':');
+            if (colon != std::string::npos)
+            {
+                Gow2PadPress press{0.0, 0.0, 0.0, 0u};
+                const std::string when = item.substr(0, colon), name = item.substr(colon + 1u);
+                char *end = nullptr;
+                press.from = press.to = std::strtod(when.c_str(), &end);
+                if (end && *end == '-')
+                    press.to = std::strtod(end + 1, &end);
+                if (end && *end == '/')
+                    press.period = std::strtod(end + 1, &end);
+                for (const auto &[button, mask] : kButtons)
+                    if (name == button)
+                        press.mask = mask;
+                if (press.mask != 0u)
+                    presses.push_back(press);
+            }
+            item.clear();
+            if (*c == '\0')
+                break;
+        }
+        return presses;
+    }
+
+    // Botones del guion pulsados ahora (bits activos a 1)
+    uint16_t gow2PadScriptButtons()
+    {
+        static const char *text = std::getenv("GOW2_PAD_SCRIPT");
+        if (!text)
+            return 0u;
+        static const std::vector<Gow2PadPress> presses = gow2ParsePadScript(text);
+        static const auto start = std::chrono::steady_clock::now();
+        const double now = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+        constexpr double kHold = 0.3;
+        uint16_t pressed = 0u;
+        for (const Gow2PadPress &press : presses)
+        {
+            if (now < press.from || now > press.to + kHold)
+                continue;
+            const double into = now - press.from;
+            const double phase = press.period > 0.0 ? into - press.period * static_cast<long>(into / press.period) : into;
+            if (phase < kHold)
+                pressed |= press.mask;
+        }
+        static uint16_t last = 0u;
+        if (pressed != last)
+            std::fprintf(stderr, "[gow2-pad2:script] t=%.1f s botones=%04x\n", now, pressed);
+        last = pressed;
+        return pressed;
+    }
+
     // 0x2B7AE0 scePad2Read(socket, u8 *data): 18 bytes = botones (activos a 0, orden del cable), RX/RY/LX/LY y las 12
     // presiones. Sin mando en el PC, el teclado: botones según PSPadBackend (flechas, Z/X/C/V, Q/E, 1/3, Intro = Start)
     // y sticks con WASD (izquierdo) e IJKL (derecho).
@@ -392,6 +499,11 @@ namespace
             state[7] = IsKeyDown(KEY_W) ? 0 : IsKeyDown(KEY_S) ? 255 : 128;
             state[4] = IsKeyDown(KEY_J) ? 0 : IsKeyDown(KEY_L) ? 255 : 128;
             state[5] = IsKeyDown(KEY_I) ? 0 : IsKeyDown(KEY_K) ? 255 : 128;
+        }
+        if (const uint16_t scripted = gow2PadScriptButtons())
+        {
+            state[2] &= static_cast<uint8_t>(~scripted);
+            state[3] &= static_cast<uint8_t>(~(scripted >> 8));
         }
         uint8_t packet[18]{};
         for (size_t i = 0; i < 6; ++i)
@@ -442,6 +554,8 @@ namespace
                          runtime.replaceFunction(0x002B7BB8u, gow2Pad2GetButtonProfile) &&
                          runtime.replaceFunction(0x002B7C88u, gow2Pad2GetState);
         std::fprintf(stderr, "[gow2-override] libpad2=%d\n", pad);
+        const bool ipu = runtime.replaceFunction(0x002B56F0u, gow2IpuInit); // sceIpuInit (bloqueo 11)
+        std::fprintf(stderr, "[gow2-override] sceIpuInit=%d\n", ipu);
 
         // al final, para envolver también los overrides de arriba
         if (const char *profile = std::getenv("GOW2_CALL_PROFILE"))
