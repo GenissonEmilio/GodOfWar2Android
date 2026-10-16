@@ -68,7 +68,13 @@ Igual que en GoW1: **DeepSeek V4.1 Flash, gratis en OpenCode**, para trabajo de 
 - `sceCdReadDvdDualInfo` (`0x2B6BF0`), como en GoW1: el arranque la repetía para siempre.
 - **TEMPORAL** `0x1875E0`: el `SetupThread` del runtime ignora el bloque de argumentos, `main` recibe `argc = 0` y las rutas de los IRX salían vacías. El arreglo de verdad sería en el runtime (propuesta en NOTES.md, "Cambios necesarios en PS2Recomp"); quien toque el fork, que lo avise antes.
 
-**Siguiente bloqueo** (objetivo 2 de la fase 2): tras cargar los IRX, el hilo principal se queda en `pc=0x1833C8` (`ra=0x181568`). Para investigarlo: `GOW2_THREAD_WATCH=5` y `GOW2_BOOT_TRACE=1` (ver NOTES.md, "Diagnóstico de bloqueos", que explica también cómo probar un override en ~1 min sin recompilar todo).
+**Objetivo 2 en marcha** (DaniSBR1, 2026-10-16): resueltos tres bloqueos más en el override. El heap interno del runtime pisaba el del juego (`setPrivateGuestHeap(0xA0000, 0xFF000)`, como en GoW1), el módulo del IOP que va dentro del ELF (`sceSifLoadStartModuleBuffer`, como en GoW1) y un punto de reanudación sin registrar (TEMPORAL, ver abajo). El juego ya empieza a leer el disco.
+
+**Dos decisiones pendientes** (detalle en NOTES.md, "Bloqueos"):
+1. **Bloqueo abierto, cambio en el fork:** SMPD lee `cdrom0:\GODOFWAR.TOC` con `ioman` (`open`/`read`/`lseek`/`close`), que el IOP del runtime no implementa (devuelve 0): carga un índice vacío y el juego se cuelga en `0x27D7E8`. Hay que implementar esas cuatro funciones en `ps2xIOP/src/emulator/imports/iop_ioman.cpp` sobre los archivos de `game/disc/`. Quien lo haga, que lo avise antes (regla 5).
+2. **Puntos de reanudación:** `ps2_recomp` llama `entry_XXXX` a las 735 funciones de `entry_points` y no registra sus puntos de reanudación. Arreglo sin tocar el fork: meterlas en `funcmap.csv` con su nombre (`vfn_`/`cfn_`/`fn_`), regenerar y recompilar entero (~50 min). Mientras, un TEMPORAL cubre el único caso visto (`0x1857F8`).
+
+Para investigar: `GOW2_THREAD_WATCH=5` y `GOW2_BOOT_TRACE=1` (NOTES.md, "Diagnóstico de bloqueos", que explica también cómo probar un override en ~1 min sin recompilar todo).
 
 ### Fase 1 cerrada: primera configuración que recompila y compila (DaniSBR1 y cxldsakeb, 2026-10-15)
 
