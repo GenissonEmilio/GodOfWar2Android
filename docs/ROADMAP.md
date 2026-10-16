@@ -37,7 +37,9 @@ Cada fase tiene un criterio de "hecho" comprobable.
   - En GoW1, `sceSifLoadStartModuleBuffer` (un módulo mínimo, "ck01", que va dentro del ELF) necesitó override. En GoW II es `0x2D4850` (verificada); de momento no ha hecho falta.
 - [ ] **Pasa la inicialización** y empieza a leer datos del disco (`GODOFWAR.TOC`, `PART*.PAK` a través de `.disc_layout`).
   - Resueltos (DaniSBR1, 2026-10-16): el heap del runtime pisaba el del juego (`setPrivateGuestHeap`), los puntos de reanudación de las funciones del escáner (ahora en `funcmap.csv`) y el módulo del IOP que va dentro del ELF (`sceSifLoadStartModuleBuffer`). El juego ya empieza a leer el disco (SMPD arranca).
-  - SMPD lee `cdrom0:\GODOFWAR.TOC` con `ioman` (`open`/`read`/`lseek`/`close`), que el IOP del runtime no implementaba: cargaba un índice vacío y el juego se colgaba en `0x27D7E8`. Implementado en el fork (ver NOTES.md).
+  - SMPD lee `cdrom0:\GODOFWAR.TOC` con `ioman` (`open`/`read`/`lseek`/`close`), que el IOP del runtime no implementaba: cargaba un índice vacío y el juego se colgaba en `0x27D7E8`. Implementado en el fork (DaniSBR1) y **probado** (cxldsakeb, 2026-10-16).
+  - SMPD troceaba sus rutas con `strtok`, que el runtime dejaba en 0, y usaba `GetSystemTimeLow`, que no existía (cxldsakeb, 2026-10-16, fork `df2a082`). Con eso, el EE ya pide recursos (`R_PermA…`) y SMPD lee `PART1.PAK`.
+  - **Siguiente:** el bloqueo 8. Tras la primera lectura de `PART1.PAK`, el EE y SMPD se quedan esperándose (ver NOTES.md).
 - [ ] **Overrides imprescindibles**, solo cuando el log los pida y con direcciones de GoW II. Candidatos según GoW1: `sceIpuInit` (tablas del IPU), la configuración de pantalla y la interrupción FINISH del GS, `DelayThread` y el timer 2, `libpad2` (mando) y el envío de comandos a 989snd.
 - Resuelto sin override: `sceSifInitRpc` e `iWakeupThread`. En GoW1 el recompilador las descartaba; en GoW II Ghidra las detecta y van a los manejadores del runtime.
 
