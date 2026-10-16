@@ -9,10 +9,10 @@ Tres tipos, los que causan "[guest-branch:missing-target]" en el runtime:
         (callbacks que se pasan como argumento, p. ej. el de fin de un comando asíncrono). Mismo
         criterio que vfn_: deben empezar tras un "jr ra" o tras relleno.
 
-    py -3 tools/scan_missing_functions.py              # usa config/gow_functions.csv + gow.manual.toml
+    py -3 tools/scan_missing_functions.py              # usa config/gow_functions.csv + recomp.template.toml
 
-Ya cuenta las entradas que haya en config/gow.manual.toml, así que tras volver a exportar desde
-Ghidra solo saldrán las nuevas. El resultado se pega en extra_entry_points; revisa a mano las
+Ya cuenta las entradas "nombre@0x..." de config/recomp.template.toml (stubs y entry_points), así que
+tras volver a exportar desde Ghidra solo saldrán las nuevas. El resultado se pega en entry_points; revisa a mano las
 dudosas (p. ej. 0x100000, el relleno antes del crt0, se descartó).
 Requisitos: py -3 -m pip install pyelftools
 """
@@ -29,11 +29,17 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 JR_RA = 0x03E00008
 
 
+def default_elf():
+    # el ELF que detectó scripts/extract-iso.ps1
+    with open(os.path.join(REPO, "game", "elf-name.txt"), encoding="ascii") as f:
+        return os.path.join(REPO, "game", "disc", f.readline().strip())
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--elf", default=os.path.join(REPO, "game", "disc", "SCUS_973.99"))
+    parser.add_argument("--elf", default=default_elf())
     parser.add_argument("--csv", default=os.path.join(REPO, "config", "gow_functions.csv"))
-    parser.add_argument("--manual", default=os.path.join(REPO, "config", "gow.manual.toml"))
+    parser.add_argument("--manual", default=os.path.join(REPO, "config", "recomp.template.toml"))
     args = parser.parse_args()
 
     elf = ELFFile(open(args.elf, "rb"))

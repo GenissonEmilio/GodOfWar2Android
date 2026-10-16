@@ -11,6 +11,7 @@ $ElfNameFile  = Join-Path $GameDir 'elf-name.txt'
 $IsoPathFile  = Join-Path $GameDir 'iso-path.txt'
 $TemplateToml = Join-Path $RepoRoot 'config\recomp.template.toml'   # de KIexster (base de Waffle565)
 $FuncMapCsv   = Join-Path $RepoRoot 'config\funcmap.csv'
+$ConfigToml   = Join-Path $RepoRoot 'config\gow.toml'                # lo exporta ghidra-analyze.ps1
 $EffectiveToml = Join-Path $RepoRoot 'out\gow.effective.toml'
 $GeneratedDir = Join-Path $RepoRoot 'generated'
 $OverridesDir = Join-Path $RepoRoot 'overrides'

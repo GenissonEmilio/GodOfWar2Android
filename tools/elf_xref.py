@@ -15,7 +15,9 @@ from capstone import CS_ARCH_MIPS, CS_MODE_LITTLE_ENDIAN, CS_MODE_MIPS32, Cs
 from elftools.elf.elffile import ELFFile
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DEFAULT_ELF = os.path.join(REPO, "game", "disc", "SCUS_973.99")
+# el ELF que detectó scripts/extract-iso.ps1
+with open(os.path.join(REPO, "game", "elf-name.txt"), encoding="ascii") as _f:
+    DEFAULT_ELF = os.path.join(REPO, "game", "disc", _f.readline().strip())
 
 
 def main():

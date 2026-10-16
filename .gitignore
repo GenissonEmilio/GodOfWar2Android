@@ -19,6 +19,10 @@ game/*
 # Código C++ generado por el recompilador (derivado del ELF: se regenera en local)
 generated/
 
+# Export de Ghidra (rutas locales; se regenera con ghidra-analyze.ps1). Lo que se sube es funcmap.csv
+config/gow.toml
+config/gow_functions.csv
+
 # Builds y logs
 out/
 *.log
