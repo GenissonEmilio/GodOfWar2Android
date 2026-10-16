@@ -51,8 +51,10 @@ Cada fase tiene un criterio de "hecho" comprobable.
 Se llega a la **primera zona jugable (Rodas), con sonido** (cxldsakeb, 2026-10-16). Lo que falta:
 
 - [x] **Bloqueo 12, el escenario verde.** El juego cuenta las sombras de los personajes en el canal verde del framebuffer y lo restaura con copias por columnas de 8 px a través de una vista de 16 bits. Esas copias acaban en una fracción de píxel (`y = 895.4375`) y el backend del GS las descartaba. Arreglado en el fork (`8a4abab`, DaniSBR1, 2026-10-16): el escenario sale bien y **se dibuja la sombra de Kratos**.
-- [ ] Otros fallos de imagen: un **polígono azul translúcido en el cielo** (probablemente el "cielo plano"), la copia Z16 → framebuffer de las sombras que el backend aún descarta (`shuffleWhy=13`) y un "fantasma" pegado a Kratos que vio cxldsakeb. Detalle en NOTES.md, "Estado del repositorio".
-- [ ] **Velocidad completa:** ahora va a pocos FPS. VU1 e IOP nativos con capturas propias de GoW II (sección 7b de [SETUP.md](SETUP.md)); en GoW1 fue el salto de 7–8 a ~60 FPS. Los microprogramas de la VU van dentro del ELF (`.DVP.overlay`): quizá se puedan sacar de ahí.
+- [x] **Bloqueo 13, el polígono azul del cielo:** la copia Z16 → framebuffer leía el target de profundidad equivocado. Arreglado en el fork (`d0b6162`, DaniSBR1, 2026-10-16).
+- [ ] Otros fallos de imagen: **contornos azules finos** contra el cielo a escala interna 2 (probable efecto del escalado) y el "fantasma" pegado a Kratos que vio cxldsakeb. Detalle en NOTES.md, "Estado del repositorio".
+- [ ] **Velocidad completa.** Medida con el contador nuevo (F10) en el PC de DaniSBR1: **~58–60 FPS reales y velocidad 100 % en la primera zona**. Falta confirmarlo en otros equipos y en zonas más pesadas. VPS 60 significa que la emulación llega a tiempo (los VBlank van al ritmo del tiempo emulado). VU1 e IOP nativos con capturas propias (sección 7b de [SETUP.md](SETUP.md)) darían margen; los microprogramas de la VU van dentro del ELF (`.DVP.overlay`).
+- [x] **Controles de la ventana** (DaniSBR1, 2026-10-16, fork `cf4e3f2`/`3b71410`): F12 pantalla completa sin bordes / ventana; F10 contador de FPS como el de PCSX2.
 - [ ] Partida, combate y HUD, revisados en pantalla.
 - [ ] Guardar y cargar (memory card).
 - [ ] Retirar el TEMPORAL de `0x1875E0` (que `SetupThread` rellene los argumentos en el runtime).
