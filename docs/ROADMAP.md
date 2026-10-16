@@ -23,7 +23,7 @@ Cada fase tiene un criterio de "hecho" comprobable.
 - [x] Funciones que Ghidra no ve (`scan_missing_functions.py`). (DaniSBR1: 733, en `entry_points`)
 - [x] `config/funcmap.csv` (`Name,Start,End,Size`) y `config/recomp.template.toml` con `@ELF@`, `@MAP@` y `@OUT@`, tomando como modelo los de `referencia/gow1/config/`. (DaniSBR1: primera versión; `recompile.ps1` genera C++ sin errores)
 - [x] Stubs de las librerías de Sony (`sceMpeg*`, `sceIpu*`, `sceGs*`, `sceCd*`, `sceDma*`, libkernel…): localizar cada una en GoW II (las cadenas y los patrones de llamada ayudan; DeepSeek puede cruzar listas). (DaniSBR1: 76 de 79; los otros 3 no están enlazados en GoW II. SDK 3.0.0, ver NOTES.md)
-- [x] Tabla `[mmio]`: los accesos del juego a registros del hardware que el runtime convierte en llamadas nativas. (DaniSBR1: 240 entradas de `ps2_analyzer`, equivalentes a la tabla de GoW1)
+- [x] Tabla `[mmio]`: los accesos del juego a registros del hardware que el runtime convierte en llamadas nativas. (DaniSBR1: 240 entradas de `ps2_analyzer`, equivalentes a la tabla de GoW1; falta confirmar que el runner compila con ella)
 
 **Hecho cuando:** `recompile.ps1` genera C++ sin errores y el runner compila. (DaniSBR1, 2026-10-15: ya se cumple con la primera configuración; faltan los stubs y `[mmio]` para que tenga sentido pasar a la fase 2)
 

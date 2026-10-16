@@ -71,7 +71,9 @@ Igual que en GoW1: **DeepSeek V4.1 Flash, gratis en OpenCode**, para trabajo de 
 2. ~~Tabla `[mmio]`~~ **hecho: 240 entradas** de `ps2_analyzer`, equivalentes a la tabla de GoW1 (que era la salida del analizador sin retocar). El analizador, con su base de símbolos de Sony, también confirma los 76 stubs en las mismas direcciones. Ver NOTES.md ("Tabla [mmio] y contraste con ps2_analyzer").
 3. Cada `recompile.ps1` regenera todo `generated/` y el runner tarda ~50 min en recompilarse entero: juntar cambios antes de regenerar.
 
-**Siguiente: fase 2** (primer arranque): `.\scripts\run.ps1 -Config RelWithDebInfo -NoBuild` y arreglar el primer bloqueo del log. Vigilar los 8 `sceSif*` que `ps2_recomp` convierte en stub por nombre.
+**Falta confirmar que el runner compila con la tabla `[mmio]`** (DaniSBR1 la subió sin compilar, para que la compile otro miembro del equipo). Con los stubs sí compilaba y enlazaba limpio. Quien lo compile: `.\scripts\recompile.ps1` y luego `.\scripts\run.ps1 -Config RelWithDebInfo` (compila el runner, ~50 min, y arranca). Si enlaza sin `LNK2001`/`LNK2019`, la fase 1 queda cerrada: táchalo aquí y en `docs/ROADMAP.md`.
+
+**Siguiente: fase 2** (primer arranque): con el runner ya compilado, `.\scripts\run.ps1 -Config RelWithDebInfo -NoBuild` y arreglar el primer bloqueo del log. Vigilar los 8 `sceSif*` que `ps2_recomp` convierte en stub por nombre.
 
 ### Traspaso a DaniSBR1: fase 1, mapa de funciones y primera configuración (cxldsakeb, 2026-10-15)
 
