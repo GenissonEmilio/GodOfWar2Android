@@ -5,7 +5,9 @@
 #include "game_overrides.h"
 #include "ps2_runtime.h"
 #include "ps2_runtime_macros.h"
+#include "ps2_host_backend.h" // raylib: IsGamepadAvailable / IsKeyDown para el teclado
 #include <ps2_recompiled_functions.h>
+#include <array>
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -276,6 +278,137 @@ namespace
         ctx->pc = GPR_U32(ctx, 31);
     }
 
+    // ---- Mando: libpad2 en el EE ----
+    // Adaptado de GoW1 (referencia/gow1/overrides/gow_overrides.cpp y gow_pad2_packet.h, Waffle565 vía KIexster, GPLv3).
+    // God of War II lee el mando en el EE con libpad2 (sockets y un paquete de 18 bytes), que habla con el driver
+    // DBCMAN del IOP; sin estos overrides, el juego no ve ningún mando y se queda en el aviso "no hay mando conectado".
+    // Se responde con el mando nativo del runtime (PSPadBackend: un mando del PC o, si no hay, el teclado).
+    // Direcciones: libpad2 de GoW1 + 0x3C0F0 (el mismo desplazamiento que libcdvd/libdbc); cada una empieza una función
+    // de config/funcmap.csv con el tamaño de GoW1 (±4) y el juego las llama desde 0x188B4C/0x188BC8/0x188C5C.
+    struct Gow2PadSocket
+    {
+        bool open = false;
+        uint32_t port = 0;
+    };
+    std::array<Gow2PadSocket, 2> g_gow2PadSockets{};
+
+    void gow2PadReturn(R5900Context *ctx, uint32_t result)
+    {
+        SET_GPR_S32(ctx, 2, static_cast<int32_t>(result));
+        ctx->pc = GPR_U32(ctx, 31);
+    }
+
+    Gow2PadSocket *gow2PadSocket(R5900Context *ctx)
+    {
+        const uint32_t handle = GPR_U32(ctx, 4);
+        return handle < g_gow2PadSockets.size() && g_gow2PadSockets[handle].open ? &g_gow2PadSockets[handle] : nullptr;
+    }
+
+    uint8_t *gow2PadBuffer(uint8_t *rdram, uint32_t address, size_t size)
+    {
+        const uint32_t physical = address & 0x1FFFFFFFu;
+        return address && physical < 0x02000000u && size <= 0x02000000u - physical ? rdram + physical : nullptr;
+    }
+
+    // 0x2B78D8 scePad2Init / 0x2B7918 scePad2End
+    void gow2Pad2Init(uint8_t *, R5900Context *ctx, PS2Runtime *)
+    {
+        g_gow2PadSockets = {};
+        gow2PadReturn(ctx, 1u);
+    }
+
+    // 0x2B7980 int scePad2CreateSocket(scePad2SocketParam *param, void *dmaBuffer): param = {?, port, slot}
+    void gow2Pad2CreateSocket(uint8_t *rdram, R5900Context *ctx, PS2Runtime *)
+    {
+        const uint8_t *params = gow2PadBuffer(rdram, GPR_U32(ctx, 4), 12);
+        uint32_t port = 0, slot = 0;
+        if (params)
+        {
+            std::memcpy(&port, params + 4, 4);
+            std::memcpy(&slot, params + 8, 4);
+        }
+        if (!params || port >= 2u || slot != 0u || (GPR_U32(ctx, 5) & 63u))
+        {
+            gow2PadReturn(ctx, 0xFFFFFFFFu);
+            return;
+        }
+        for (uint32_t handle = 0; handle < g_gow2PadSockets.size(); ++handle)
+            if (!g_gow2PadSockets[handle].open)
+            {
+                g_gow2PadSockets[handle] = {true, port};
+                std::fprintf(stderr, "[gow2-pad2] socket=%u port=%u\n", handle, port);
+                gow2PadReturn(ctx, handle);
+                return;
+            }
+        gow2PadReturn(ctx, 0xFFFFFFFFu);
+    }
+
+    // 0x2B7A88 scePad2DeleteSocket(socket)
+    void gow2Pad2DeleteSocket(uint8_t *, R5900Context *ctx, PS2Runtime *)
+    {
+        Gow2PadSocket *socket = gow2PadSocket(ctx);
+        if (socket)
+            socket->open = false;
+        gow2PadReturn(ctx, socket ? 1u : 0xFFFFFFFFu);
+    }
+
+    // 0x2B7C88 scePad2GetState(socket): 1 = estable. Solo el puerto 1 tiene mando (el del PC o el teclado).
+    void gow2Pad2GetState(uint8_t *, R5900Context *ctx, PS2Runtime *)
+    {
+        const Gow2PadSocket *socket = gow2PadSocket(ctx);
+        gow2PadReturn(ctx, socket && socket->port == 0u ? 1u : 0u);
+    }
+
+    // 0x2B7BB8 scePad2GetButtonProfile(socket, u8 *profile): 0xFF... = DualShock 2 (todos los botones)
+    void gow2Pad2GetButtonProfile(uint8_t *rdram, R5900Context *ctx, PS2Runtime *)
+    {
+        uint8_t *buffer = gow2PadBuffer(rdram, GPR_U32(ctx, 5), 4);
+        const Gow2PadSocket *socket = gow2PadSocket(ctx);
+        if (!buffer || !socket || socket->port != 0u)
+        {
+            gow2PadReturn(ctx, 0xFFFFFFFFu);
+            return;
+        }
+        std::memset(buffer, 0xFF, 4);
+        gow2PadReturn(ctx, 4u);
+    }
+
+    // 0x2B7AE0 scePad2Read(socket, u8 *data): 18 bytes = botones (activos a 0, orden del cable), RX/RY/LX/LY y las 12
+    // presiones. Sin mando en el PC, el teclado: botones según PSPadBackend (flechas, Z/X/C/V, Q/E, 1/3, Intro = Start)
+    // y sticks con WASD (izquierdo) e IJKL (derecho).
+    void gow2Pad2Read(uint8_t *rdram, R5900Context *ctx, PS2Runtime *runtime)
+    {
+        uint8_t *buffer = gow2PadBuffer(rdram, GPR_U32(ctx, 5), 18);
+        const Gow2PadSocket *socket = gow2PadSocket(ctx);
+        uint8_t state[32]{};
+        if (!buffer || !socket || socket->port != 0u || !runtime || !runtime->padBackend().readState(0, 0, state, sizeof(state)))
+        {
+            gow2PadReturn(ctx, 0xFFFFFFFFu);
+            return;
+        }
+        if (!IsGamepadAvailable(0) && !IsGamepadAvailable(1) && !IsGamepadAvailable(2) && !IsGamepadAvailable(3))
+        {
+            state[6] = IsKeyDown(KEY_A) ? 0 : IsKeyDown(KEY_D) ? 255 : 128;
+            state[7] = IsKeyDown(KEY_W) ? 0 : IsKeyDown(KEY_S) ? 255 : 128;
+            state[4] = IsKeyDown(KEY_J) ? 0 : IsKeyDown(KEY_L) ? 255 : 128;
+            state[5] = IsKeyDown(KEY_I) ? 0 : IsKeyDown(KEY_K) ? 255 : 128;
+        }
+        uint8_t packet[18]{};
+        for (size_t i = 0; i < 6; ++i)
+            packet[i] = state[i + 2];
+        const uint16_t buttons = static_cast<uint16_t>(state[2] | (state[3] << 8));
+        constexpr uint16_t kPressureBits[] = {0x20, 0x80, 0x10, 0x40, 0x1000, 0x2000, 0x4000, 0x8000, 0x400, 0x800, 0x100, 0x200};
+        for (size_t i = 0; i < 12; ++i)
+            packet[6 + i] = (buttons & kPressureBits[i]) ? 0 : 255;
+        std::memcpy(buffer, packet, sizeof(packet));
+        static uint16_t lastButtons = 0xFFFFu;
+        static unsigned reads = 0;
+        if (++reads <= 3u || buttons != lastButtons)
+            std::fprintf(stderr, "[gow2-pad2] read buttons=%04x\n", buttons);
+        lastButtons = buttons;
+        gow2PadReturn(ctx, 18u);
+    }
+
     void applyGow2Overrides(PS2Runtime &runtime)
     {
         const bool bootTrace = std::getenv("GOW2_BOOT_TRACE") != nullptr;
@@ -299,6 +432,16 @@ namespace
         const bool moduleBuffer = runtime.replaceFunction(0x002D4850u, gow2LoadStartModuleBuffer);
         std::fprintf(stderr, "[gow2-override] sceCdReadDvdDualInfo=%d bootDevice=%d moduleBuffer=%d\n", dualInfo, bootDevice,
                      moduleBuffer);
+
+        // mando (libpad2, ver arriba)
+        const bool pad = runtime.replaceFunction(0x002B78D8u, gow2Pad2Init) &&         // scePad2Init
+                         runtime.replaceFunction(0x002B7918u, gow2Pad2Init) &&         // scePad2End
+                         runtime.replaceFunction(0x002B7980u, gow2Pad2CreateSocket) && // scePad2CreateSocket
+                         runtime.replaceFunction(0x002B7A88u, gow2Pad2DeleteSocket) && // scePad2DeleteSocket
+                         runtime.replaceFunction(0x002B7AE0u, gow2Pad2Read) &&         // scePad2Read
+                         runtime.replaceFunction(0x002B7BB8u, gow2Pad2GetButtonProfile) &&
+                         runtime.replaceFunction(0x002B7C88u, gow2Pad2GetState);
+        std::fprintf(stderr, "[gow2-override] libpad2=%d\n", pad);
 
         // al final, para envolver también los overrides de arriba
         if (const char *profile = std::getenv("GOW2_CALL_PROFILE"))
