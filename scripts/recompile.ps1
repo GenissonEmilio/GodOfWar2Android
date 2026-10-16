@@ -63,23 +63,48 @@ if ($env:GOW_IOP_MODULOS) {
 # ── Sincronizar con el runner ──────────────────────────────────────────────
 if (-not (Test-Path $GeneratedDir)) { throw 'No hay nada en generated/. Ejecuta sin -SyncOnly.' }
 
-# Borrar lo que copiamos la vez anterior (por si cambiaron nombres de funciones)
-if (Test-Path $SyncManifest) {
-    Get-Content $SyncManifest | Where-Object { $_ -and (Test-Path $_) } | Remove-Item -Force
-}
 New-Item -ItemType Directory -Force (Split-Path $SyncManifest) | Out-Null
+
+# Solo se copian los archivos cuyo contenido cambió: los demás conservan su fecha y MSBuild no los recompila.
+# Antes se borraba y se copiaba todo con la fecha actual, y cada sincronización recompilaba el runner entero
+# (~45 min) aunque nada hubiera cambiado. Primero se compara el tamaño y, si coincide, una huella MD5.
+$md5 = [System.Security.Cryptography.MD5]::Create()
+function Test-SameContent([string]$a, [string]$b) {
+    $fa = Get-Item -LiteralPath $a
+    $fb = Get-Item -LiteralPath $b -ErrorAction SilentlyContinue
+    if (-not $fb -or $fa.Length -ne $fb.Length) { return $false }
+    $ha = $md5.ComputeHash([IO.File]::ReadAllBytes($a))
+    $hb = $md5.ComputeHash([IO.File]::ReadAllBytes($b))
+    return [Convert]::ToBase64String($ha) -eq [Convert]::ToBase64String($hb)
+}
 
 # El código generado incluye <ps2_recompiled_functions.h> desde src/runner, así que todo va ahí
 $copied = New-Object System.Collections.Generic.List[string]
+$changed = 0
 $sources = @(Get-ChildItem $GeneratedDir -File) + @(Get-ChildItem $OverridesDir -File | Where-Object { $_.Extension -in '.cpp', '.h' })
 foreach ($file in $sources) {
     $dest = Join-Path $RunnerSrcDir $file.Name
-    Copy-Item $file.FullName $dest -Force
-    (Get-Item $dest).LastWriteTime = Get-Date   # que MSBuild no lo dé por compilado
+    if (-not (Test-SameContent $file.FullName $dest)) {
+        Copy-Item $file.FullName $dest -Force
+        (Get-Item $dest).LastWriteTime = Get-Date   # que MSBuild no lo dé por compilado
+        $changed++
+    }
     $copied.Add($dest)
 }
+# Borrar las copias de la vez anterior que ya no existen (funciones renombradas o eliminadas)
+$removed = 0
+if (Test-Path $SyncManifest) {
+    $current = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+    foreach ($path in $copied) { [void]$current.Add($path) }
+    foreach ($old in (Get-Content $SyncManifest)) {
+        if ($old -and -not $current.Contains($old) -and (Test-Path -LiteralPath $old)) {
+            Remove-Item -LiteralPath $old -Force
+            $removed++
+        }
+    }
+}
 Set-Content -Path $SyncManifest -Value $copied -Encoding utf8
-Write-Host "Copiados $($copied.Count) archivos al runner de PS2Recomp."
+Write-Host "Runner de PS2Recomp: $($copied.Count) archivos, $changed copiados (contenido nuevo o distinto), $removed borrados."
 
 # Reconfigurar CMake para que el proyecto del runner incluya los archivos nuevos. Si se deja
 # a la regeneración automática durante el build, MSBuild compila con el proyecto viejo y
