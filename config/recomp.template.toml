@@ -13,12 +13,88 @@ patch_syscalls = false
 patch_cop0 = true
 patch_cache = true
 
-# Funciones con manejador propio en el runtime. Solo direcciones verificadas en el ELF de GoW II;
-# las de GoW1 que faltan se van localizando (ver docs/NOTES.md, "Stubs de librerías de Sony").
+# Funciones con manejador propio en el runtime: los stubs de GoW1, localizados en GoW II (SDK 3.0.0).
+# Método y verificación de cada grupo en docs/NOTES.md, "Stubs de librerías de Sony".
 stubs = [
-  "StartThread@0x002D0768",     # SDK 3.0: función en C (ReferThreadStatus + syscall 0x22 en 0x2CF740), como en GoW1
-  "iWakeupThread@0x002CF860",   # syscall -0x34
-  "InitTLB@0x002CFD90",         # syscall 0x82
+  "sceMpegCreate@0x002AB3E0",
+  "sceMpegInit@0x002ABE88",
+  "sceMpegGetPicture@0x002ABF48",
+  "sceMpegGetPictureRAW8@0x002ABF90",
+  "sceMpegReset@0x002ABFD8",
+  "sceMpegAddCallback@0x002AC070",
+  "sceMpegClearRefBuff@0x002AC1F0",
+  "_sceMpegFlush@0x002ACDA8",
+  "sceMpegDemuxPssRing@0x002AFDD8",
+  "sceMpegAddStrCallback@0x002B01D8",
+  "sceIpuStopDMA@0x002B53D8",
+  "sceIpuRestartDMA@0x002B54C0",
+  "sceIpuSync@0x002B5610",
+  "sceIpuInit@0x002B56F0",
+  "sceGsResetGraph@0x002B5928",
+  "sceGsResetPath@0x002B5AC8",
+  "sceGsSyncV@0x002B5B30",
+  "sceGsSyncPath@0x002B5BC8",
+  "memclr@0x002B5FE0",
+  "sceDmaGetChan@0x002B6018",
+  "sceDmaReset@0x002B6040",
+  "sceDmaPutEnv@0x002B6120",
+  "sceDmaSend@0x002B6300",
+  "sceDmaPause@0x002B6388",
+  "sceCdSync@0x002B6698",
+  "sceCdSyncS@0x002B6738",
+  "sceCdInit@0x002B6900",
+  "sceCdMmode@0x002B6CC0",
+  "__divdi3@0x002BF830",
+  # "exit": no está enlazado en GoW II (ver NOTES.md)
+  "memcmp@0x002C6A38",
+  "rand@0x002C8448",
+  "strrchr@0x002C94F0",
+  "write@0x002CFEE8",
+  # "read": no está enlazado en GoW II (ver NOTES.md)
+  "_sceSDC@0x002D0028",
+  "_sceIDC@0x002D0158",
+  "InitThread@0x002D0510",
+  "iWakeupThread@0x002D0600",
+  "StartThread@0x002D0768",
+  "sceTtyHandler@0x002D0978",
+  "sceTtyWrite@0x002D0B10",
+  # "sceTtyRead": no está enlazado en GoW II (ver NOTES.md)
+  "sceTtyInit@0x002D0C88",
+  "sceSifInitCmd@0x002D2080",
+  "sceSifExitCmd@0x002D2300",
+  "sceSifAddCmdHandler@0x002D2338",
+  "sceSifRemoveCmdHandler@0x002D23B0",
+  "_sceSifSendCmd@0x002D2400",
+  "sceSifSendCmd@0x002D2538",
+  "_sceSifCmdIntrHdlr@0x002D25B8",
+  "sceSifWriteBackDCache@0x002D2700",
+  "sceSifInitRpc@0x002D27B0",
+  "_sceRpcGetFPacket@0x002D2A40",
+  "_sceRpcGetFPacket2@0x002D2A70",
+  "sceSifBindRpc@0x002D2DF8",
+  "sceSifCallRpc@0x002D2FD8",
+  "sceSifCheckStatRpc@0x002D31D8",
+  "_sceFsSemInit@0x002D3848",
+  "sceFsInit@0x002D3928",
+  "sceFsReset@0x002D3BC0",
+  "sceOpen@0x002D3BF8",
+  "sceClose@0x002D3E88",
+  "sceRead@0x002D4008",
+  "sceSifInitIopHeap@0x002D42D8",
+  "sceSifAllocIopHeap@0x002D4360",
+  "sceSifLoadFileReset@0x002D4608",
+  "_sceSifLoadModuleBuffer@0x002D4640",
+  "_sceSifLoadModule@0x002D4870",
+  "sceSifResetIop@0x002D4AE0",
+  "sceSifSyncIop@0x002D4C38",
+  "sceSifRebootIop@0x002D4C88",
+  "InitAlarm@0x002D52B0",
+  "sceDeci2Open@0x002D6310",
+  "sceDeci2ReqSend@0x002D6360",
+  "sceDeci2Poll@0x002D6390",
+  "sceDeci2ExRecv@0x002D63C0",
+  "sceDeci2ExSend@0x002D63F8",
+  "InitTLB@0x002D65B0",
 ]
 
 # Funciones del juego a las que solo se llega por puntero (vtables, callbacks) o que Ghidra no analizó.

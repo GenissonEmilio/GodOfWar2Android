@@ -67,9 +67,9 @@ Igual que en GoW1: **DeepSeek V4.1 Flash, gratis en OpenCode**, para trabajo de 
 **Hecho:** fase 0 de DaniSBR1 (mismo SHA1). Ghidra → 5 874 funciones; `tools/make_funcmap.py` → `config/funcmap.csv` (solo funciones: el export trae además 31 986 etiquetas internas que no deben ir); escáner → 733 funciones más en `entry_points` (no en `funcmap.csv`, como en GoW1). `recompile.ps1` genera 6 607 funciones **sin errores** y **el runner compila y enlaza** (0 símbolos sin resolver). Arreglados restos de GoW1: `$ConfigToml` sin definir en `_common.ps1` y los scripts de `tools/` apuntando al ELF de GoW1.
 
 **Pendiente para cerrar la fase 1:**
-1. **Stubs de Sony:** 3 de 79 verificados. **GoW II usa el SDK 3.0.0** y GoW1 otro: los tamaños no coinciden, así que se localizan por las cadenas que usan (`lui`+`addiu` a `.rodata`) y por quién las llama. Candidatas y método en NOTES.md ("Stubs de librerías de Sony"). Ojo: en el SDK 3.0 algunas funciones de libkernel son funciones en C delante del envoltorio de la syscall (`StartThread`).
-2. **Tabla `[mmio]`**, buscando en GoW II los equivalentes de la de GoW1.
-3. Juntar varios stubs antes de cada `recompile.ps1`: regenera todo `generated/` y el runner tarda ~40 min en recompilarse entero.
+1. ~~Stubs de Sony~~ **hecho: 76 de 79** (los otros 3, `exit`, `read` y `sceTtyRead`, no están enlazados en GoW II). **GoW II usa el SDK 3.0.0**: las librerías están desplazadas en bloque respecto a GoW1 (+0x3C0E8 libmpeg, +0x3C0F0 ipu/graph/dma/cdvd, +0x3BB68 sif/deci2) y cada stub se verificó en el ELF de GoW II. Método en NOTES.md ("Stubs de librerías de Sony"). Ojo: en el SDK 3.0, `StartThread`, `iWakeupThread` e `InitTLB` son funciones en C delante del envoltorio de la syscall, y el stub va en la función en C.
+2. **Tabla `[mmio]`**, buscando en GoW II los equivalentes de la de GoW1. Probablemente sirva el mismo truco del desplazamiento por librería: casi todas sus direcciones caen en libipu/libdma/libgraph.
+3. Cada `recompile.ps1` regenera todo `generated/` y el runner tarda ~40 min en recompilarse entero: juntar cambios antes de regenerar.
 
 ### Traspaso a DaniSBR1: fase 1, mapa de funciones y primera configuración (cxldsakeb, 2026-10-15)
 
