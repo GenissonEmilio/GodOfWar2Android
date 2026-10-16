@@ -62,6 +62,14 @@ Igual que en GoW1: **DeepSeek V4.1 Flash, gratis en OpenCode**, para trabajo de 
 
 > Actualizar esta sección al cerrar cada hito, para que la vean las sesiones de todos.
 
+### Compilación más rápida (DaniSBR1, 2026-10-16)
+
+**Tras el `git pull`:** `git submodule update --init --recursive` (submódulo en **`a50613b`**). No hace falta nada más: CMake se reconfigura solo y activar `/MP` no recompila nada.
+
+- **`/MP`** (fork): el runner y el runtime se compilan con varios `cl.exe` a la vez; antes, de uno en uno. El número sale de la RAM y los núcleos de cada PC (al configurar: `PS2X: MSVC parallel compilation /MPn`; se cambia con `-DPS2X_MSVC_MP_PROCESSES=N`). Recompilación completa en el PC de DaniSBR1: **40 min 24 s → 21 min 13 s**.
+- **`recompile.ps1`** copia al runner solo los archivos cuyo contenido cambió: un `-SyncOnly` sin cambios ya no recompila nada, y un override cambiado recompila un solo bloque (~20 s).
+- Mediciones y detalles en NOTES.md, "Compilación más rápida". Con esto ya no hace falta copiar el override a mano para iterar rápido: `recompile.ps1 -SyncOnly` + `cmake --build` hace lo mismo.
+
 ### Fase 4: cielo arreglado, F12/F10 y velocidad medida (DaniSBR1, 2026-10-16, tarde)
 
 **Tras el `git pull`:** `git submodule update --init --recursive` (submódulo en **`3b71410`**), `cmake -S PS2Recomp -B out/build` (opciones nuevas de raylib) y **recompilar el runner entero** (~45 min: cambió `gs_frontend.h`, que lo incluye todo).
