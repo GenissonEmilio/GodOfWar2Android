@@ -52,6 +52,19 @@ Los 79 de la plantilla de GoW1, buscados en GoW II: **76 localizados** (en `conf
 
 **Stubs por nombre (a vigilar en la fase 2).** Además de los de la plantilla, `ps2_recomp` convierte en stub los envoltorios de syscalls a los que Ghidra pone nombre de librería (`sceSifSetDma`, `sceSifDmaStat`, `sceSifSetDChain`, `sceSifSetReg`, `sceSifGetReg`, `sceSifStopDma`, `isceSifSetDma`, `isceSifSetDChain`): con los 76 de la plantilla salen 84 stubs. En GoW1 se recompilaban como código normal que hace la syscall.
 
+## Tabla [mmio] y contraste con ps2_analyzer
+
+DaniSBR1, 2026-10-15. `ps2_analyzer` (la otra herramienta de `build-tools.ps1`) analiza el ELF por su cuenta y lleva una base de datos de símbolos de Sony integrada. Se ejecuta desde Bash o cmd: en PowerShell 5.1 con `_common.ps1` cargado, su primer aviso por stderr aborta el comando.
+
+```
+./out/build/ps2xAnalyzer/Release/ps2_analyzer.exe game/disc/SCUS_974.81 out/analyzer.toml
+```
+
+- **Stubs:** reconoce los 76 de la plantilla **exactamente en las mismas direcciones** (0 discrepancias). Es una comprobación independiente del método del desplazamiento por librería.
+- **Stubs que propone y no se usan:** `sin`, `pow`, `sqrt`, `fabs` y `floor`. GoW1 no los tenía como stubs: recompilados se comportan como en la PS2, y un manejador del PC podría redondear distinto que la FPU del EE (física, animaciones). Probarlos solo si hiciera falta por rendimiento.
+- **`entry_points`:** de sus 301 funciones de librería con nombre, 299 ya estaban; se añaden `__sjpopnthrow` (`0x2C1838`) y `__eh_rtime_match` (`0x2C1950`), que Ghidra deja dentro de otra función.
+- **`[mmio]`:** la plantilla lleva sus **240 entradas** para GoW II (instrucción `lw`/`sw` → registro del hardware). La tabla de GoW1 (227) era la salida del analizador sin retocar: 158 de sus entradas tienen equivalente exacto en GoW II desplazando por librería (+0x3C0E8, +0x3C0F0, +0x3BB68, +0x3BD00) y las otras 69, en código del juego, tienen su gemelo con la misma secuencia de registros y el mismo espaciado (p. ej. el grupo DMA `e010, d410, d480, d420, d400`: `0x1018C8` en GoW1 → `0x101848` en GoW II). GoW II tiene además 14 accesos nuevos: una cuarta copia de ese grupo DMA (`0x12B99C`), un bloque de configuración de DMA en `0x1901F8`–`0x1902A4` y el timer 1 en `0x2D55A8`.
+
 ## Funciones identificadas
 
 Dirección = inicio de la función en el ELF de referencia.
