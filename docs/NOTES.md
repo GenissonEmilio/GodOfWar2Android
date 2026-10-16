@@ -66,12 +66,38 @@ DaniSBR1, 2026-10-15. `ps2_analyzer` (la otra herramienta de `build-tools.ps1`) 
 - **`[mmio]`:** la plantilla lleva sus **240 entradas** para GoW II (instrucción `lw`/`sw` → registro del hardware). La tabla de GoW1 (227) era la salida del analizador sin retocar: 158 de sus entradas tienen equivalente exacto en GoW II desplazando por librería (+0x3C0E8, +0x3C0F0, +0x3BB68, +0x3BD00) y las otras 69, en código del juego, tienen su gemelo con la misma secuencia de registros y el mismo espaciado (p. ej. el grupo DMA `e010, d410, d480, d420, d400`: `0x1018C8` en GoW1 → `0x101848` en GoW II). GoW II tiene además 14 accesos nuevos: una cuarta copia de ese grupo DMA (`0x12B99C`), un bloque de configuración de DMA en `0x1901F8`–`0x1902A4` y el timer 1 en `0x2D55A8`.
 - **Compilación con `[mmio]`** (cxldsakeb, 2026-10-15): `recompile.ps1` sin errores (6 612 archivos en `generated/`) y el runner `RelWithDebInfo` compila y enlaza en ~38 min (32 hilos, 207 bloques del unity build). El runner se enlaza con `/FORCE`, que crea el `.exe` aunque falten símbolos, así que el criterio no es "hay `.exe`" sino que el log no tenga `LNK2001`/`LNK2019`/`LNK4088`. Aquí el único aviso del enlazador es `LNK4075` (se ignora `/INCREMENTAL` por el `/FORCE`), que es inofensivo.
 
+## Fase 2: preparación del primer arranque
+
+DaniSBR1, 2026-10-16. Funciones de GoW II equivalentes a los overrides **de arranque** de GoW1 (el bloque final de `applyGowOverrides` en `referencia/gow1/overrides/gow_overrides.cpp`). No se hace override hasta que el log lo pida.
+
+| Override de GoW1 | En GoW II | Verificación | ¿Hace falta? |
+|---|---|---|---|
+| `sceSifInitRpc` (`bindAddressHandler`) | `0x2D27B0` | stub de la plantilla; el C++ generado llama a `ps2_stubs::sceSifInitRpc` | **No.** En GoW1 el recompilador la descartaba (empieza en el *delay slot* de un `jr ra` suelto); aquí Ghidra la detecta como función |
+| `iWakeupThread` (`bindAddressHandler`) | `0x2D0600` | ídem | **No**, por lo mismo |
+| `sceCdReadDvdDualInfo` → "doble capa, capa 1 en el LBN 2 083 872" | `0x2B6BF0` | libcdvd +0x3C0F0; el código de `0x188748` la llama **en bucle mientras devuelva 0** y en `0x18877C` imprime `"sceCdReadDvdDualInfo function fail"` | **Sí: fue el bloqueo 1** (override hecho, ver "Bloqueos") |
+| `sceSifLoadStartModuleBuffer` → "cargado y terminado con NO_RESIDENT_END" | `0x2D4850` | envoltorio de 28 bytes que llama a `_sceSifLoadModuleBuffer` (`0x2D4640`) y va justo detrás de ella (en GoW1, 32 bytes justo detrás); la llama `0x2BF708` | Si el log se para cargando el módulo embebido ("ck01" en GoW1) |
+| `snd989SendCommand` (solo registro) | por buscar | — | No es imprescindible: en GoW1 pasa el comando al original |
+
+## Diagnóstico de bloqueos (overrides/gow2_overrides.cpp)
+
+Solo se activan con la variable de entorno; sin ella no cambian nada.
+
+- `GOW2_THREAD_WATCH=<s>`: cada `<s>` segundos, los hilos del EE (`status`, espera, `pc`, `ra`). Para bloqueos silenciosos: si un hilo `status=0` repite el mismo `pc` con el ciclo avanzando, es un bucle activo. Como `GOW_THREAD_WATCH` en GoW1.
+- `GOW2_BOOT_TRACE=1`: cuenta las llamadas a las funciones de la secuencia de arranque (`sceSifRebootIop`, `sceCdInit`, `sceSifInitRpc`…) y registra cada `sceSifLoadModule` (ruta y resultado) y cada `sceSifBindRpc` (servidor y resultado).
+- Del runtime, sin recompilar: `PS2X_TRACE_RPC=<prefijo>` registra las llamadas RPC que llegan al IOP (p. ej. `8` para los servidores de Sony).
+- Para probar un override sin recompilar todo: copiar solo `overrides/gow2_overrides.cpp` a `PS2Recomp/ps2xRuntime/src/runner/`, `touch` y `cmake --build` (~1 min; solo cambia su bloque del unity build). `recompile.ps1 -SyncOnly` vuelve a fechar los 6 600 archivos y recompila todo (~50 min). Ejecutar CMake desde Bash: en PowerShell, con `_common.ps1` cargado, el primer aviso por stderr aborta el comando.
+
 ## Funciones identificadas
 
 Dirección = inicio de la función en el ELF de referencia.
 
 | Dirección | Nombre | Qué hace | Equivalente en GoW1 | Estado | Quién |
 |---|---|---|---|---|---|
+| `0x002B6BF0` | `sceCdReadDvdDualInfo` | libcdvd: informa de si el disco es de doble capa y dónde empieza la capa 1 | `0x27AB00` (`gowCdReadDvdDualInfo`) | reimplementada | DaniSBR1 |
+| `0x001875E0` | `bootDeviceFromArgs` (nombre nuestro) | Mira `argv[0]` y guarda en `0x2D7FE8` si se arrancó desde `cdrom` (0) o desde `host0:` (1) | — | binding temporal (TEMPORAL) | DaniSBR1 |
+| `0x00187630` | `makeDevicePath` (nombre nuestro) | Ruta → `"cdrom0:\RUTA;1"` (mayúsculas, `\`) o `"host0:ruta"` según `0x2D7FE8`; con otro valor devuelve el búfer sin escribir | — | investigando | DaniSBR1 |
+| `0x001885F8` | `loadIopModule` (nombre nuestro) | Carga un IRX: `IOP_MOD/` si viene de host, ruta con `0x187630`, `sceSifLoadModule` (`0x2D4A98`). El arranque la llama para 8 módulos (tabla en `0x32F340`) | — | investigando | DaniSBR1 |
+| `0x002B6DF0` | `sceDbcInit`? | `sceSifBindRpc(0x80001300)` (DBCMAN) en bucle hasta que exista el servidor | `0x27AD00` | investigando | DaniSBR1 |
 
 Estados: `investigando` · `binding temporal (ret0/ret1)` · `binding real` · `reimplementada`.
 
@@ -81,6 +107,9 @@ Los más recientes arriba. Un bloqueo = el primer error del log que impide avanz
 
 | Fecha | Síntoma (línea del log) | Causa | Solución / PR | Quién |
 |---|---|---|---|---|
+| 2026-10-16 | Tras cargar los IRX, el hilo principal se queda en `pc=0x1833C8 ra=0x181568` (`GOW2_THREAD_WATCH`) | Por investigar: es el **siguiente** bloqueo (fase 2, objetivo 2) | — | — |
+| 2026-10-16 | Silencio tras `[SifInitRpc] Initialized`; `GOW2_THREAD_WATCH`: bucle activo en `0x2B6E58` (`sceSifBindRpc(0x80001300)` en bucle). `GOW2_BOOT_TRACE`: los 8 `sceSifLoadModule("")` devuelven -1 | El `SetupThread` del runtime ignora el bloque de argumentos (`$a3 = 0x2FBE00`): `main` recibe `argc = 0`, `0x1875E0` deja `0x2D7FE8 = -1` (valor de `.data`), `0x187630` devuelve rutas vacías, no se carga DBCMAN y su servidor nunca aparece | Override **TEMPORAL** de `0x1875E0`: con `argc = 0` hace como una consola (`argv[0] = "cdrom0:\SCUS_974.81;1"`). Cargan los 8 IRX y se enlazan sus servidores | DaniSBR1 |
+| 2026-10-16 | Silencio tras `[SifInitRpc] Initialized` | El arranque (`0x188738`) repite `sceCdReadDvdDualInfo` mientras devuelva 0, y esta devuelve 0 sin llamar al IOP si el servidor S del CDVD no está listo (`0x2B67A8`). Como en GoW1 | Override de `0x2B6BF0`: doble capa, capa 1 en 2 083 872 | DaniSBR1 |
 
 ## Cambios necesarios en PS2Recomp
 
@@ -88,3 +117,4 @@ Lo que haya que cambiar en el runtime (rama `godofwar2`) y por qué. Si también
 
 | Commit | Qué | ¿Vale para GoW1? |
 |---|---|---|
+| (propuesta, sin hacer) | `SetupThread` (syscall `0x3C`, `ps2xRuntime/src/lib/Kernel/Syscalls/System.cpp`) debería rellenar el bloque de argumentos de `$a3` como el kernel de la PS2 (`argc = 1`, `argv[0] = "cdrom0:\<ELF>;1"`). Con eso sobraría el override TEMPORAL de `0x1875E0` | Probablemente: cualquier juego que mire `argv` |

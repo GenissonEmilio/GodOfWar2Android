@@ -62,6 +62,14 @@ Igual que en GoW1: **DeepSeek V4.1 Flash, gratis en OpenCode**, para trabajo de 
 
 > Actualizar esta sección al cerrar cada hito, para que la vean las sesiones de todos.
 
+### Fase 2 en marcha: arranca y carga los IRX (DaniSBR1, 2026-10-16)
+
+**Hecho:** el juego arranca, **carga sus 8 IRX** en el intérprete del IOP (`SIO2MAN`, `DBCMAN`, `SIO2D`, `MC2_D`, `DS2U_D`, `LIBSD`, `989NOMID`, `SMPD`) y se enlaza a sus servidores RPC. Hicieron falta dos overrides en `overrides/gow2_overrides.cpp` (el primer archivo de overrides de GoW II, registrado para `SCUS_974.81`):
+- `sceCdReadDvdDualInfo` (`0x2B6BF0`), como en GoW1: el arranque la repetía para siempre.
+- **TEMPORAL** `0x1875E0`: el `SetupThread` del runtime ignora el bloque de argumentos, `main` recibe `argc = 0` y las rutas de los IRX salían vacías. El arreglo de verdad sería en el runtime (propuesta en NOTES.md, "Cambios necesarios en PS2Recomp"); quien toque el fork, que lo avise antes.
+
+**Siguiente bloqueo** (objetivo 2 de la fase 2): tras cargar los IRX, el hilo principal se queda en `pc=0x1833C8` (`ra=0x181568`). Para investigarlo: `GOW2_THREAD_WATCH=5` y `GOW2_BOOT_TRACE=1` (ver NOTES.md, "Diagnóstico de bloqueos", que explica también cómo probar un override en ~1 min sin recompilar todo).
+
 ### Fase 1 cerrada: primera configuración que recompila y compila (DaniSBR1 y cxldsakeb, 2026-10-15)
 
 **Hecho:** fase 0 de DaniSBR1 (mismo SHA1). Ghidra → 5 874 funciones; `tools/make_funcmap.py` → `config/funcmap.csv` (solo funciones: el export trae además 31 986 etiquetas internas que no deben ir); escáner → 733 funciones más en `entry_points` (no en `funcmap.csv`, como en GoW1). `recompile.ps1` genera 6 607 funciones **sin errores** y **el runner compila y enlaza** (0 símbolos sin resolver). Arreglados restos de GoW1: `$ConfigToml` sin definir en `_common.ps1` y los scripts de `tools/` apuntando al ELF de GoW1.
@@ -73,7 +81,7 @@ Igual que en GoW1: **DeepSeek V4.1 Flash, gratis en OpenCode**, para trabajo de 
 
 ~~Falta confirmar que el runner compila con la tabla `[mmio]`~~ **Fase 1 cerrada** (cxldsakeb, 2026-10-15): con stubs y `[mmio]`, el runner `RelWithDebInfo` compila y enlaza sin `LNK2001`/`LNK2019`/`LNK4088`. Ojo: el runner se enlaza con `/FORCE` y siempre sale un `.exe`; lo que vale es que el log del enlazador no tenga esos errores.
 
-**Siguiente: fase 2** (primer arranque): con el runner ya compilado, `.\scripts\run.ps1 -Config RelWithDebInfo -NoBuild` y arreglar el primer bloqueo del log. Vigilar los 8 `sceSif*` que `ps2_recomp` convierte en stub por nombre.
+**Siguiente: fase 2** (primer arranque), ya en marcha (ver arriba). Vigilar los 8 `sceSif*` que `ps2_recomp` convierte en stub por nombre.
 
 ### Traspaso a DaniSBR1: fase 1, mapa de funciones y primera configuración (cxldsakeb, 2026-10-15)
 
