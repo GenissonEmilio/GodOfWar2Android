@@ -109,6 +109,30 @@ DaniSBR1, 2026-10-16. Funciones de GoW II equivalentes a los overrides **de arra
 | `sceSifLoadStartModuleBuffer` → "cargado y terminado con NO_RESIDENT_END" | `0x2D4850` | envoltorio de 28 bytes que llama a `_sceSifLoadModuleBuffer` (`0x2D4640`) y va justo detrás de ella (en GoW1, 32 bytes justo detrás); la llama `0x2BF708` | Si el log se para cargando el módulo embebido ("ck01" en GoW1) |
 | `snd989SendCommand` (solo registro) | por buscar | — | No es imprescindible: en GoW1 pasa el comando al original |
 
+## Compilación más rápida (DaniSBR1, 2026-10-16)
+
+Mediciones en el PC de DaniSBR1 (Ryzen 5 5500, 6 núcleos / 12 hilos, 16 GB, repo en HDD), recompilando el runner entero (borrando sus `.obj`), con un script que muestrea cada 5 s los `cl.exe` a la vez, la CPU y la RAM, y el resumen de MSBuild (`/clp:PerformanceSummary`).
+
+| | Antes | Con `/MP6` |
+|---|---|---|
+| **Tiempo total** | **40 min 24 s** | **21 min 13 s** (1,9× más rápido) |
+| Compilar (`ClCompile`) | 2 389 s (98,6 %) | 1 243 s |
+| Enlazar (`Link`) | 30 s | 26 s |
+| `cl.exe` a la vez | 1 (media 0,99) | 6,6 de media |
+| CPU | ~8 % | 89 % de media |
+| `cl.exe` más grande | 1,85 GB | 3,27 GB |
+| RAM libre mínima | 1,7 GB | 267 MB (por debajo de 1 GB el 5 % del tiempo) |
+
+- **Causa:** el generador de Visual Studio compila los archivos de un proyecto de uno en uno si no se le da `/MP`. `--parallel` solo ejecuta a la vez proyectos distintos. Los 207 bloques del runner se compilaban en serie.
+- **`/MP`** (fork, `ps2xRuntime/CMakeLists.txt`): para `ps2EntryRunner` y `ps2_runtime`. El número de compiladores sale de la RAM y los núcleos de cada PC (1,5 GB por compilador y 6 GB para el sistema: 6 en 16 GB / 12 hilos, unos 17 en 32 GB / 32 hilos, 1 = sin paralelismo por debajo de ~8 GB). Se cambia con `-DPS2X_MSVC_MP_PROCESSES=N`. CMake lo muestra al configurar: `PS2X: MSVC parallel compilation /MP6`. MSBuild no recompila nada por activarlo.
+- **Copiado por contenido** (`scripts/recompile.ps1`): copia al runner solo los archivos cuyo contenido cambió (tamaño y, si coincide, MD5), sin tocar la fecha de los demás, y solo borra las copias que ya no existen. Antes lo borraba y lo copiaba todo con la fecha actual, y cada sincronización recompilaba el runner entero.
+  - `-SyncOnly` sin cambios: **0 archivos copiados y 0 bloques recompilados** (la compilación, 6 s). Antes: recompilación completa.
+  - Cambiar un override y `-SyncOnly`: **1 archivo copiado, 1 bloque recompilado, 21 s**.
+  - La comparación lee todos los archivos: 40–170 s en HDD según la caché de Windows.
+- **Comprobado:** el juego llega a la zona jugable igual que antes (FPS 57,99 `[B]`, VPS 60, velocidad 100 %, sin `missing-target`).
+- **No sirve de mucho aquí:** mover la compilación a un SSD (el enlazado son 30 s de 40 min). Opcional en cada PC: excluir la carpeta del repo de Windows Defender, que mientras compila revisa miles de archivos nuevos y ocupa ~400 MB.
+- Un cambio en una cabecera que lo incluye todo (`gs_frontend.h`, `ps2_recompiled_functions.h`…) sigue obligando a recompilar entero, pero ahora en la mitad de tiempo.
+
 ## Diagnóstico de bloqueos (overrides/gow2_overrides.cpp)
 
 Solo se activan con la variable de entorno; sin ella no cambian nada.
