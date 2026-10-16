@@ -62,6 +62,14 @@ Igual que en GoW1: **DeepSeek V4.1 Flash, gratis en OpenCode**, para trabajo de 
 
 > Actualizar esta sección al cerrar cada hito, para que la vean las sesiones de todos.
 
+### Fase 2: bloqueos 6 y 7 resueltos en el runtime; el juego pide recursos a SMPD (cxldsakeb, 2026-10-16)
+
+**Para el Claude de quien siga: lee primero "Estado del repositorio" en `docs/NOTES.md`.** Tras el `git pull`: `git submodule update --init --recursive` (el submódulo apunta a `df2a082` de `godofwar2`) y recompila el runner (si `generated/` ya está al día con el `funcmap.csv` de la fase 2, basta `cmake --build`, ~2 min; si no, `recompile.ps1` y ~25–50 min).
+
+**Hecho:** la rama `godofwar2-ioman` de Daniel funciona (SMPD lee el TOC entero) y está fusionada en `godofwar2`. Bloqueo 7: SMPD troceaba sus rutas con `strtok` (el runtime devolvía 0, `files = NULL`) y usaba `GetSystemTimeLow`, que no existía. Arreglados en el fork; además, los imports del IOP sin atender ya dejan siempre el aviso `[IOP] unhandled import`. **Método nuevo:** `tools/irx_imports.py` cruzado con el catálogo de lo que implementa el runtime (NOTES.md, "Imports del IOP que usa GoW II"): predijo el bloqueo 7 antes de ejecutar.
+
+**Siguiente: bloqueo 8.** El EE pide recursos a SMPD (`R_LglScA…`, `R_PermA…`), SMPD lee 384 KB de `PART1.PAK` y los dos se quedan esperando; el hilo 1, en el bucle de `0x18CF70`. Detalles y trazas útiles (`PS2X_IOP_TRACE`, `PS2X_TRACE_RPC=123`) en NOTES.md.
+
 ### Fase 2 en marcha: arranca, carga los IRX y empieza a leer el disco (DaniSBR1, 2026-10-16)
 
 **Para el Claude de quien siga: lee primero "Estado del repositorio" en `docs/NOTES.md`.** Resumen:
@@ -73,7 +81,7 @@ Igual que en GoW1: **DeepSeek V4.1 Flash, gratis en OpenCode**, para trabajo de 
 4. Puntos de reanudación: `ps2_recomp` no los registra en las funciones de `entry_points` (las llama `entry_XXXX`). **Las 733 funciones del escáner van ahora en `config/funcmap.csv`** (`tools/make_funcmap.py --extra`), no en `entry_points`.
 5. `sceSifLoadStartModuleBuffer` (`0x2D4850`): el módulo del IOP que va dentro del ELF (como en GoW1).
 
-**Siguiente paso (pendiente de probar):** el bloqueo 6. SMPD lee `cdrom0:\GODOFWAR.TOC` con `ioman` (`open`/`read`/`lseek`/`close`) y el IOP del runtime no lo implementaba: carga un índice vacío y el juego se cuelga en `0x27D7E8` (pila de estados vacía). **La implementación está en la rama `godofwar2-ioman` del fork** (`b14b951`, sin fusionar en `godofwar2`): compila, pero no se llegó a probar en el juego. Para probarla:
+**~~Siguiente paso (pendiente de probar)~~ hecho, ver arriba:** el bloqueo 6. SMPD lee `cdrom0:\GODOFWAR.TOC` con `ioman` (`open`/`read`/`lseek`/`close`) y el IOP del runtime no lo implementaba: carga un índice vacío y el juego se cuelga en `0x27D7E8` (pila de estados vacía). **La implementación está en la rama `godofwar2-ioman` del fork** (`b14b951`, sin fusionar en `godofwar2`): compila, pero no se llegó a probar en el juego. Para probarla:
 1. `git pull`, `git submodule update --init --recursive` y luego `git -C PS2Recomp fetch` + `git -C PS2Recomp switch godofwar2-ioman`.
 2. `.\scripts\recompile.ps1` (hay que regenerar: `funcmap.csv` cambió) y `.\scripts\run.ps1 -Config RelWithDebInfo` (~50 min la primera vez).
 3. En el log, sin `unhandled import ioman`. Con `GOW2_THREAD_WATCH=5`, el hilo 1 ya no debe quedarse en `pc=0x0027d7e8`.
