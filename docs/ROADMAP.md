@@ -19,13 +19,13 @@ Cada fase tiene un criterio de "hecho" comprobable.
 
 ### Fase 1: mapa de funciones y primera configuración
 
-- [ ] Ghidra (`ghidra-analyze.ps1`) → `config/gow_functions.csv` y `config/gow.toml`.
-- [ ] Funciones que Ghidra no ve (`scan_missing_functions.py`).
-- [ ] `config/funcmap.csv` (`Name,Start,End,Size`) y `config/recomp.template.toml` con `@ELF@`, `@MAP@` y `@OUT@`, tomando como modelo los de `referencia/gow1/config/`.
-- [ ] Stubs de las librerías de Sony (`sceMpeg*`, `sceIpu*`, `sceGs*`, `sceCd*`, `sceDma*`, libkernel…): localizar cada una en GoW II (las cadenas y los patrones de llamada ayudan; DeepSeek puede cruzar listas).
+- [x] Ghidra (`ghidra-analyze.ps1`) → `config/gow_functions.csv` y `config/gow.toml`. (DaniSBR1: 5 874 funciones)
+- [x] Funciones que Ghidra no ve (`scan_missing_functions.py`). (DaniSBR1: 733, en `entry_points`)
+- [x] `config/funcmap.csv` (`Name,Start,End,Size`) y `config/recomp.template.toml` con `@ELF@`, `@MAP@` y `@OUT@`, tomando como modelo los de `referencia/gow1/config/`. (DaniSBR1: primera versión; `recompile.ps1` genera C++ sin errores)
+- [ ] Stubs de las librerías de Sony (`sceMpeg*`, `sceIpu*`, `sceGs*`, `sceCd*`, `sceDma*`, libkernel…): localizar cada una en GoW II (las cadenas y los patrones de llamada ayudan; DeepSeek puede cruzar listas). (3 de 79; GoW II usa el SDK 3.0.0, ver NOTES.md)
 - [ ] Tabla `[mmio]`: los accesos del juego a registros del hardware que el runtime convierte en llamadas nativas.
 
-**Hecho cuando:** `recompile.ps1` genera C++ sin errores y el runner compila.
+**Hecho cuando:** `recompile.ps1` genera C++ sin errores y el runner compila. (DaniSBR1, 2026-10-15: ya se cumple con la primera configuración; faltan los stubs y `[mmio]` para que tenga sentido pasar a la fase 2)
 
 ### Fase 2: primer arranque
 

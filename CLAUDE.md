@@ -62,6 +62,15 @@ Igual que en GoW1: **DeepSeek V4.1 Flash, gratis en OpenCode**, para trabajo de 
 
 > Actualizar esta sección al cerrar cada hito, para que la vean las sesiones de todos.
 
+### Fase 1 en marcha: primera configuración que recompila y compila (DaniSBR1, 2026-10-15)
+
+**Hecho:** fase 0 de DaniSBR1 (mismo SHA1). Ghidra → 5 874 funciones; `tools/make_funcmap.py` → `config/funcmap.csv` (solo funciones: el export trae además 31 986 etiquetas internas que no deben ir); escáner → 733 funciones más en `entry_points` (no en `funcmap.csv`, como en GoW1). `recompile.ps1` genera 6 607 funciones **sin errores** y **el runner compila y enlaza** (0 símbolos sin resolver). Arreglados restos de GoW1: `$ConfigToml` sin definir en `_common.ps1` y los scripts de `tools/` apuntando al ELF de GoW1.
+
+**Pendiente para cerrar la fase 1:**
+1. **Stubs de Sony:** 3 de 79 verificados. **GoW II usa el SDK 3.0.0** y GoW1 otro: los tamaños no coinciden, así que se localizan por las cadenas que usan (`lui`+`addiu` a `.rodata`) y por quién las llama. Candidatas y método en NOTES.md ("Stubs de librerías de Sony"). Ojo: en el SDK 3.0 algunas funciones de libkernel son funciones en C delante del envoltorio de la syscall (`StartThread`).
+2. **Tabla `[mmio]`**, buscando en GoW II los equivalentes de la de GoW1.
+3. Juntar varios stubs antes de cada `recompile.ps1`: regenera todo `generated/` y el runner tarda ~40 min en recompilarse entero.
+
 ### Traspaso a DaniSBR1: fase 1, mapa de funciones y primera configuración (cxldsakeb, 2026-10-15)
 
 cxldsakeb cerró la fase 0 por su parte y le pasa la fase 1 a Daniel. Claude de Daniel: guíale paso a paso y explica el porqué.
