@@ -15,6 +15,7 @@
 #include <cstring>
 #include <string>
 #include <thread>
+#include <utility>
 
 namespace
 {
@@ -134,10 +135,82 @@ namespace
                     std::fprintf(stderr, "[gow2-watch]   tree sentinel=%08x pool=%08x distance=0x%x heap=[%08x,%08x)\n", sentinel, pool,
                                  sentinel - pool, runtime.guestHeapBase(), runtime.guestHeapLimit());
                 }
+                // GOW2_PEEK=dir,dir,…: palabras de memoria del EE (hex) en cada pasada, para seguir variables del juego
+                if (const char *peek = std::getenv("GOW2_PEEK"))
+                {
+                    const uint8_t *ram = runtime.memory().getRDRAM();
+                    std::fprintf(stderr, "[gow2-watch]   peek");
+                    for (const char *cursor = peek; cursor && *cursor;)
+                    {
+                        char *end = nullptr;
+                        const uint32_t address = static_cast<uint32_t>(std::strtoul(cursor, &end, 16)) & 0x01FFFFFCu;
+                        uint32_t value = 0;
+                        std::memcpy(&value, ram + address, sizeof(value));
+                        std::fprintf(stderr, " [%06x]=%08x", address, value);
+                        cursor = (end && *end == ',') ? end + 1 : nullptr;
+                    }
+                    std::fprintf(stderr, "\n");
+                }
                 if (bootTrace)
                     for (const Gow2BootCall &call : g_gow2BootCalls)
                         std::fprintf(stderr, "[gow2-watch]   boot %-18s %08x calls=%u last_v0=%d\n", call.name, call.address,
                                      call.count.load(), call.lastV0.load());
+            }
+        }).detach();
+    }
+
+    // GOW2_CALL_PROFILE=<s>: envuelve todas las funciones del juego y, cada <s> segundos, imprime las 25 más llamadas en
+    // ese intervalo. Sirve cuando GOW2_THREAD_WATCH da siempre el mismo pc (el pc del código recompilado solo se
+    // actualiza en algunos puntos): las funciones del bucle en el que está el juego salen arriba.
+    constexpr uint32_t kGow2ProfileBase = 0x00100000u;
+    constexpr uint32_t kGow2ProfileEnd = 0x002FC000u; // final de .text (0x2FBDA8) redondeado
+    constexpr size_t kGow2ProfileSlots = (kGow2ProfileEnd - kGow2ProfileBase) / 4u;
+    PS2Runtime::RecompiledFunction g_gow2ProfileOriginals[kGow2ProfileSlots];
+    std::atomic<uint32_t> g_gow2ProfileCounts[kGow2ProfileSlots];
+
+    void gow2ProfileWrapper(uint8_t *rdram, R5900Context *ctx, PS2Runtime *runtime)
+    {
+        const size_t slot = (ctx->pc - kGow2ProfileBase) / 4u;
+        g_gow2ProfileCounts[slot].fetch_add(1u, std::memory_order_relaxed);
+        g_gow2ProfileOriginals[slot](rdram, ctx, runtime);
+    }
+
+    void gow2StartCallProfile(PS2Runtime &runtime, double period)
+    {
+        unsigned hooked = 0;
+        // hasFunction primero: lookupFunction escribe un error (con traza) por cada dirección sin función exacta
+        for (uint32_t address = kGow2ProfileBase; address < kGow2ProfileEnd; address += 4u)
+            if (!runtime.hasFunction(address))
+                continue;
+            else if (const PS2Runtime::RecompiledFunction original = runtime.lookupFunction(address))
+            {
+                g_gow2ProfileOriginals[(address - kGow2ProfileBase) / 4u] = original;
+                runtime.replaceFunction(address, gow2ProfileWrapper);
+                ++hooked;
+            }
+        std::fprintf(stderr, "[gow2-prof] %u funciones envueltas\n", hooked);
+        std::thread([period] {
+            static uint32_t previous[kGow2ProfileSlots];
+            for (;;)
+            {
+                std::this_thread::sleep_for(std::chrono::duration<double>(period));
+                std::pair<uint32_t, uint32_t> top[25]{}; // (llamadas, dirección)
+                for (size_t slot = 0; slot < kGow2ProfileSlots; ++slot)
+                {
+                    const uint32_t now = g_gow2ProfileCounts[slot].load(std::memory_order_relaxed);
+                    const uint32_t delta = now - previous[slot];
+                    previous[slot] = now;
+                    if (delta > top[24].first)
+                    {
+                        top[24] = {delta, kGow2ProfileBase + static_cast<uint32_t>(slot) * 4u};
+                        std::sort(std::begin(top), std::end(top), [](const auto &a, const auto &b) { return a.first > b.first; });
+                    }
+                }
+                std::fprintf(stderr, "[gow2-prof] llamadas en los últimos %.0f s:", period);
+                for (const auto &[calls, address] : top)
+                    if (calls != 0u)
+                        std::fprintf(stderr, " %06x:%u", address, calls);
+                std::fprintf(stderr, "\n");
             }
         }).detach();
     }
@@ -226,6 +299,10 @@ namespace
         const bool moduleBuffer = runtime.replaceFunction(0x002D4850u, gow2LoadStartModuleBuffer);
         std::fprintf(stderr, "[gow2-override] sceCdReadDvdDualInfo=%d bootDevice=%d moduleBuffer=%d\n", dualInfo, bootDevice,
                      moduleBuffer);
+
+        // al final, para envolver también los overrides de arriba
+        if (const char *profile = std::getenv("GOW2_CALL_PROFILE"))
+            gow2StartCallProfile(runtime, std::max(1.0, std::atof(profile)));
     }
 }
 

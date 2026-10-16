@@ -62,13 +62,25 @@ Igual que en GoW1: **DeepSeek V4.1 Flash, gratis en OpenCode**, para trabajo de 
 
 > Actualizar esta sección al cerrar cada hito, para que la vean las sesiones de todos.
 
+### Fase 2, inicialización superada: el juego carga sus recursos y dibuja (cxldsakeb, 2026-10-16)
+
+**Para el Claude de quien siga: lee primero "Estado del repositorio" en `docs/NOTES.md`.** Tras el `git pull`: `git submodule update --init --recursive` (el submódulo apunta a `9ccffe1`) y recompilar el runner (si `generated/` ya está al día, `cmake --build`, unos minutos).
+
+**Hecho:** bloqueos 8 y 9, los dos en el runtime.
+- **8:** el registro `Count` del EE no avanzaba, y el cargador de recursos (`0x18CF70`, con un presupuesto de tiempo por frame) no terminaba nunca.
+- **9:** en GoW II no se aplicaba **ninguna** sustitución nativa del IOP (LIBSD, memory card, SIO2). El juego nombra los módulos `NAME.IRX;1` y su LIBSD es otra compilación, con otros desplazamientos. Sin ellas, subir un banco de sonido esperaba un DMA de la SPU2 que no existe.
+
+Ahora el juego carga (`R_PermA`, `SBP_general`…), entra en su bucle principal y el GS dibuja de forma estable. El protocolo con SMPD y el cargador están en NOTES.md ("Cargador de recursos y protocolo con SMPD"). Herramientas nuevas en el override: `GOW2_CALL_PROFILE` (funciones más llamadas) y `GOW2_PEEK` (variables en memoria).
+
+**Siguiente: empezar la fase 3.** Ver **qué** dibuja (¿logos, vídeo, menú, carga?) mirando la ventana, y arreglar lo primero que falle. Vigilar el sonido, que ahora pasa por las sustituciones de LIBSD de GoW II.
+
 ### Fase 2: bloqueos 6 y 7 resueltos en el runtime; el juego pide recursos a SMPD (cxldsakeb, 2026-10-16)
 
 **Para el Claude de quien siga: lee primero "Estado del repositorio" en `docs/NOTES.md`.** Tras el `git pull`: `git submodule update --init --recursive` (el submódulo apunta a `df2a082` de `godofwar2`) y recompila el runner (si `generated/` ya está al día con el `funcmap.csv` de la fase 2, basta `cmake --build`, ~2 min; si no, `recompile.ps1` y ~25–50 min).
 
 **Hecho:** la rama `godofwar2-ioman` de Daniel funciona (SMPD lee el TOC entero) y está fusionada en `godofwar2`. Bloqueo 7: SMPD troceaba sus rutas con `strtok` (el runtime devolvía 0, `files = NULL`) y usaba `GetSystemTimeLow`, que no existía. Arreglados en el fork; además, los imports del IOP sin atender ya dejan siempre el aviso `[IOP] unhandled import`. **Método nuevo:** `tools/irx_imports.py` cruzado con el catálogo de lo que implementa el runtime (NOTES.md, "Imports del IOP que usa GoW II"): predijo el bloqueo 7 antes de ejecutar.
 
-**Siguiente: bloqueo 8.** El EE pide recursos a SMPD (`R_LglScA…`, `R_PermA…`), SMPD lee 384 KB de `PART1.PAK` y los dos se quedan esperando; el hilo 1, en el bucle de `0x18CF70`. Detalles y trazas útiles (`PS2X_IOP_TRACE`, `PS2X_TRACE_RPC=123`) en NOTES.md.
+**~~Siguiente: bloqueo 8~~ hecho, ver arriba.** El EE pide recursos a SMPD (`R_LglScA…`, `R_PermA…`), SMPD lee 384 KB de `PART1.PAK` y los dos se quedan esperando; el hilo 1, en el bucle de `0x18CF70`. Detalles y trazas útiles (`PS2X_IOP_TRACE`, `PS2X_TRACE_RPC=123`) en NOTES.md.
 
 ### Fase 2 en marcha: arranca, carga los IRX y empieza a leer el disco (DaniSBR1, 2026-10-16)
 
