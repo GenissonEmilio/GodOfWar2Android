@@ -33,7 +33,9 @@ Foto de dónde lo dejé, para quien siga (y su Claude). Lo de abajo, en "Bloqueo
 **Fase 3 (cxldsakeb, 2026-10-16, ~12:15): se llega al gameplay.** Pantalla de título completa (a pocos FPS), menú, primer vídeo (bloqueo 11, `sceIpuInit`) y **la primera zona jugable, con sonido** (con `GOW2_PAD_SCRIPT=15:start,20-120/3:x` se llega sin teclado en unos 2 minutos). **Siguiente: el bloqueo 12**, el escenario verde por las sombras de los personajes (ver "Bloqueos"): enseñar al backend del GS las copias de 16 bits con máscara de bits. Pendiente de mirar después: un "fantasma" pegado a Kratos que vio cxldsakeb (probablemente otra pasada que el backend descarta: el destino Z24 `fpsm=0x31`, el brillo o la profundidad de campo), el cielo plano y los pocos FPS. Mirar la ventana durante un minuto de ejecución es lo más rápido. `GOW_HOST_SHOT=<frame>` guarda una captura en `host_shot.png` **en la raíz del repo**: es una imagen del juego y no se sube (regla 1).
 
 **Fase 4 (DaniSBR1, 2026-10-16, ~15:45): bloqueos 12 y 13 resueltos, F12/F10 hechos.** El escenario ya no sale verde, se dibuja la sombra de Kratos y desapareció el polígono azul del cielo (fork `d0b6162`). **Velocidad medida con el contador nuevo (F10) en este PC: ~58–60 FPS reales, VPS 60, velocidad 100 % en la primera zona.** Los "pocos FPS" de antes no se reproducen aquí (otro equipo, o antes de los arreglos). **Siguiente, por orden:**
-1. **Contornos azules finos** donde la geometría lejana se recorta contra el cielo (cambios de profundidad), a escala interna 2. Probable efecto del escalado en las pasadas que leen la profundidad, como en PCSX2 al subir la resolución en los God of War. Comprobar comparando la **misma escena** a `PS2X_GS_HW_SCALE=1` (la prueba de hoy cayó en otra escena y allí no había contornos).
+1. **Contornos azules finos** donde la geometría lejana se recorta contra el cielo (cambios de profundidad), a escala interna 2. Probable efecto del escalado en las pasadas que leen la profundidad, como en PCSX2 al subir la resolución en los God of War. Comprobar comparando la **misma escena** a `PS2X_GS_HW_SCALE=1` (la prueba de hoy cayó en otra escena y allí no había contornos). **Comprobado (cxldsakeb, 2026-10-16): son del escalado**, porque a escala 1 no salen. Ver "Opciones de PCSX2 para God of War II". Siguiente: localizar la pasada (un contador local de dibujos que leen el Z o un target más pequeño que la pantalla) y dibujarla a escala 1, como `nativeScaling` de PCSX2.
+
+**Ojo con el contador F10:** en el PC de cxldsakeb marca "FPS 60, VPS 60, velocidad 100 %", pero el juego se ve a **~2 FPS**. El contador no mide la velocidad real del juego: no hay que fiarse de él (ni de la medición de arriba) hasta revisarlo. La velocidad queda para después de los arreglos gráficos.
 2. El "fantasma" pegado a Kratos que vio cxldsakeb: mirarlo en pantalla durante el combate.
 3. Partida, combate y HUD, revisados jugando (con teclado o mando; ver "Mando").
 4. Guardar y cargar (memory card).
@@ -132,6 +134,29 @@ Mediciones en el PC de DaniSBR1 (Ryzen 5 5500, 6 núcleos / 12 hilos, 16 GB, rep
 - **Comprobado:** el juego llega a la zona jugable igual que antes (FPS 57,99 `[B]`, VPS 60, velocidad 100 %, sin `missing-target`).
 - **No sirve de mucho aquí:** mover la compilación a un SSD (el enlazado son 30 s de 40 min). Opcional en cada PC: excluir la carpeta del repo de Windows Defender, que mientras compila revisa miles de archivos nuevos y ocupa ~400 MB.
 - Un cambio en una cabecera que lo incluye todo (`gs_frontend.h`, `ps2_recompiled_functions.h`…) sigue obligando a recompilar entero, pero ahora en la mitad de tiempo.
+- **PC de cxldsakeb** (Ryzen 9 5900XT, 16 núcleos / 32 hilos, 32 GB, repo en HDD): recompilación entera del runner tras el cambio de `gs_frontend.h`, **12 min 53 s** (antes ~38 min), sin `LNK2001`/`LNK2019`.
+
+## Opciones de PCSX2 para God of War II (cxldsakeb, 2026-10-16)
+
+Para buscar el origen de los contornos azules y del "fantasma", se miró qué activa PCSX2 para este juego (material público: `GameIndex.yaml`, `GSRendererHW.cpp`, `Config.h`). Resumen con DeepSeek, comprobado contra el código. `GSHwHack.cpp` (los *CRC hacks*) **no tiene nada de God of War**.
+
+Todas las regiones de God of War II (`SCUS-97481`, `SCES-54206`, `SCKA-30006`…) llevan lo mismo. God of War I solo lleva las dos primeras:
+
+| Opción | Qué hace en PCSX2 | Solo a escala > 1 | En nuestro backend (`gs_hw_backend.cpp`) |
+|---|---|---|---|
+| `halfPixelOffset: 5` (`NativeWTexOffset`, "Fixes misaligned bloom") | Coloca los vértices como si se dibujara a resolución nativa (`GSRendererHW.cpp` `DetermineVSConfig`, ~6327-6365), con un ajuste extra en sprites cuya fracción tiene el bit 8, y desplaza las coordenadas de textura `8 − 4/escala` (en 1/16 de téxel) en sprites FST (~8210-8232; su comentario cita "la cabina del barco en God of War") | sí | Parcial: solo un `+0,5/escala` fijo en cada vértice (`addVertex`) |
+| `autoFlush: 1` (`SpritesOnly`, "Fixes sun occlusion") | Vacía los dibujos pendientes cuando un sprite lee su propio target | no | Por otro camino: `TextureBarrier` cuando un dibujo lee su target |
+| `alignSprite: 1` ("Fixes water vertical lines") | Sprites con `X` en fracción 8: alarga medio píxel la columna derecha (`X += 8`, y `U += 8` si la textura está desalineada) (~5236-5263) | sí | No |
+| `nativeScaling: 1` (`Normal`, "Fixes light blooms") | Detecta los dibujos que reducen o amplían la imagen (`IsScalingDraw`, ~10840) y los hace a escala 1: bloom, brillos, copias de post-proceso (~3675-3708) | sí | **No**: una sola escala para todos los targets |
+
+Además, `mvuFlag: 0` (*speedhack* de la VU, "Fixes enemies attacks turning into squares"). A tener en cuenta si salen cuadrados en los ataques de los enemigos.
+
+**Prueba de escala** (misma zona, `GOW2_PAD_SCRIPT=15:start,20-120/3:x`, `GOW_HOST_SHOT=9000`): a `PS2X_GS_HW_SCALE=2` hay un contorno azul **escalonado, en bloques**, por toda la silueta de la ciudad y la montaña contra el cielo, y una línea de puntos diagonal en el cielo. A escala 1, el mismo horizonte sale limpio. **Los contornos son del escalado.** Por la forma de bloques, apunta a una pasada que el juego hace a menor resolución (niebla, cielo o profundidad de campo, que leen la profundidad) y que, escalada, no coincide con los bordes de la imagen: el caso que cubre `nativeScaling`. El "fantasma" no se distingue en capturas fijas. Ojo: las dos ejecuciones no cayeron en el mismo momento del combate, porque el guion va por segundos de reloj y el juego no avanza igual en cada arranque.
+
+## Memory card en GoW II (cxldsakeb, 2026-10-16)
+
+- `MC2_D.IRX`, `SIO2D.IRX` y `SIO2MAN.IRX` son **idénticos** a los de GoW1 (mismo SHA1). Por eso sus sustituciones nativas (`ps2xIOP/src/native/iop_native_overrides.cpp`), que no comprueban el tamaño del texto, caen bien. De los IRX con sustituciones, solo cambia `LIBSD` (bloqueo 9).
+- Por vigilar al probar guardar y cargar (lectura de DeepSeek del runtime, sin comprobar aún): `sceMcRename` está implementada pero no enganchada en `PS2IopHostAdapter::memoryCard` (`ps2_iop_host.cpp`), y `GetDir` por MCSERV devuelve 0 entradas (`mcserv.cpp`).
 
 ## Diagnóstico de bloqueos (overrides/gow2_overrides.cpp)
 
