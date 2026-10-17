@@ -407,19 +407,24 @@ namespace
     // repetir una secuencia sin teclado (como GOW_PAD_GUION en GoW1). Elementos separados por comas:
     //   "T:boton"         pulsa en T (0,3 s)
     //   "T1-T2/P:boton"   pulsa cada P segundos entre T1 y T2
-    // Botones: start, select, x, o, sq, tri, up, down, left, right, l1, r1, l2, r2. Ej.: "20:start,25-90/3:x".
+    //   "T1-T2:boton"     mantiene pulsado entre T1 y T2
+    // Botones: start, select, x, o, sq, tri, up, down, left, right, l1, r1, l2, r2; stick izquierdo a tope: lup, ldown,
+    // lleft, lright. Ej.: "20:start,25-90/3:x,130-160:lup" (andar hacia delante 30 s).
     struct Gow2PadPress
     {
         double from, to, period;
-        uint16_t mask;
+        uint32_t mask;
     };
+
+    // bits 16-19 de la máscara del guion: el stick izquierdo
+    constexpr uint32_t kGow2StickUp = 0x10000u, kGow2StickDown = 0x20000u, kGow2StickLeft = 0x40000u, kGow2StickRight = 0x80000u;
 
     std::vector<Gow2PadPress> gow2ParsePadScript(const char *text)
     {
-        static const std::pair<const char *, uint16_t> kButtons[] = {
+        static const std::pair<const char *, uint32_t> kButtons[] = {
             {"select", 0x0001}, {"start", 0x0008}, {"up", 0x0010}, {"right", 0x0020}, {"down", 0x0040}, {"left", 0x0080},
             {"l2", 0x0100}, {"r2", 0x0200}, {"l1", 0x0400}, {"r1", 0x0800}, {"tri", 0x1000}, {"o", 0x2000}, {"x", 0x4000},
-            {"sq", 0x8000}};
+            {"sq", 0x8000}, {"lup", kGow2StickUp}, {"ldown", kGow2StickDown}, {"lleft", kGow2StickLeft}, {"lright", kGow2StickRight}};
         std::vector<Gow2PadPress> presses;
         std::string item;
         for (const char *c = text;; ++c)
@@ -453,8 +458,8 @@ namespace
         return presses;
     }
 
-    // Botones del guion pulsados ahora (bits activos a 1)
-    uint16_t gow2PadScriptButtons()
+    // Botones del guion pulsados ahora (bits activos a 1; 16-19, el stick izquierdo)
+    uint32_t gow2PadScriptButtons()
     {
         static const char *text = std::getenv("GOW2_PAD_SCRIPT");
         if (!text)
@@ -463,19 +468,20 @@ namespace
         static const auto start = std::chrono::steady_clock::now();
         const double now = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
         constexpr double kHold = 0.3;
-        uint16_t pressed = 0u;
+        uint32_t pressed = 0u;
         for (const Gow2PadPress &press : presses)
         {
             if (now < press.from || now > press.to + kHold)
                 continue;
             const double into = now - press.from;
+            const bool held = press.period <= 0.0 && press.to > press.from; // "T1-T2:boton": todo el intervalo
             const double phase = press.period > 0.0 ? into - press.period * static_cast<long>(into / press.period) : into;
-            if (phase < kHold)
+            if (held || phase < kHold)
                 pressed |= press.mask;
         }
-        static uint16_t last = 0u;
+        static uint32_t last = 0u;
         if (pressed != last)
-            std::fprintf(stderr, "[gow2-pad2:script] t=%.1f s botones=%04x\n", now, pressed);
+            std::fprintf(stderr, "[gow2-pad2:script] t=%.1f s botones=%05x\n", now, pressed);
         last = pressed;
         return pressed;
     }
@@ -500,10 +506,14 @@ namespace
             state[4] = IsKeyDown(KEY_J) ? 0 : IsKeyDown(KEY_L) ? 255 : 128;
             state[5] = IsKeyDown(KEY_I) ? 0 : IsKeyDown(KEY_K) ? 255 : 128;
         }
-        if (const uint16_t scripted = gow2PadScriptButtons())
+        if (const uint32_t scripted = gow2PadScriptButtons())
         {
             state[2] &= static_cast<uint8_t>(~scripted);
             state[3] &= static_cast<uint8_t>(~(scripted >> 8));
+            if (scripted & kGow2StickUp) state[7] = 0;
+            if (scripted & kGow2StickDown) state[7] = 255;
+            if (scripted & kGow2StickLeft) state[6] = 0;
+            if (scripted & kGow2StickRight) state[6] = 255;
         }
         uint8_t packet[18]{};
         for (size_t i = 0; i < 6; ++i)
