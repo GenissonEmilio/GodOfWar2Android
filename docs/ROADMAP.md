@@ -52,11 +52,12 @@ Se llega a la **primera zona jugable (Rodas), con sonido** (cxldsakeb, 2026-10-1
 
 - [x] **Bloqueo 12, el escenario verde.** El juego cuenta las sombras de los personajes en el canal verde del framebuffer y lo restaura con copias por columnas de 8 px a través de una vista de 16 bits. Esas copias acaban en una fracción de píxel (`y = 895.4375`) y el backend del GS las descartaba. Arreglado en el fork (`8a4abab`, DaniSBR1, 2026-10-16): el escenario sale bien y **se dibuja la sombra de Kratos**.
 - [x] **Bloqueo 13, el polígono azul del cielo:** la copia Z16 → framebuffer leía el target de profundidad equivocado. Arreglado en el fork (`d0b6162`, DaniSBR1, 2026-10-16).
-- [ ] Otros fallos de imagen: **contornos azules finos** contra el cielo a escala interna 2 (probable efecto del escalado) y el "fantasma" pegado a Kratos que vio cxldsakeb. Detalle en NOTES.md, "Estado del repositorio".
-- [ ] **Velocidad completa.** Medida con el contador nuevo (F10) en el PC de DaniSBR1: **~58–60 FPS reales y velocidad 100 % en la primera zona**. Falta confirmarlo en otros equipos y en zonas más pesadas. VPS 60 significa que la emulación llega a tiempo (los VBlank van al ritmo del tiempo emulado). VU1 e IOP nativos con capturas propias (sección 7b de [SETUP.md](SETUP.md)) darían margen; los microprogramas de la VU van dentro del ELF (`.DVP.overlay`).
+- [ ] Otros fallos de imagen: la línea azul que acompaña a Kratos, las líneas onduladas bajo el agua, el "fantasma" a la izquierda de Kratos y el borde tenue del horizonte lejano (la línea azul brillante del bloom y la geometría lejana ya están: bloqueos 14 y 15). Detalle en NOTES.md, "Estado del repositorio".
+- [ ] **Velocidad completa.** El contador F10 no sirve (marca 60 siempre). Medida de verdad con `GOW_PERF_DIAG=1` y `GOW_PERF_FRAME_PC=0x14E380` en el PC de cxldsakeb, con VU1 e IOP nativos (sección 7b de [SETUP.md](SETUP.md)): **60 FPS en el menú y ~44–59 en la primera zona con combate**. Ahora manda el hilo del GS (y la VU1), no el EE. Detalle en NOTES.md, "Estado del repositorio".
 - [x] **Controles de la ventana** (DaniSBR1, 2026-10-16, fork `cf4e3f2`/`3b71410`): F12 pantalla completa sin bordes / ventana; F10 contador de FPS como el de PCSX2.
 - [ ] Partida, combate y HUD, revisados en pantalla.
-- [ ] Guardar y cargar (memory card).
-- [ ] Retirar el TEMPORAL de `0x1875E0` (que `SetupThread` rellene los argumentos en el runtime).
+- [x] Guardar y cargar (memory card): bloqueo 16 (cxldsakeb, 2026-10-17). Formatea, guarda y carga.
+- [x] **Cinemáticas** (bloqueo 17, cxldsakeb, 2026-10-17): el audio ADPCM de las películas no llegaba al juego y el reproductor las dejaba; además iban a ~0,57×. La inicial se ve entera; la de tras el QTE contra el Coloso, por confirmar jugando.
+- [x] Retirar el TEMPORAL de `0x1875E0`: `SetupThread` rellena los argumentos en el runtime (fork `5b1a25a`, cxldsakeb, 2026-10-17).
 
 **Hecho cuando:** se juega el primer nivel a velocidad completa.

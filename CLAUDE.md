@@ -62,6 +62,15 @@ Igual que en GoW1: **DeepSeek V4.1 Flash, gratis en OpenCode**, para trabajo de 
 
 > Actualizar esta sección al cerrar cada hito, para que la vean las sesiones de todos.
 
+### Fase 4: cinemáticas (bloqueo 17), velocidad medida y adiós al TEMPORAL (cxldsakeb, 2026-10-17, tarde)
+
+**Tras el `git pull`:** `git submodule update --init --recursive` (submódulo en **`ac9dfaf`**), **`recompile.ps1`** con `GOW_VU1_MICROCODIGO` y `GOW_IOP_MODULOS` puestas (cambió la traducción de `movn`/`movz`: hay que regenerar `generated/`) y compilar el runner.
+
+- **Bloqueo 17, las cinemáticas:** no se veían ni la inicial ni la de tras el primer QTE contra el Coloso. Sus vídeos llevan audio **ADPCM** y el runtime solo se lo entregaba al juego si lo registraba como PCM (el caso de GoW1): el reproductor esperaba el primer paquete de audio y dejaba la película. Arreglado en el fork (`ac9dfaf`). Además, las películas iban a ~0,57× por una espera activa de libmpeg: override de `0x190A08` con `catchUpToHost`, como GoW1. **La cinemática inicial se ve entera, a 30 imágenes por segundo y con el audio a la par.** La de tras el QTE, por confirmar jugando.
+- **Velocidad real, por fin medida:** `GOW_PERF_DIAG=1` + `GOW_PERF_FRAME_PC=0x14E380` → `guest_flip_hz`. En el PC de cxldsakeb: **60 FPS en el menú y ~44–59 en la primera zona con combate**. Ahora el cuello de botella es el hilo del GS (y la VU1), no el EE.
+- También en el fork: `SetupThread` da `argc`/`argv` como una consola (**ya no queda ningún TEMPORAL**), `movn`/`movz` escriben solo 64 bits (como el R5900) y la memory card deja su archivo abierto entre escrituras (guardar debería ir más rápido; **falta probarlo guardando**).
+- Pendientes de imagen, sin cambios (NOTES.md, "Estado del repositorio"): línea azul con Kratos, líneas onduladas bajo el agua, fantasma a la izquierda de Kratos (para DaniSBR1).
+
 ### Fase 4: memory card, guarda y carga (bloqueo 16) (cxldsakeb, 2026-10-17)
 
 **Tras el `git pull`: hay que regenerar** (`recompile.ps1` con `GOW_VU1_MICROCODIGO` y `GOW_IOP_MODULOS` puestas, ~1 min) y compilar el runner (~14 min en el PC de cxldsakeb): cambió `config/funcmap.csv`.
