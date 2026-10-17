@@ -64,7 +64,7 @@ Igual que en GoW1: **DeepSeek V4.1 Flash, gratis en OpenCode**, para trabajo de 
 
 ### Fase 4: los contornos azules son del escalado (cxldsakeb, 2026-10-16, noche)
 
-- **Contornos azules:** a `PS2X_GS_HW_SCALE=1` no salen y a escala 2 sí, en bloques, por la silueta del horizonte. PCSX2 activa para GoW II `halfPixelOffset: 5`, `alignSprite`, `autoFlush` y `nativeScaling`. Nuestro backend no tiene `nativeScaling`, que dibuja a escala 1 las pasadas de reducción y de bloom, y es el candidato principal. Tabla y prueba en NOTES.md, "Opciones de PCSX2 para God of War II". **Siguiente:** localizar esa pasada en `gs_hw_backend.cpp` (fork; avisar antes).
+- **Contornos azules:** solo salían a escala 2. **La línea azul brillante está resuelta (bloqueo 14, fork `2b20dc4`)**: el bloom pondera por el alfa del frame, y una lectura reinterpretada lo dejaba a resolución PS2. Tras el `git pull`: `git submodule update --init --recursive` y `cmake --build` (solo cambia `gs_hw_backend.cpp`, unos minutos). **Queda** un borde tenue solo en el horizonte lejano, que ya está antes del bloom (sospecha y método en NOTES.md, "Estado del repositorio"). Lo que PCSX2 activa para GoW II está en NOTES.md, "Opciones de PCSX2 para God of War II".
 - **No te fíes del contador F10:** en el PC de cxldsakeb marca 60 FPS y velocidad 100 %, pero el juego va a ~2 FPS. La velocidad se mira después de los gráficos.
 - **Memory card:** MC2_D, SIO2D y SIO2MAN son idénticos a los de GoW1, así que sus sustituciones del IOP valen.
 
