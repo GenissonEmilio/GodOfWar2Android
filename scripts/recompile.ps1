@@ -53,11 +53,29 @@ if (-not $SyncOnly) {
 
 # ── IOP nativo (opcional) ──────────────────────────────────────────────────
 $iopNativeDir = Join-Path $RecompDir 'ps2xIOP\src\native'
-Get-ChildItem $iopNativeDir -Filter 'iopn_*.cpp' -File -ErrorAction SilentlyContinue | Remove-Item -Force
 if ($env:GOW_IOP_MODULOS) {
     if (-not (Test-Path (Join-Path $env:GOW_IOP_MODULOS 'modules.txt'))) { throw "GOW_IOP_MODULOS no tiene modules.txt: $env:GOW_IOP_MODULOS" }
     Write-Host "IOP nativo desde $env:GOW_IOP_MODULOS"
-    Invoke-Native 'py' @('-3', '-I', (Join-Path $RepoRoot 'tools\iop\iopn_gen.py'), $env:GOW_IOP_MODULOS, $iopNativeDir)
+    # Se genera aparte y solo se copia lo que cambia: si no, cada -SyncOnly deja fecha nueva a los iopn_*.cpp y MSBuild
+    # recompila el IOP (el de 989NOMID son 10 MB en un solo cl.exe, varios minutos).
+    $iopTemp = Join-Path $RepoRoot 'out\iopn-gen'
+    if (Test-Path $iopTemp) { Remove-Item $iopTemp -Recurse -Force }
+    New-Item -ItemType Directory -Force $iopTemp | Out-Null
+    Invoke-Native 'py' @('-3', '-I', (Join-Path $RepoRoot 'tools\iop\iopn_gen.py'), $env:GOW_IOP_MODULOS, $iopTemp)
+    $fresh = @(Get-ChildItem $iopTemp -Filter 'iopn_*.cpp' -File)
+    $freshNames = $fresh | ForEach-Object Name
+    Get-ChildItem $iopNativeDir -Filter 'iopn_*.cpp' -File -ErrorAction SilentlyContinue |
+        Where-Object { $freshNames -notcontains $_.Name } | Remove-Item -Force
+    $iopCopied = 0
+    foreach ($file in $fresh) {
+        $dest = Join-Path $iopNativeDir $file.Name
+        if ((Test-Path $dest) -and (Get-FileHash $dest -Algorithm MD5).Hash -eq (Get-FileHash $file.FullName -Algorithm MD5).Hash) { continue }
+        Copy-Item $file.FullName $dest -Force
+        $iopCopied++
+    }
+    Write-Host "IOP nativo: $($fresh.Count) archivos, $iopCopied copiados (contenido nuevo o distinto)."
+} else {
+    Get-ChildItem $iopNativeDir -Filter 'iopn_*.cpp' -File -ErrorAction SilentlyContinue | Remove-Item -Force
 }
 
 # ── Sincronizar con el runner ──────────────────────────────────────────────
