@@ -62,6 +62,14 @@ Igual que en GoW1: **DeepSeek V4.1 Flash, gratis en OpenCode**, para trabajo de 
 
 > Actualizar esta sección al cerrar cada hito, para que la vean las sesiones de todos.
 
+### Fase 4: la sala ya se ve entera (bloqueo 15) y PCSX2 como referencia (cxldsakeb, 2026-10-17)
+
+**Tras el `git pull`:** `git submodule update --init --recursive` (submódulo en **`eb5657e`**) y `cmake --build` (solo cambia `gs_hw_backend.cpp`).
+
+- **Bloqueo 15:** paredes, techos y NPC a más de unos metros desaparecían detrás del cielo. El juego borra el Z dibujando sprites con **formato de Z en la memoria del Z** (y con su propio `ZBUF` para la mitad inferior), y el backend los descartaba. Arreglado en el fork; la primera zona se ve como en la PS2 (ventanales con el Coloso).
+- **PCSX2 portátil como referencia** y `tools/gsdump/` para leer sus volcados del GS (Z por dibujo, simulación del buffer de Z). Cómo montarlo en NOTES.md, "PCSX2 para comparar".
+- **Pendientes nuevos** (NOTES.md, "Estado del repositorio"): línea azul que acompaña a Kratos (para DaniSBR1), la cinemática inicial de la traición que no aparece, el fantasma a la izquierda de Kratos y el borde tenue del horizonte lejano.
+
 ### Fase 4: VU1 e IOP nativos, de ~3 a ~35–40 FPS estimados (cxldsakeb, 2026-10-16, noche)
 
 - **Cada uno tiene que capturar y generar en su PC** (SETUP.md, 7b; los datos son del juego y no se suben): 4 min de partida con `GOW_VU1_CAPTURA` + `GOW_VU1_NATIVE_OFF=1` + `PS2X_IOP_DUMP_MODULES`, y después `recompile.ps1 -SyncOnly` con `GOW_VU1_MICROCODIGO` y `GOW_IOP_MODULOS` puestas (~20 min). Sin esto el juego va a ~3 FPS: la VU1 interpretada se lleva el 97 % del tiempo.
