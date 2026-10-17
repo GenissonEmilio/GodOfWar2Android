@@ -62,11 +62,11 @@ Igual que en GoW1: **DeepSeek V4.1 Flash, gratis en OpenCode**, para trabajo de 
 
 > Actualizar esta sección al cerrar cada hito, para que la vean las sesiones de todos.
 
-### Fase 4: memory card (bloqueo 16, en prueba) (cxldsakeb, 2026-10-17)
+### Fase 4: memory card, guarda y carga (bloqueo 16) (cxldsakeb, 2026-10-17)
 
 **Tras el `git pull`: hay que regenerar** (`recompile.ps1` con `GOW_VU1_MICROCODIGO` y `GOW_IOP_MODULOS` puestas, ~1 min) y compilar el runner (~14 min en el PC de cxldsakeb): cambió `config/funcmap.csv`.
 
-- Guardar no llegaba a escribir la tarjeta (y pedía formatear en cada arranque): el `switch` de libmc2 que reparte sus operaciones (`0x2B8CC0`) estaba partido en dos funciones en `funcmap.csv`, y sus casos daban `missing-target`. Unido con `tools/find_split_switches.py --fix` (solo había este caso). **Falta confirmar jugando** que formatea, guarda y carga. Además, la tarjeta reabre su archivo de 8 MB en cada página escrita: lento (NOTES.md, "Memory card: rendimiento").
+- Guardar no llegaba a escribir la tarjeta (y pedía formatear en cada arranque): el `switch` de libmc2 que reparte sus operaciones (`0x2B8CC0`) estaba partido en dos funciones en `funcmap.csv`, y sus casos daban `missing-target`. Unido con `tools/find_split_switches.py --fix` (solo había este caso). **Comprobado jugando: formatea, guarda (~10–20 s la primera vez) y carga sin pedir formatear.** Además, la tarjeta reabre su archivo de 8 MB en cada página escrita: lento (NOTES.md, "Memory card: rendimiento").
 - Pendientes para DaniSBR1 en NOTES.md ("Estado del repositorio"): línea azul con Kratos, líneas onduladas bajo el agua, cinemáticas que se saltan (la inicial y la de tras el primer QTE contra el Coloso), fantasma a la izquierda de Kratos.
 
 ### Fase 4: la sala ya se ve entera (bloqueo 15) y PCSX2 como referencia (cxldsakeb, 2026-10-17)
