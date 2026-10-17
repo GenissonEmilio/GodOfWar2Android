@@ -249,7 +249,11 @@ def gen_module(name, base, words, out):
         def go(addr):
             """transfer to addr (cpu.pc already holds it)"""
             if clo <= addr < chi:
-                return f'goto L{(addr - base) // 4:x};'
+                # GoW2-Port: a delay slot reached directly (fall-through from another delay slot, or a branch target)
+                # only has its D label: it runs as an ordinary instruction. God of War II's LIBSD and 989NOMID have
+                # two branch words in a row (data inside .text); God of War's modules never did.
+                j = (addr - base) // 4
+                return f'goto {"D" if is_delay(j) else "L"}{j:x};'
             return 'return n;'
 
         def is_delay(i):
