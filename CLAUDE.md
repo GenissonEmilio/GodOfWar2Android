@@ -62,6 +62,12 @@ Igual que en GoW1: **DeepSeek V4.1 Flash, gratis en OpenCode**, para trabajo de 
 
 > Actualizar esta sección al cerrar cada hito, para que la vean las sesiones de todos.
 
+### Fase 4: VU1 e IOP nativos, de ~3 a ~35–40 FPS estimados (cxldsakeb, 2026-10-16, noche)
+
+- **Cada uno tiene que capturar y generar en su PC** (SETUP.md, 7b; los datos son del juego y no se suben): 4 min de partida con `GOW_VU1_CAPTURA` + `GOW_VU1_NATIVE_OFF=1` + `PS2X_IOP_DUMP_MODULES`, y después `recompile.ps1 -SyncOnly` con `GOW_VU1_MICROCODIGO` y `GOW_IOP_MODULOS` puestas (~20 min). Sin esto el juego va a ~3 FPS: la VU1 interpretada se lleva el 97 % del tiempo.
+- Hizo falta arreglar `tools/iop/iopn_gen.py` (etiquetas de *delay slot* en LIBSD y 989NOMID de GoW II). Mediciones en NOTES.md, "VU1 e IOP nativos en GoW II".
+- **Siguiente para la velocidad:** medir FPS reales con `GOW_PERF_FRAME_PC` (falta la dirección del *flip* de GoW II). Con la velocidad ya razonable, se puede volver a los gráficos.
+
 ### Fase 4: los contornos azules son del escalado (cxldsakeb, 2026-10-16, noche)
 
 - **Contornos azules:** solo salían a escala 2. **La línea azul brillante está resuelta (bloqueo 14, fork `2b20dc4`)**: el bloom pondera por el alfa del frame, y una lectura reinterpretada lo dejaba a resolución PS2. Tras el `git pull`: `git submodule update --init --recursive` y `cmake --build` (solo cambia `gs_hw_backend.cpp`, unos minutos). **Queda** un borde tenue solo en el horizonte lejano, que ya está antes del bloom (sospecha y método en NOTES.md, "Estado del repositorio"). Lo que PCSX2 activa para GoW II está en NOTES.md, "Opciones de PCSX2 para God of War II".

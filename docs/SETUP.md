@@ -91,9 +91,9 @@ New-Item -ItemType Directory -Force out\capturas\vu1, out\capturas\iop
 $env:GOW_VU1_CAPTURA = "$PWD\out\capturas\vu1"       # microprogramas de la VU1
 $env:GOW_VU1_NATIVE_OFF = '1'                         # sin esto no captura nada
 $env:PS2X_IOP_DUMP_MODULES = "$PWD\out\capturas\iop"  # los 8 IRX del juego
-$env:GOW_PAD_TEST = '1'                               # guion de mando de GoW1: puede no valer para GoW II
-.\scripts\run.ps1 -Config RelWithDebInfo -NoBuild    # ciérralo a los ~3 min
-Remove-Item Env:GOW_VU1_CAPTURA, Env:GOW_VU1_NATIVE_OFF, Env:PS2X_IOP_DUMP_MODULES, Env:GOW_PAD_TEST
+$env:GOW2_PAD_SCRIPT = '15:start,20-120/3:x'         # llega solo a la primera zona (o juega con el teclado)
+.\scripts\run.ps1 -Config RelWithDebInfo -NoBuild    # ciérralo a los ~4 min: cuanto más juegues, más microprogramas
+Remove-Item Env:GOW_VU1_CAPTURA, Env:GOW_VU1_NATIVE_OFF, Env:PS2X_IOP_DUMP_MODULES, Env:GOW2_PAD_SCRIPT
 
 # 2. Generar y compilar con ellos
 $env:GOW_VU1_MICROCODIGO = "$PWD\out\capturas\vu1"
@@ -103,6 +103,7 @@ $env:GOW_IOP_MODULOS = "$PWD\out\capturas\iop"
 ```
 
 - Con `$env:GOW_VU1_STATS = '1'`, el log dice cuántos pares de la VU1 se interpretan: con todo capturado, 0.
+- En GoW II (PC de cxldsakeb, 2026-10-16): 4 min de captura dan ~1 000 microprogramas de la VU1 y los 8 IRX; el paso 2 tarda ~20 min (genera y compila la VU1). Las variables `GOW_VU1_MICROCODIGO` y `GOW_IOP_MODULOS` tienen que estar puestas en **cada** `recompile.ps1`: sin ellas, CMake se reconfigura sin VU1 nativa.
 - Memory card: `$env:GOW_MC0 = "$PWD\game\disc\play.mcd"` (se crea sola).
 
 ## 8. Herramientas de apoyo recomendadas

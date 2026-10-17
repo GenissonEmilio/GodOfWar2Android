@@ -155,6 +155,23 @@ Además, `mvuFlag: 0` (*speedhack* de la VU, "Fixes enemies attacks turning into
 
 **Prueba de escala** (misma zona, `GOW2_PAD_SCRIPT=15:start,20-120/3:x`, `GOW_HOST_SHOT=9000`): a `PS2X_GS_HW_SCALE=2` hay un contorno azul **escalonado, en bloques**, por toda la silueta de la ciudad y la montaña contra el cielo, y una línea de puntos diagonal en el cielo. A escala 1, el mismo horizonte sale limpio. **Los contornos son del escalado.** Por la forma de bloques, apunta a una pasada que el juego hace a menor resolución (niebla, cielo o profundidad de campo, que leen la profundidad) y que, escalada, no coincide con los bordes de la imagen: el caso que cubre `nativeScaling`. El "fantasma" no se distingue en capturas fijas. Ojo: las dos ejecuciones no cayeron en el mismo momento del combate, porque el guion va por segundos de reloj y el juego no avanza igual en cada arranque.
 
+## VU1 e IOP nativos en GoW II (cxldsakeb, 2026-10-16)
+
+Mismo método que en GoW1 (SETUP.md, 7b). Medido con `GOW_PERF_DIAG=1` y `GOW_VU1_STATS=1` en la zona del tutorial, ventanas de 5 s, PC de cxldsakeb:
+
+| | VU1 interpretada | VU1 + IOP nativos |
+|---|---|---|
+| `vu_ms` | ~4 850 (97 %) | ~3 000 |
+| `ee_ms` / `gs_ms` / `iop_ms` | ~730 / ~155 / ~200 | ~2 700 / ~1 000–1 800 / ~250 |
+| `guest_wait_ms` (el EE esperando) | ~4 050 | ~1 500–2 200 |
+| Ejecuciones de la VU1 (`runs`) | ~30 000, todas interpretadas | ~370 000, **0 interpretadas** |
+| ns por ciclo de la VU1 | 87 | 3,5 |
+
+- **~12 veces más trabajo por segundo**: de ~3 FPS a unos **35–40 FPS estimados** (por el número de ejecuciones de la VU1; el contador F10 no sirve, ver "Estado del repositorio"). En 245 s, el guion de mando pasa el tutorial y llega a la zona siguiente. Imagen correcta.
+- **Captura:** 4 min → **1 012 microprogramas** de la VU1 (`out/capturas/vu1`) y los 8 IRX (`out/capturas/iop`). Generar y compilar: ~20 min.
+- **Arreglo en `tools/iop/iopn_gen.py`:** el C++ de `LIBSD` y `989NOMID` no compilaba (`error C2094: la etiqueta 'L…' no estaba definida`). Dos palabras de salto seguidas (datos dentro del `.text`) dejaban un *delay slot* al que se llega directamente, que solo tiene etiqueta `D…`, y `go()` saltaba a `L…`. Ahora `go()` elige `D` cuando el destino es un *delay slot*. Con los módulos de GoW1 no pasaba.
+- **Ahora el tiempo está repartido** entre la VU1, el EE y el GS (hilos distintos). Lo siguiente para la velocidad sería medir los FPS de verdad: buscar la función de *flip* de GoW II para `GOW_PERF_FRAME_PC` (en GoW1, `0x1837B8`), que da `guest_flip_hz`.
+
 ## Memory card en GoW II (cxldsakeb, 2026-10-16)
 
 - `MC2_D.IRX`, `SIO2D.IRX` y `SIO2MAN.IRX` son **idénticos** a los de GoW1 (mismo SHA1). Por eso sus sustituciones nativas (`ps2xIOP/src/native/iop_native_overrides.cpp`), que no comprueban el tamaño del texto, caen bien. De los IRX con sustituciones, solo cambia `LIBSD` (bloqueo 9).
