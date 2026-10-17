@@ -218,6 +218,56 @@ namespace
         }).detach();
     }
 
+    // GOW2_MOVIE_TRACE=1: por qué el reproductor de vídeos deja una película. Su bucle (0x191620–0x191828, estado en
+    // [0x2D8190]) sale si 0x25EF40() ≠ 0, si [[0x2D7A24]+0x5AC] == 2, si 0x191AB0 (siguiente imagen) devuelve 0, si
+    // 0x191BD0 (¿terminada?: [película+0x154] ≠ 0 o, en el modo 2 de libmpeg, sceMpegIsEnd 0x2AC058) da 1, o por un
+    // botón cuando la película se puede saltar ([0x2D8194]). Envuelve esas funciones e imprime cada cambio de resultado
+    // con el estado de la película ([0x337700]: +0x50 imágenes, +0x54 mostradas, +0x140 modo, +0x14C, +0x154 fin).
+    struct Gow2MovieProbe
+    {
+        uint32_t address;
+        const char *name;
+        PS2Runtime::RecompiledFunction original;
+        std::atomic<uint32_t> calls;
+        std::atomic<uint32_t> lastV0;
+    };
+    Gow2MovieProbe g_gow2MovieProbes[] = {
+        {0x00191AB0u, "frame", nullptr, {0u}, {0xDEADBEEFu}},   {0x00191BD0u, "done", nullptr, {0u}, {0xDEADBEEFu}},
+        {0x0025EF40u, "quit25ef40", nullptr, {0u}, {0xDEADBEEFu}}, {0x002AC058u, "sceMpegIsEnd", nullptr, {0u}, {0xDEADBEEFu}},
+        {0x0018FE08u, "check18fe08", nullptr, {0u}, {0xDEADBEEFu}}};
+
+    void gow2MovieProbeWrapper(uint8_t *rdram, R5900Context *ctx, PS2Runtime *runtime)
+    {
+        Gow2MovieProbe *probe = nullptr;
+        for (Gow2MovieProbe &p : g_gow2MovieProbes)
+            if (p.address == ctx->pc)
+                probe = &p;
+        if (!probe || !probe->original)
+            return;
+        probe->original(rdram, ctx, runtime);
+        const uint32_t calls = probe->calls.fetch_add(1u) + 1u;
+        const uint32_t v0 = GPR_U32(ctx, 2);
+        if (probe->lastV0.exchange(v0) == v0 && calls % 2000u != 0u)
+            return;
+        auto word = [rdram](uint32_t a) { uint32_t v; std::memcpy(&v, rdram + (a & 0x01FFFFFCu), 4); return v; };
+        const uint32_t movie = word(0x00337700u), game = word(0x002D7A24u);
+        std::fprintf(stderr,
+                     "[gow2-movie] %s=%d (llamada %u) estado=%u saltable=%u saltada=%u game+5ac=%d | película %08x: imágenes=%u "
+                     "mostradas=%u modo=%u 14c=%x fin154=%u\n",
+                     probe->name, static_cast<int32_t>(v0), calls, word(0x002D8190u), word(0x002D8194u), word(0x002D8198u),
+                     game ? static_cast<int32_t>(word(game + 0x5ACu)) : -1, movie, movie ? word(movie + 0x50u) : 0u,
+                     movie ? word(movie + 0x54u) : 0u, movie ? word(movie + 0x140u) : 0u, movie ? word(movie + 0x14Cu) : 0u,
+                     movie ? word(movie + 0x154u) : 0u);
+    }
+
+    void gow2StartMovieTrace(PS2Runtime &runtime)
+    {
+        for (Gow2MovieProbe &probe : g_gow2MovieProbes)
+            if (runtime.hasFunction(probe.address) && (probe.original = runtime.lookupFunction(probe.address)))
+                runtime.replaceFunction(probe.address, gow2MovieProbeWrapper);
+        std::fprintf(stderr, "[gow2-movie] traza del reproductor de vídeos activada\n");
+    }
+
     // ---- Overrides ----
 
     // Sector donde empieza la capa 1 del DVD-9 de GoW II (game/disc/.disc_layout, "layer1"; docs/NOTES.md).
@@ -240,30 +290,6 @@ namespace
         gow2WriteGuest32(rdram, GPR_U32(ctx, 4), 1u);
         gow2WriteGuest32(rdram, GPR_U32(ctx, 5), kGow2Layer1StartLbn);
         SET_GPR_U32(ctx, 2, 1u);
-        ctx->pc = GPR_U32(ctx, 31);
-    }
-
-    // 0x1875E0 int bootDeviceFromArgs(int argc, char **argv), llamada desde main (0x1463F0).
-    // Guarda en 0x2D7FE8 de dónde arrancó el juego (0 = "cdrom…", 1 = otro, es decir, host0: del kit de desarrollo).
-    // Con ese valor, 0x187630 construye las rutas: "cdrom0:\RUTA;1" o "host0:ruta". Si argc es 0, el original no
-    // escribe nada, el valor se queda en -1 (el de .data) y las rutas salen VACÍAS: no se carga ningún IRX y el
-    // arranque se queda esperando al servidor de DBCMAN (bloqueo 2 de la fase 2).
-    // TEMPORAL: el SetupThread del runtime (syscall 0x3C) ignora el bloque de argumentos ($a3 = 0x2FBE00), así que
-    // main recibe argc = 0. Una PS2 da argc = 1 y argv[0] = "cdrom0:\SCUS_974.81;1"; aquí se hace como si fuera así.
-    // Sobra cuando el runtime rellene los argumentos (docs/NOTES.md, "Bloqueos").
-    void gow2BootDeviceFromArgs(uint8_t *rdram, R5900Context *ctx, PS2Runtime *)
-    {
-        const uint32_t argc = GPR_U32(ctx, 4);
-        const uint32_t argv = GPR_U32(ctx, 5);
-        int32_t fromHost = 0; // argc == 0: como una consola, arrancado desde el DVD
-        if (argc != 0u)
-        {
-            uint32_t arg0 = 0;
-            std::memcpy(&arg0, rdram + (argv & 0x01FFFFFFu), sizeof(arg0));
-            fromHost = std::memcmp(rdram + (arg0 & 0x01FFFFFFu), "cdrom", 5) != 0 ? 1 : 0;
-        }
-        std::memcpy(rdram + 0x002D7FE8u, &fromHost, sizeof(fromHost));
-        SET_GPR_U32(ctx, 2, static_cast<uint32_t>(fromHost));
         ctx->pc = GPR_U32(ctx, 31);
     }
 
@@ -306,6 +332,20 @@ namespace
         std::fprintf(stderr, "[gow2-ipu] sceIpuInit con las tablas de SCUS-97481\n");
         SET_GPR_S32(ctx, 2, 0);
         ctx->pc = GPR_U32(ctx, 31);
+    }
+
+    // 0x190A08: la función de espera del reproductor de vídeos. El juego la registra en libmpeg (0x2A9400) y libmpeg la
+    // llama (0x2A9418) en sus esperas activas: 0x2A8EA0 mete la imagen en la cola de pantalla (2 huecos) y da vueltas
+    // `while (cola llena)` hasta que el VBlank saca una; esta función demultiplexa más datos en cada vuelta. En la PS2,
+    // cada vuelta cuesta su tiempo; aquí cuesta más en el PC de lo que avanza en ciclos del EE, y la película (y el
+    // tiempo emulado, con sus VBlank) iba a ~0,57× (34 VBlank por segundo; EE ocupado el 99 %, sin esperas).
+    // catchUpToHost añade los ciclos que faltan cuando el tiempo emulado se queda detrás del reloj real, como hace GoW1
+    // con su sondeo de la película (gowMovieStreamService, 0x188B80; referencia/gow1/overrides/gow_overrides.cpp,
+    // Waffle565 vía KIexster, GPLv3).
+    void gow2MovieIdle(uint8_t *rdram, R5900Context *ctx, PS2Runtime *runtime)
+    {
+        runtime->eeScheduler().catchUpToHost(EeScheduler::kEeClockHz / 60u);
+        FUN_00190a08_0x190a08(rdram, ctx, runtime);
     }
 
     // ---- Mando: libpad2 en el EE ----
@@ -550,10 +590,10 @@ namespace
         runtime.setPrivateGuestHeap(0x000A0000u, 0x000FF000u);
 
         const bool dualInfo = runtime.replaceFunction(0x002B6BF0u, gow2CdReadDvdDualInfo);
-        const bool bootDevice = runtime.replaceFunction(0x001875E0u, gow2BootDeviceFromArgs);
         const bool moduleBuffer = runtime.replaceFunction(0x002D4850u, gow2LoadStartModuleBuffer);
-        std::fprintf(stderr, "[gow2-override] sceCdReadDvdDualInfo=%d bootDevice=%d moduleBuffer=%d\n", dualInfo, bootDevice,
-                     moduleBuffer);
+        // 0x1875E0 (de dónde arrancó el juego, según argv) ya no se sustituye: el SetupThread del runtime rellena los
+        // argumentos de main como una consola (argc = 1, argv[0] = "cdrom0:\SCUS_974.81;1"; antes era un TEMPORAL).
+        std::fprintf(stderr, "[gow2-override] sceCdReadDvdDualInfo=%d moduleBuffer=%d\n", dualInfo, moduleBuffer);
 
         // mando (libpad2, ver arriba)
         const bool pad = runtime.replaceFunction(0x002B78D8u, gow2Pad2Init) &&         // scePad2Init
@@ -565,7 +605,11 @@ namespace
                          runtime.replaceFunction(0x002B7C88u, gow2Pad2GetState);
         std::fprintf(stderr, "[gow2-override] libpad2=%d\n", pad);
         const bool ipu = runtime.replaceFunction(0x002B56F0u, gow2IpuInit); // sceIpuInit (bloqueo 11)
-        std::fprintf(stderr, "[gow2-override] sceIpuInit=%d\n", ipu);
+        const bool movieIdle = runtime.replaceFunction(0x00190A08u, gow2MovieIdle); // espera de los vídeos
+        std::fprintf(stderr, "[gow2-override] sceIpuInit=%d movieIdle=%d\n", ipu, movieIdle);
+
+        if (std::getenv("GOW2_MOVIE_TRACE"))
+            gow2StartMovieTrace(runtime);
 
         // al final, para envolver también los overrides de arriba
         if (const char *profile = std::getenv("GOW2_CALL_PROFILE"))
