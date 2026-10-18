@@ -68,7 +68,7 @@ Descartado antes:
 - **Compilar en `Release`** (`/Ob2`) en vez de `RelWithDebInfo` (`/Ob1`): baja `ee_ms` (~3 000 → ~2 550) y `gs_ms`, pero los FPS no cambian (~47–48): el EE solo espera más. No compensa (19 min de compilación aparte).
 - **Cola del hilo del GS más grande** (`PS2X_GS_QUEUE_CHUNKS=256`, por defecto 8 bloques de 64 KB): mismos FPS.
 - Hilos del runtime, por si hace falta: `GameThread` (EE), el *worker* del VIF1/GIF que ejecuta la VU1 (`PS2X_GS_WORKER=1`), la etapa del frontend del GS (`gs_stage.cpp`) y `GSThread` (OpenGL).
-- Ideas para más adelante: cada `jal` del código generado pasa por `dispatchGuestBranch` (una llamada al runtime por llamada del juego); llamar directamente a la función recompilada cuando el destino es fijo podría recortar mucho tiempo del EE. Es un cambio del recompilador, para hablarlo antes.
+- Ideas para más adelante: cada `jal` del código generado pasa por `dispatchGuestBranch` (una llamada al runtime por llamada del juego); llamar directamente a la función recompilada cuando el destino es fijo recortaría algo de tiempo del EE, pero `dispatchGuestBranch` ya es ligero (anillo de trazas, *checkpoint* y consulta de la tabla): calculado a ojo, un ~10 %, no el ~25 % que falta. Sin medir; es un cambio del recompilador, para hablarlo antes. La otra mitad, la VU1 nativa, es la otra vía.
 
 2. El "fantasma" pegado a Kratos que vio cxldsakeb: mirarlo en pantalla durante el combate.
 3. Partida, combate y HUD, revisados jugando (con teclado o mando; ver "Mando").
