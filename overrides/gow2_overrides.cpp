@@ -5,6 +5,7 @@
 #include "game_overrides.h"
 #include "ps2_runtime.h"
 #include "ps2_runtime_macros.h"
+#include "runtime/ps2_perf.h" // setGameFramePc: FPS reales en el contador F10
 #include "ps2_host_backend.h" // raylib: IsGamepadAvailable / IsKeyDown para el teclado
 #include <ps2_recompiled_functions.h>
 #include <array>
@@ -607,6 +608,11 @@ namespace
         const bool ipu = runtime.replaceFunction(0x002B56F0u, gow2IpuInit); // sceIpuInit (bloqueo 11)
         const bool movieIdle = runtime.replaceFunction(0x00190A08u, gow2MovieIdle); // espera de los vídeos
         std::fprintf(stderr, "[gow2-override] sceIpuInit=%d movieIdle=%d\n", ipu, movieIdle);
+
+        // Contador F10: GoW II dibuja todos los frames en un solo búfer de pantalla (sin flips) y el GS recibe un frame
+        // por VBlank haga lo que haga el juego, así que marcaba 60 siempre. 0x14E380 entrega cada frame al GS, una vez
+        // por frame del juego: el F10 cuenta sus entradas ("[G]"). Es lo mismo que GOW_PERF_FRAME_PC=0x14E380.
+        ps2_perf::setGameFramePc(0x0014E380u);
 
         if (std::getenv("GOW2_MOVIE_TRACE"))
             gow2StartMovieTrace(runtime);
