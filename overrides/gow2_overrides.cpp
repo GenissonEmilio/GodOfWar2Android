@@ -235,7 +235,8 @@ namespace
     Gow2MovieProbe g_gow2MovieProbes[] = {
         {0x00191AB0u, "frame", nullptr, {0u}, {0xDEADBEEFu}},   {0x00191BD0u, "done", nullptr, {0u}, {0xDEADBEEFu}},
         {0x0025EF40u, "quit25ef40", nullptr, {0u}, {0xDEADBEEFu}}, {0x002AC058u, "sceMpegIsEnd", nullptr, {0u}, {0xDEADBEEFu}},
-        {0x0018FE08u, "check18fe08", nullptr, {0u}, {0xDEADBEEFu}}};
+        {0x0018FE08u, "check18fe08", nullptr, {0u}, {0xDEADBEEFu}}, {0x002A89D0u, "spuPos5b", nullptr, {0u}, {0xDEADBEEFu}},
+        {0x00190488u, "adpcmFeed", nullptr, {0u}, {0xDEADBEEFu}}};
 
     void gow2MovieProbeWrapper(uint8_t *rdram, R5900Context *ctx, PS2Runtime *runtime)
     {
@@ -261,11 +262,51 @@ namespace
                      movie ? word(movie + 0x154u) : 0u);
     }
 
+    // El callback del audio de la película (0x1929E0, ver NOTES.md): las primeras entregas, con su longitud, los primeros
+    // bytes y el estado del anillo antes y después ([película+0x138] bytes de cabecera, +0x104 lectura, +0x108 lleno).
+    PS2Runtime::RecompiledFunction g_gow2MovieAudioOriginal = nullptr;
+    void gow2MovieAudioProbe(uint8_t *rdram, R5900Context *ctx, PS2Runtime *runtime)
+    {
+        static unsigned calls = 0;
+        auto word = [rdram](uint32_t a) { uint32_t v; std::memcpy(&v, rdram + (a & 0x01FFFFFCu), 4); return v; };
+        const uint32_t movie = word(0x00337700u), cb = GPR_U32(ctx, 5);
+        const uint32_t data = word(cb + 8u), len = word(cb + 12u);
+        const uint32_t before138 = word(movie + 0x138u), beforeFill = word(movie + 0x108u);
+        g_gow2MovieAudioOriginal(rdram, ctx, runtime);
+        if (++calls <= 12u || calls % 500u == 0u)
+        {
+            const uint8_t *p = rdram + (data & 0x01FFFFFFu);
+            std::fprintf(stderr, "[gow2-movie-audio] #%u len=%u bytes=%02x%02x%02x%02x %02x%02x%02x%02x hdr %u->%u fill %u->%u rd=%u v0=%d\n",
+                         calls, len, p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], before138, word(movie + 0x138u), beforeFill,
+                         word(movie + 0x108u), word(movie + 0x104u), static_cast<int32_t>(GPR_U32(ctx, 2)));
+        }
+    }
+
+    // 0x190190(staging, size, spuOffset): lo que se envía a la SPU2; las marcas (byte 1) de cada bloque ADPCM de 16 bytes.
+    PS2Runtime::RecompiledFunction g_gow2MovieSpuOriginal = nullptr;
+    void gow2MovieSpuProbe(uint8_t *rdram, R5900Context *ctx, PS2Runtime *runtime)
+    {
+        static unsigned calls = 0;
+        if (++calls <= 24u)
+        {
+            const uint32_t src = GPR_U32(ctx, 4), size = GPR_U32(ctx, 5), dst = GPR_U32(ctx, 6);
+            char flags[16 * 3 + 1] = {};
+            for (uint32_t b = 0; b < 16u && b * 16u < size; ++b)
+                std::snprintf(flags + b * 3u, 4u, "%02x ", rdram[(src + b * 16u + 1u) & 0x01FFFFFFu]);
+            std::fprintf(stderr, "[gow2-movie-spu] #%u src=%x size=%x dst=%x flags: %s\n", calls, src, size, dst, flags);
+        }
+        g_gow2MovieSpuOriginal(rdram, ctx, runtime);
+    }
+
     void gow2StartMovieTrace(PS2Runtime &runtime)
     {
+        if ((g_gow2MovieSpuOriginal = runtime.lookupFunction(0x00190190u)))
+            runtime.replaceFunction(0x00190190u, gow2MovieSpuProbe);
         for (Gow2MovieProbe &probe : g_gow2MovieProbes)
             if (runtime.hasFunction(probe.address) && (probe.original = runtime.lookupFunction(probe.address)))
                 runtime.replaceFunction(probe.address, gow2MovieProbeWrapper);
+        if ((g_gow2MovieAudioOriginal = runtime.lookupFunction(0x001929E0u)))
+            runtime.replaceFunction(0x001929E0u, gow2MovieAudioProbe);
         std::fprintf(stderr, "[gow2-movie] traza del reproductor de vídeos activada\n");
     }
 
