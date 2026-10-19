@@ -8,7 +8,16 @@ Static recompilation of **God of War II** (PS2, 2007) into a native Windows exec
 It is the team's second project after [God of War](https://github.com/cxldsakeb/ROMS-nativas-PS2), which is already playable at ~60 FPS on Waffle565's runtime. GoW II uses an evolution of the same engine, so we start from that runtime and what we do here is the game-specific part: the function map, the recompiler configuration, the overrides and the runtime fixes the game requires.
 
 > [!IMPORTANT]
-> This repository **contains nothing from the game** (ISO, ELF, IRX, disc data, images) nor the C++ generated from it, and **it never will**. Everyone needs **their own legal copy** of God of War II (NTSC-U, `SCUS-97481`, v1.01). Don't ask for or share ISOs in the issues.
+> This repository **contains nothing from the game** (ISO, ELF, IRX, disc data) nor the C++ generated from it, and **it never will**. The only exception are the few screenshots of the port below. Everyone needs **their own legal copy** of God of War II (NTSC-U, `SCUS-97481`, v1.01). Don't ask for or share ISOs in the issues.
+
+## Screenshots
+
+The port running on PC (October 2026, internal resolution x2): the title screen, the opening of the first level with the Colossus of Rhodes, and combat in the first area.
+
+| | |
+|---|---|
+| ![Title screen](docs/screenshots/1-title.jpg) | ![The Colossus of Rhodes](docs/screenshots/2-colossus.jpg) |
+| ![Combat in the first area](docs/screenshots/3-combat.jpg) | ![Combat in the first area](docs/screenshots/4-combat.jpg) |
 
 ## Status
 

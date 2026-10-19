@@ -13,7 +13,7 @@ Claude Code loads this file automatically. It is the **shared thread** between t
 
 ## Rules that are never broken
 
-1. **Nothing from the game is ever pushed:** no ISO, no ELF, no disc files, no C++ from `generated/`, no VU1 or IOP captures (`out/capturas/`), no images of the game. All of that is local and is in `.gitignore`. Nor is it passed to external services (DeepSeek included).
+1. **Nothing from the game is ever pushed:** no ISO, no ELF, no disc files, no C++ from `generated/`, no VU1 or IOP captures (`out/capturas/`), no images of the game. All of that is local and is in `.gitignore`. **Only exception:** the few example screenshots of the port in `docs/screenshots/`, shown in the README (agreed by cxldsakeb on 2026-10-19); don't add more, or other game images, without asking the team. Nor is it passed to external services (DeepSeek included).
 2. **Addresses are only valid for the reference ELF**, identified by the SHA1 in `docs/NOTES.md`. **GoW1's are not valid here**: `referencia/gow1/` is for understanding what each thing does, not for copying addresses.
 3. **Every finding goes to `docs/NOTES.md`:** identified functions, blockers and solutions. When you finish a task, update it in the same branch.
 4. **Temporary patches** (`ret0`/`ret1`, hacks) carry a `TEMPORAL` comment in the code and a row in NOTES.md.
@@ -62,6 +62,11 @@ Same as in GoW1: **DeepSeek V4.1 Flash, free on OpenCode**, for high-volume read
 ## Current status
 
 > Update this section when closing each milestone, so that everyone's sessions see it.
+
+### Screenshots in the README and the 16:9 stretch (cxldsakeb, 2026-10-19)
+
+- **Exception to rule 1, agreed by cxldsakeb:** four example screenshots of the port (title screen, a cutscene and combat in the first area) in `docs/screenshots/`, shown in the README. It is the only exception: no other game images go into the repo.
+- Taking them showed a real bug: **GoW II renders 4:3 and the runtime stretches it to 16:9** (everything ~33 % too wide). The screenshots are resized to 4:3. Cause and options in NOTES.md, "Repository status" ("Image stretched to 16:9").
 
 ### Documentation in English (cxldsakeb, 2026-10-19)
 
