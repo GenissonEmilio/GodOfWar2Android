@@ -1,9 +1,9 @@
 # config/
 
-Configuración del recompilador para GoW II. **Vacía al empezar: construirla es la fase 1** (`docs/ROADMAP.md`).
+Recompiler configuration for GoW II. **Empty at the start: building it is phase 1** (`docs/ROADMAP.md`).
 
-| Archivo | Qué es | De dónde sale |
+| File | What it is | Where it comes from |
 |---|---|---|
-| `gow.toml`, `gow_functions.csv` | Export de Ghidra (no se suben: llevan rutas locales y se regeneran) | `scripts/ghidra-analyze.ps1` |
-| `funcmap.csv` | Mapa de funciones (`Name,Start,End,Size`) que usa `recompile.ps1` | `py -3 tools/make_funcmap.py --extra out/scan_missing.txt`: las funciones del CSV de Ghidra (sin sus etiquetas internas) más las que Ghidra no ve (`tools/scan_missing_functions.py`). El orden está en el docstring de `make_funcmap.py` |
-| `recomp.template.toml` | Configuración de `ps2_recomp` con `@ELF@`, `@MAP@` y `@OUT@` (los rellena `recompile.ps1`): stubs, entry points y tabla `[mmio]` | Se escribe a mano, con `referencia/gow1/config/recomp.template.toml` como modelo y **las direcciones de GoW II** |
+| `gow.toml`, `gow_functions.csv` | Ghidra export (not uploaded: they contain local paths and are regenerated) | `scripts/ghidra-analyze.ps1` |
+| `funcmap.csv` | Function map (`Name,Start,End,Size`) used by `recompile.ps1` | `py -3 tools/make_funcmap.py --extra out/scan_missing.txt`: the functions from the Ghidra CSV (without its internal labels) plus the ones Ghidra doesn't see (`tools/scan_missing_functions.py`). The order is in the docstring of `make_funcmap.py` |
+| `recomp.template.toml` | `ps2_recomp` configuration with `@ELF@`, `@MAP@` and `@OUT@` (filled in by `recompile.ps1`): stubs, entry points and `[mmio]` table | Written by hand, with `referencia/gow1/config/recomp.template.toml` as the model and **GoW II's addresses** |

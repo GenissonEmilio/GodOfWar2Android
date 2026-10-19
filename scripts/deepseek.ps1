@@ -6,7 +6,7 @@
     Copia la tarea y los archivos de entrada a una carpeta aislada fuera del repo (%TEMP%\gow-deepseek\<tarea>-<fecha>\) y ejecuta
     OpenCode en modo "plan" (solo lectura) dentro de ella. La respuesta queda en salida.md, en esa misma carpeta.
     Sirve para trabajo de mucho volumen (resumir, clasificar, cruzar documentos); el resultado se revisa siempre
-    antes de usarlo. Ver "Tareas para DeepSeek" en CLAUDE.md.
+    antes de usarlo. Ver "Tasks for DeepSeek" en CLAUDE.md.
 
     Regla 1: el servicio es externo y gratuito (puede guardar lo que recibe), así que el script se niega a enviar
     nada derivado del juego: game/, generated/, out/, ghidra/, la carpeta runner/ del

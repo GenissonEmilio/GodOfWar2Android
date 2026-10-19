@@ -1,35 +1,35 @@
-# Cómo colaborar
+# How to contribute
 
-Gracias por querer ayudar. El proyecto está en marcha y cualquier prueba, informe o arreglo cuenta. La documentación está en español, pero los issues y PRs en inglés son bienvenidos.
+Thanks for wanting to help. The project is under way and every test, report or fix counts. The documentation is in English; issues and PRs are welcome in English or Spanish.
 
-## La regla que no se rompe
+## The rule that is never broken
 
-**Nada del juego entra en el repositorio ni en los issues:** ni ISO, ni ELF, ni IRX, ni archivos del disco, ni el C++ de `generated/`, ni capturas de la VU1 o del IOP (`out/capturas/`), ni partidas guardadas. Ya están en `.gitignore`; si `git status` te enseña algo de eso, no lo añadas. Los issues que pidan o enlacen copias del juego se cierran.
+**Nothing from the game goes into the repository or the issues:** no ISO, no ELF, no IRX, no disc files, no C++ from `generated/`, no VU1 or IOP captures (`out/capturas/`), no save files. They are already in `.gitignore`; if `git status` shows you any of that, don't add it. Issues that ask for or link to copies of the game get closed.
 
-Para enseñar un fallo de imagen, describe la escena o enlaza un vídeo tuyo alojado fuera del repo.
+To show a graphics glitch, describe the scene or link to a video of your own hosted outside the repo.
 
-## Informar de un fallo
+## Reporting a bug
 
-Abre un issue con:
+Open an issue with:
 
-1. **SHA1 de tu ELF** (lo imprime `scripts/extract-iso.ps1`). Si no coincide con el de [docs/NOTES.md](docs/NOTES.md), las direcciones no valen para tu copia: dilo en el issue, pero no esperes que funcione.
-2. **Commit** del repo y del submódulo (`git rev-parse --short HEAD` y `git -C PS2Recomp rev-parse --short HEAD`).
-3. Si tienes la **VU1 y el IOP nativos** generados (SETUP.md, 7b) o no.
-4. Qué hiciste, qué esperabas y qué pasó. Las **últimas líneas del log** de `out/logs/` (solo texto) ayudan mucho.
+1. **Your ELF's SHA1** (printed by `scripts/extract-iso.ps1`). If it doesn't match the one in [docs/NOTES.md](docs/NOTES.md), the addresses aren't valid for your copy: say so in the issue, but don't expect it to work.
+2. **Commit** of the repo and of the submodule (`git rev-parse --short HEAD` and `git -C PS2Recomp rev-parse --short HEAD`).
+3. Whether or not you have the **native VU1 and IOP** generated (SETUP.md, 7b).
+4. What you did, what you expected and what happened. The **last lines of the log** in `out/logs/` (text only) help a lot.
 
-Antes, mira la tabla de bloqueos y "Estado del repositorio" en [docs/NOTES.md](docs/NOTES.md): puede que ya esté anotado.
+Before that, check the blockers table and "Repository status" in [docs/NOTES.md](docs/NOTES.md): it may already be noted there.
 
-## Mandar un arreglo
+## Sending a fix
 
-1. Haz un fork y una rama por cambio.
-2. **Primero intenta un override** (`overrides/`). Si el arreglo es del runtime, va en el fork [DaniSBR1/PS2Recomp](https://github.com/DaniSBR1/PS2Recomp), rama `godofwar2`: abre ahí el PR (comentarios del código en inglés) y aquí otro con el nuevo puntero del submódulo.
-3. Las direcciones **solo valen para el ELF de referencia** (SHA1 en NOTES.md). Las de GoW1 no valen aquí.
-4. Si encuentras algo (una función, la causa de un bloqueo), **anótalo en `docs/NOTES.md`** en el mismo PR. Es lo que permite que los demás sigan donde lo dejaste.
-5. Los apaños temporales (`ret0`, saltarse una función…) llevan un comentario `TEMPORAL` y una fila en NOTES.md.
-6. Sin trazas de diagnóstico en el runtime: déjalas en tu copia local.
+1. Fork the repo and make one branch per change.
+2. **First try an override** (`overrides/`). If the fix belongs in the runtime, it goes in the fork [DaniSBR1/PS2Recomp](https://github.com/DaniSBR1/PS2Recomp), branch `godofwar2`: open the PR there (code comments in English) and another one here with the new submodule pointer.
+3. Addresses **are only valid for the reference ELF** (SHA1 in NOTES.md). GoW1's addresses are not valid here.
+4. If you find something (a function, the cause of a blocker), **write it down in `docs/NOTES.md`** in the same PR. That is what lets others pick up where you left off.
+5. Temporary hacks (`ret0`, skipping a function…) carry a `TEMPORAL` comment and a row in NOTES.md.
+6. No diagnostic traces in the runtime: keep them in your local copy.
 
-Los PRs de fuera del equipo los revisa alguien del equipo antes de fusionarlos.
+PRs from outside the team are reviewed by a team member before they are merged.
 
-## Licencia
+## License
 
-Al contribuir aceptas que tu aportación se publique bajo **GPLv3**, como el resto del proyecto. Si traes código de otro proyecto, tiene que ser compatible con GPLv3 y citar su origen en un comentario.
+By contributing you agree that your contribution is published under **GPLv3**, like the rest of the project. If you bring in code from another project, it must be GPLv3-compatible and credit its source in a comment.

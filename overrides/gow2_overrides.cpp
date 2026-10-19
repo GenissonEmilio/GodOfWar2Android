@@ -1,6 +1,6 @@
 // GoW2-Port: overrides de God of War II (SCUS-97481 v1.01, SHA1 E6A62A0F3E781C29513F563F4625B9B3A9103C56).
 // Las direcciones solo valen para ese ELF. Modelo: referencia/gow1/overrides/gow_overrides.cpp (Waffle565, vía KIexster).
-// Cada override responde a un bloqueo apuntado en docs/NOTES.md ("Bloqueos").
+// Cada override responde a un bloqueo apuntado en docs/NOTES.md ("Blockers").
 #include "runtime/ee_scheduler.h"
 #include "game_overrides.h"
 #include "ps2_runtime.h"

@@ -5,7 +5,7 @@
 Cada IRX lleva una tabla de imports por librería (marca 0x41E00000, versión, nombre de 8 bytes) seguida
 de un stub de 8 bytes por función: "jr ra" + "addiu $zero, $zero, ordinal". Es lo mismo que decodifica
 el runtime en ps2xIOP/src/emulator/imports/iop_imports.cpp. Sirve para cruzar lo que pide el juego con
-lo que implementa el runtime (ver NOTES.md, "Imports del IOP que usa GoW II").
+lo que implementa el runtime (ver NOTES.md, "IOP imports used by GoW II").
 La salida describe archivos del juego: se queda en local (regla 1).
 """
 import glob
