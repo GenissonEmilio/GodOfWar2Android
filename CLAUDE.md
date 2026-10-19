@@ -9,7 +9,7 @@ Este archivo lo carga Claude Code automáticamente. Es el **hilo compartido** en
 - **Submódulo `PS2Recomp/`:** nuestro fork [DaniSBR1/PS2Recomp](https://github.com/DaniSBR1/PS2Recomp), **rama `godofwar2`** (sale de `godofwar` en `083a286`, la base de Waffle565). Es una rama distinta de la de GoW1 para que los cambios de un juego no rompan el otro. Si un arreglo vale para los dos, se hace en una y se lleva a la otra con `cherry-pick`.
 - **Equipo:** @cxldsakeb (dueño del repo), @DaniSBR1 y @Alejrr2. Están aprendiendo: Claude hace de guía, así que explica el porqué de las cosas y no solo el qué.
 - **Idioma:** todo en español (conversación, docs, comentarios y commits). Excepción: los comentarios de código dentro del fork de PS2Recomp van en inglés.
-- **Repo:** privado por ahora (GPLv3). Si se hace público, la regla 1 importa todavía más.
+- **Repo:** **público** desde el 2026-10-18 (GPLv3), como aviso de trabajo en curso y para que otros puedan colaborar o hacer su fork. Por eso la regla 1 importa todavía más: todo lo que se sube lo puede ver cualquiera, también en el historial.
 
 ## Reglas que no se rompen
 
@@ -45,6 +45,7 @@ referencia/gow1/                         configuración y overrides de GoW1 (KIe
 ## Cómo colaboramos
 
 - Una rama por tarea y PR a `main`. **No hace falta revisión** (acordado el 2026-10-15): quien la abre la fusiona.
+- **PRs e issues de fuera del equipo** (desde que el repo es público): los revisa alguien del equipo antes de fusionar, comprobando sobre todo la regla 1 (que no entre nada del juego) y que las direcciones sean del ELF de referencia. Las normas para colaboradores están en `CONTRIBUTING.md`.
 - Antes de empezar: `git pull`, `git submodule sync --recursive` y `git submodule update --init --recursive`. Lee `docs/NOTES.md` y `docs/ROADMAP.md`.
 - Quien vaya a cambiar el fork (`godofwar2`) lo avisa antes.
 - Al terminar: actualiza NOTES.md y, si cambia la fase, la sección **Estado actual** de abajo.
@@ -61,6 +62,11 @@ Igual que en GoW1: **DeepSeek V4.1 Flash, gratis en OpenCode**, para trabajo de 
 ## Estado actual
 
 > Actualizar esta sección al cerrar cada hito, para que la vean las sesiones de todos.
+
+### Repo público (cxldsakeb, 2026-10-18)
+
+- El repo pasa a **público** para avisar de que el port está en marcha (en Twitter se preguntaba por uno) y abrirlo a colaboradores y forks. Antes se revisó el historial entero: solo texto, nada del juego, sin credenciales.
+- README de cara al público (estado, aviso de que no hay versión jugable todavía, resumen en inglés), `CONTRIBUTING.md` y `.recomp.json` en `in-progress`. **Ojo con lo que se sube a partir de ahora:** lo ve cualquiera.
 
 ### Fase 4: cinemáticas (bloqueo 17), velocidad medida y adiós al TEMPORAL (cxldsakeb, 2026-10-17, tarde)
 
