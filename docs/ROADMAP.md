@@ -1,63 +1,63 @@
-# Hoja de ruta
+# Roadmap
 
-## Qué esperar
+## What to expect
 
-- **No empezamos de cero.** El runtime ya sabe dibujar el GS, ejecutar la VU1 y el IOP como código nativo, sonar, leer el mando y la memory card y reproducir vídeos: eso es lo que en GoW1 costó semanas. GoW II usa una evolución del mismo motor, así que mucho debería valer tal cual.
-- **Lo que sí es nuevo:** el ELF de GoW II no tiene símbolos y sus direcciones son otras. Hay que construir el mapa de funciones, la configuración del recompilador (stubs de librerías de Sony y la tabla `[mmio]`) y los overrides, y arreglar los bloqueos propios del juego con el método de siempre: ejecutar, arreglar el **primer** bloqueo y repetir.
-- `referencia/gow1/` es el modelo: qué stubs hicieron falta, qué accesos a registros se convierten en llamadas nativas y qué overrides necesitó GoW1. Para cada cosa hay que encontrar **su equivalente en GoW II**.
+- **We are not starting from scratch.** The runtime already knows how to draw with the GS, run the VU1 and the IOP as native code, play sound, read the controller and the memory card and play videos: that is what took weeks in GoW1. GoW II uses an evolution of the same engine, so much of it should work as is.
+- **What is new:** GoW II's ELF has no symbols and its addresses are different. We have to build the function map, the recompiler configuration (Sony library stubs and the `[mmio]` table) and the overrides, and fix the game's own blockers with the usual method: run, fix the **first** blocker and repeat.
+- `referencia/gow1/` is the model: which stubs were needed, which register accesses become native calls and which overrides GoW1 needed. For each thing we have to find **its equivalent in GoW II**.
 
-## Fases
+## Phases
 
-Cada fase tiene un criterio de "hecho" comprobable.
+Each phase has a verifiable "done" criterion.
 
-### Fase 0: entorno (todos) — falta Ale
+### Phase 0: environment (everyone) — Ale still pending
 
-- [ ] Cada uno sigue [SETUP.md](SETUP.md) hasta `build-tools.ps1`. (cxldsakeb y DaniSBR1: hecho)
-- [ ] Cada uno extrae su copia con `extract-iso.ps1` y todos tenemos el **mismo SHA1 del ELF**, apuntado en [NOTES.md](NOTES.md). (cxldsakeb y DaniSBR1: hecho, `E6A62A0F…`)
+- [ ] Everyone follows [SETUP.md](SETUP.md) up to `build-tools.ps1`. (cxldsakeb and DaniSBR1: done)
+- [ ] Everyone extracts their copy with `extract-iso.ps1` and we all have the **same ELF SHA1**, recorded in [NOTES.md](NOTES.md). (cxldsakeb and DaniSBR1: done, `E6A62A0F…`)
 
-**Hecho cuando:** los 3 compilamos las herramientas y tenemos el ELF de referencia.
+**Done when:** all 3 of us build the tools and have the reference ELF.
 
-### Fase 1: mapa de funciones y primera configuración — ✅ hecha (2026-10-15)
+### Phase 1: function map and first configuration — ✅ done (2026-10-15)
 
-- [x] Ghidra (`ghidra-analyze.ps1`) → `config/gow_functions.csv` y `config/gow.toml`. (DaniSBR1: 5 874 funciones)
-- [x] Funciones que Ghidra no ve (`scan_missing_functions.py`). (DaniSBR1: 733; desde la fase 2 van en `funcmap.csv`)
-- [x] `config/funcmap.csv` (`Name,Start,End,Size`) y `config/recomp.template.toml` con `@ELF@`, `@MAP@` y `@OUT@`, tomando como modelo los de `referencia/gow1/config/`. (DaniSBR1: primera versión; `recompile.ps1` genera C++ sin errores)
-- [x] Stubs de las librerías de Sony (`sceMpeg*`, `sceIpu*`, `sceGs*`, `sceCd*`, `sceDma*`, libkernel…): localizar cada una en GoW II (las cadenas y los patrones de llamada ayudan; DeepSeek puede cruzar listas). (DaniSBR1: 76 de 79; los otros 3 no están enlazados en GoW II. SDK 3.0.0, ver NOTES.md)
-- [x] Tabla `[mmio]`: los accesos del juego a registros del hardware que el runtime convierte en llamadas nativas. (DaniSBR1: 240 entradas de `ps2_analyzer`, equivalentes a la tabla de GoW1; cxldsakeb confirmó que el runner compila y enlaza con ella)
+- [x] Ghidra (`ghidra-analyze.ps1`) → `config/gow_functions.csv` and `config/gow.toml`. (DaniSBR1: 5,874 functions)
+- [x] Functions that Ghidra doesn't see (`scan_missing_functions.py`). (DaniSBR1: 733; since phase 2 they go in `funcmap.csv`)
+- [x] `config/funcmap.csv` (`Name,Start,End,Size`) and `config/recomp.template.toml` with `@ELF@`, `@MAP@` and `@OUT@`, modeled on the ones in `referencia/gow1/config/`. (DaniSBR1: first version; `recompile.ps1` generates C++ without errors)
+- [x] Sony library stubs (`sceMpeg*`, `sceIpu*`, `sceGs*`, `sceCd*`, `sceDma*`, libkernel…): locate each one in GoW II (strings and call patterns help; DeepSeek can cross-reference lists). (DaniSBR1: 76 of 79; the other 3 are not linked in GoW II. SDK 3.0.0, see NOTES.md)
+- [x] `[mmio]` table: the game's hardware register accesses that the runtime turns into native calls. (DaniSBR1: 240 entries from `ps2_analyzer`, equivalent to GoW1's table; cxldsakeb confirmed that the runner builds and links with it)
 
-**Hecho cuando:** `recompile.ps1` genera C++ sin errores y el runner compila. **Hecho** (2026-10-15): con stubs y `[mmio]`, `recompile.ps1` sin errores y el runner `RelWithDebInfo` enlaza sin símbolos sin resolver (cxldsakeb).
+**Done when:** `recompile.ps1` generates C++ without errors and the runner builds. **Done** (2026-10-15): with stubs and `[mmio]`, `recompile.ps1` runs without errors and the `RelWithDebInfo` runner links with no unresolved symbols (cxldsakeb).
 
-### Fase 2: primer arranque — ✅ hecha (2026-10-16)
+### Phase 2: first boot — ✅ done (2026-10-16)
 
-**Método** (el de GoW1): `.\scripts\run.ps1 -Config RelWithDebInfo -NoBuild`, leer el **primer** error del log en `out/logs/`, arreglarlo y repetir. Cada bloqueo va a la tabla "Bloqueos" de [NOTES.md](NOTES.md). Los overrides de GoW II van en `overrides/gow2_overrides.cpp` y se registran con su propio `PS2_REGISTER_GAME_OVERRIDE` (`"SCUS_974.81"`, entrada `0x00100008`): los de GoW1 no se activan aquí, porque están atados a `SCUS_973.99`.
+**Method** (the one from GoW1): `.\scripts\run.ps1 -Config RelWithDebInfo -NoBuild`, read the **first** error in the log in `out/logs/`, fix it and repeat. Each blocker goes into the "Blockers" table in [NOTES.md](NOTES.md). GoW II's overrides go in `overrides/gow2_overrides.cpp` and are registered with their own `PS2_REGISTER_GAME_OVERRIDE` (`"SCUS_974.81"`, entry `0x00100008`): GoW1's are not activated here, because they are tied to `SCUS_973.99`.
 
-- [x] **Cada uno compila su runner** (`recompile.ps1` + `run.ps1`, ~40–50 min la primera vez). El `.exe` y `generated/` no se suben (regla 1), así que no se pueden compartir. (cxldsakeb y DaniSBR1)
-- [x] **Arranca y carga los 8 IRX** en el intérprete del IOP (`SIO2MAN`, `DBCMAN`, `SIO2D`, `MC2_D`, `DS2U_D`, `LIBSD`, `989NOMID`, `SMPD`) y se conecta a sus servidores. Bloqueos 1–2: `sceCdReadDvdDualInfo` y el **TEMPORAL** de `0x1875E0` (el runtime le pasa `argc = 0` a `main`). (DaniSBR1)
-- [x] **Pasa la inicialización y lee el disco.** Bloqueos 3–5 (DaniSBR1): el heap del runtime pisaba el del juego, los puntos de reanudación de las funciones del escáner (ahora en `funcmap.csv`) y el módulo del IOP que va dentro del ELF. Bloqueos 6–9 (DaniSBR1 y cxldsakeb, en el fork): `ioman` para leer `GODOFWAR.TOC`, `strtok`/`GetSystemTimeLow` de SMPD, el registro `Count` del EE y las sustituciones nativas del LIBSD de GoW II.
-- [x] **Overrides imprescindibles**, con direcciones de GoW II: `sceIpuInit` (bloqueo 11) y `libpad2`, el mando (bloqueo 10; sin mando, el teclado). No han hecho falta `DelayThread` ni el timer 2.
-- Resuelto sin override: `sceSifInitRpc` e `iWakeupThread`. En GoW1 el recompilador las descartaba; en GoW II Ghidra las detecta.
+- [x] **Everyone builds their own runner** (`recompile.ps1` + `run.ps1`, ~40–50 min the first time). The `.exe` and `generated/` are not uploaded (rule 1), so they cannot be shared. (cxldsakeb and DaniSBR1)
+- [x] **Boots and loads the 8 IRX** in the IOP interpreter (`SIO2MAN`, `DBCMAN`, `SIO2D`, `MC2_D`, `DS2U_D`, `LIBSD`, `989NOMID`, `SMPD`) and connects to their servers. Blockers 1–2: `sceCdReadDvdDualInfo` and the **TEMPORAL** at `0x1875E0` (the runtime passes `argc = 0` to `main`). (DaniSBR1)
+- [x] **Gets through initialization and reads the disc.** Blockers 3–5 (DaniSBR1): the runtime's heap was overwriting the game's, the resume points of the scanner's functions (now in `funcmap.csv`) and the IOP module that is embedded in the ELF. Blockers 6–9 (DaniSBR1 and cxldsakeb, in the fork): `ioman` to read `GODOFWAR.TOC`, SMPD's `strtok`/`GetSystemTimeLow`, the EE `Count` register and the native IOP replacements for GoW II's LIBSD.
+- [x] **Essential overrides**, with GoW II addresses: `sceIpuInit` (blocker 11) and `libpad2`, the controller (blocker 10; without a controller, the keyboard). `DelayThread` and timer 2 were not needed.
+- Solved without an override: `sceSifInitRpc` and `iWakeupThread`. In GoW1 the recompiler discarded them; in GoW II Ghidra detects them.
 
-**Hecho cuando:** llega a la primera pantalla (logos). **Hecho:** pantalla de título completa.
+**Done when:** it reaches the first screen (logos). **Done:** full title screen.
 
-### Fase 3: menú y vídeos — ✅ hecha (2026-10-16)
+### Phase 3: menu and videos — ✅ done (2026-10-16)
 
-- [x] El menú responde (con el mando, el teclado o `GOW2_PAD_SCRIPT`).
-- [x] Al empezar partida nueva se reproduce el primer vídeo (bloqueo 11, `sceIpuInit`). (cxldsakeb)
+- [x] The menu responds (with the controller, the keyboard or `GOW2_PAD_SCRIPT`).
+- [x] When starting a new game, the first video plays (blocker 11, `sceIpuInit`). (cxldsakeb)
 
-**Hecho cuando:** se llega al menú y la intro se reproduce.
+**Done when:** you reach the menu and the intro plays.
 
-### Fase 4: jugable — en curso
+### Phase 4: playable — in progress
 
-Se llega a la **primera zona jugable (Rodas), con sonido** (cxldsakeb, 2026-10-16). Lo que falta:
+The **first playable area (Rhodes) is reached, with sound** (cxldsakeb, 2026-10-16). What's left:
 
-- [x] **Bloqueo 12, el escenario verde.** El juego cuenta las sombras de los personajes en el canal verde del framebuffer y lo restaura con copias por columnas de 8 px a través de una vista de 16 bits. Esas copias acaban en una fracción de píxel (`y = 895.4375`) y el backend del GS las descartaba. Arreglado en el fork (`8a4abab`, DaniSBR1, 2026-10-16): el escenario sale bien y **se dibuja la sombra de Kratos**.
-- [x] **Bloqueo 13, el polígono azul del cielo:** la copia Z16 → framebuffer leía el target de profundidad equivocado. Arreglado en el fork (`d0b6162`, DaniSBR1, 2026-10-16).
-- [ ] Otros fallos de imagen: la línea azul que acompaña a Kratos, las líneas onduladas bajo el agua, el "fantasma" a la izquierda de Kratos y el borde tenue del horizonte lejano (la línea azul brillante del bloom y la geometría lejana ya están: bloqueos 14 y 15). Detalle en NOTES.md, "Estado del repositorio".
-- [ ] **Velocidad completa.** El contador F10 no sirve (marca 60 siempre). Medida de verdad con `GOW_PERF_DIAG=1` y `GOW_PERF_FRAME_PC=0x14E380` en el PC de cxldsakeb, con VU1 e IOP nativos (sección 7b de [SETUP.md](SETUP.md)): **60 FPS en el menú y ~44–59 en la primera zona con combate**. Ahora manda el hilo del GS (y la VU1), no el EE. Detalle en NOTES.md, "Estado del repositorio".
-- [x] **Controles de la ventana** (DaniSBR1, 2026-10-16, fork `cf4e3f2`/`3b71410`): F12 pantalla completa sin bordes / ventana; F10 contador de FPS como el de PCSX2.
-- [ ] Partida, combate y HUD, revisados en pantalla.
-- [x] Guardar y cargar (memory card): bloqueo 16 (cxldsakeb, 2026-10-17). Formatea, guarda y carga.
-- [x] **Cinemáticas** (bloqueo 17, cxldsakeb, 2026-10-17): el audio ADPCM de las películas no llegaba al juego y el reproductor las dejaba; además iban a ~0,57×. La inicial se ve entera; la de tras el QTE contra el Coloso, por confirmar jugando.
-- [x] Retirar el TEMPORAL de `0x1875E0`: `SetupThread` rellena los argumentos en el runtime (fork `5b1a25a`, cxldsakeb, 2026-10-17).
+- [x] **Blocker 12, the green scenery.** The game counts the characters' shadows in the framebuffer's green channel and restores it with 8 px column copies through a 16-bit view. Those copies end at a fraction of a pixel (`y = 895.4375`) and the GS backend discarded them. Fixed in the fork (`8a4abab`, DaniSBR1, 2026-10-16): the scenery looks right and **Kratos's shadow is drawn**.
+- [x] **Blocker 13, the blue polygon in the sky:** the Z16 → framebuffer copy read the wrong depth target. Fixed in the fork (`d0b6162`, DaniSBR1, 2026-10-16).
+- [ ] Other graphics glitches: the blue line that follows Kratos, the wavy lines under water, the "ghost" to Kratos's left and the faint edge of the distant horizon (the bright blue line from the bloom and the distant geometry are done: blockers 14 and 15). Details in NOTES.md, "Repository status".
+- [ ] **Full speed.** The F10 counter is useless (it always shows 60). Measured properly with `GOW_PERF_DIAG=1` and `GOW_PERF_FRAME_PC=0x14E380` on cxldsakeb's PC, with native VU1 and IOP (section 7b of [SETUP.md](SETUP.md)): **60 FPS in the menu and ~44–59 in the first area with combat**. The limit is now the GS thread (and the VU1), not the EE. Details in NOTES.md, "Repository status".
+- [x] **Window controls** (DaniSBR1, 2026-10-16, fork `cf4e3f2`/`3b71410`): F12 borderless fullscreen / windowed; F10 FPS counter like PCSX2's.
+- [ ] Gameplay, combat and HUD, checked on screen.
+- [x] Saving and loading (memory card): blocker 16 (cxldsakeb, 2026-10-17). Formats, saves and loads.
+- [x] **Cutscenes** (blocker 17, cxldsakeb, 2026-10-17): the movies' ADPCM audio didn't reach the game and the player gave up on them; they also ran at ~0.57×. The opening one plays in full; the one after the QTE against the Colossus is still to be confirmed by playing.
+- [x] Remove the TEMPORAL at `0x1875E0`: `SetupThread` fills in the arguments in the runtime (fork `5b1a25a`, cxldsakeb, 2026-10-17).
 
-**Hecho cuando:** se juega el primer nivel a velocidad completa.
+**Done when:** the first level is played at full speed.

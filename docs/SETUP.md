@@ -1,116 +1,116 @@
-# Instalación del entorno (Windows)
+# Setting up the environment (Windows)
 
-Hay que seguir estos pasos **una vez por persona**. Todos los comandos se ejecutan en PowerShell, desde la raíz del repo.
+These steps have to be followed **once per person**. All commands are run in PowerShell, from the root of the repo.
 
-## 1. Clonar el repo (con el submódulo)
+## 1. Clone the repo (with the submodule)
 
 ```powershell
 git clone --recurse-submodules https://github.com/cxldsakeb/GoW2-nativo-PS2.git
 cd GoW2-nativo-PS2
 ```
 
-Si ya lo tenías clonado sin submódulos: `git submodule update --init --recursive`.
+If you had already cloned it without submodules: `git submodule update --init --recursive`.
 
-**El submódulo apunta a nuestro fork** (`DaniSBR1/PS2Recomp`, rama `godofwar2`), que lleva la base de Waffle565. Para ponerte al día después de un `git pull`:
+**The submodule points to our fork** (`DaniSBR1/PS2Recomp`, branch `godofwar2`), which carries Waffle565's base. To catch up after a `git pull`:
 
 ```powershell
 git submodule sync --recursive
 git submodule update --init --recursive
 ```
 
-## 2. Compilador de C++ y CMake
+## 2. C++ compiler and CMake
 
-Hace falta **Visual Studio 2022** (Community o Build Tools) con la carga de trabajo *Desarrollo para el escritorio con C++*, que incluye MSVC y CMake:
+You need **Visual Studio 2022** (Community or Build Tools) with the *Desktop development with C++* workload, which includes MSVC and CMake:
 
 ```powershell
 winget install Microsoft.VisualStudio.2022.BuildTools --override "--wait --passive --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
 ```
 
-Los scripts encuentran solos el CMake que trae Visual Studio. Si usas otra versión de VS, pásala con `.\scripts\build-tools.ps1 -Generator "<generador>"`.
+The scripts find the CMake that ships with Visual Studio on their own. If you use another version of VS, pass it with `.\scripts\build-tools.ps1 -Generator "<generator>"`.
 
-## 3. Permitir ejecutar los scripts
+## 3. Allow running the scripts
 
 ```powershell
 Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 ```
 
-## 4. Extraer tu copia del juego
+## 4. Extract your copy of the game
 
 ```powershell
-.\scripts\extract-iso.ps1 -IsoPath "ruta\a\God of War II.iso"
+.\scripts\extract-iso.ps1 -IsoPath "path\to\God of War II.iso"
 ```
 
-- Extrae las dos capas del DVD a `game/disc/` con `tools/iso_extract.py --layout` (necesita Python 3), escribe el mapa de sectores `game/disc/.disc_layout`, copia los IRX a `game/disc/IOP_MOD/` y detecta el ELF principal (en la versión USA debería ser `SCUS_974.81`).
-- Al final imprime el **SHA1 del ELF**. Compáralo con el de [NOTES.md](NOTES.md). Si no coincide, tienes otra región o revisión y las direcciones del proyecto **no te van a servir**.
-- Solo funciona con `.iso`. Si tu copia es `.bin/.cue` u otro formato, conviértela antes a ISO.
-- El juego lee los datos de `game/disc/`, no de la ISO. Si tenías el disco extraído con el formato anterior (sin `.disc_layout`), vuelve a ejecutar el script.
+- It extracts both DVD layers to `game/disc/` with `tools/iso_extract.py --layout` (needs Python 3), writes the sector map `game/disc/.disc_layout`, copies the IRX to `game/disc/IOP_MOD/` and detects the main ELF (in the USA version it should be `SCUS_974.81`).
+- At the end it prints the **ELF's SHA1**. Compare it with the one in [NOTES.md](NOTES.md). If it doesn't match, you have a different region or revision and the project's addresses **won't work for you**.
+- It only works with `.iso`. If your copy is `.bin/.cue` or another format, convert it to ISO first.
+- The game reads its data from `game/disc/`, not from the ISO. If you had the disc extracted with the old format (without `.disc_layout`), run the script again.
 
-## 5. Compilar las herramientas de PS2Recomp
+## 5. Build the PS2Recomp tools
 
 ```powershell
 .\scripts\build-tools.ps1
 ```
 
-La primera vez tarda varios minutos. Genera `ps2_analyzer.exe` y `ps2_recomp.exe` en `out/build/`.
+The first time it takes several minutes. It produces `ps2_analyzer.exe` and `ps2_recomp.exe` in `out/build/`.
 
-## 6. Ghidra + extensión Emotion Engine
+## 6. Ghidra + Emotion Engine extension
 
-**En GoW II hace falta** para la fase 1: es lo que da el mapa de funciones de un ELF sin símbolos. Basta con que lo instale una persona, aunque viene bien que lo tengáis todos para investigar.
+**In GoW II it is needed** for phase 1: it is what gives the function map of an ELF without symbols. It's enough for one person to install it, although it's handy for all of you to have it for investigating.
 
 1. **Java 21**: `winget install EclipseAdoptium.Temurin.21.JDK`
-2. **Ghidra 12.1.4**: descárgalo de https://github.com/NationalSecurityAgency/ghidra/releases y descomprímelo (por ejemplo en `C:\ghidra`).
-3. **Extensión Emotion Engine** (el procesador de PS2, con soporte de MMI/VU0, que el MIPS normal de Ghidra no decodifica bien): descarga de https://github.com/chaoticgd/ghidra-emotionengine-reloaded/releases el zip **de tu versión exacta de Ghidra** (`ghidra_12.1.4_PUBLIC_..._ghidra-emotionengine-reloaded.zip`). En Ghidra: *File → Install Extensions → +*, elige el zip y reinicia Ghidra.
-   La forma rápida: descomprime el zip directamente en `C:\ghidra\ghidra_12.1.4_PUBLIC\Ghidra\Extensions\`.
-4. Analiza el ELF y exporta la config **sin abrir la interfaz** (tarda alrededor de 1 minuto):
+2. **Ghidra 12.1.4**: download it from https://github.com/NationalSecurityAgency/ghidra/releases and unzip it (for example in `C:\ghidra`).
+3. **Emotion Engine extension** (the PS2's processor, with MMI/VU0 support, which Ghidra's regular MIPS doesn't decode properly): download from https://github.com/chaoticgd/ghidra-emotionengine-reloaded/releases the zip **for your exact Ghidra version** (`ghidra_12.1.4_PUBLIC_..._ghidra-emotionengine-reloaded.zip`). In Ghidra: *File → Install Extensions → +*, pick the zip and restart Ghidra.
+   The quick way: unzip the zip directly into `C:\ghidra\ghidra_12.1.4_PUBLIC\Ghidra\Extensions\`.
+4. Analyze the ELF and export the config **without opening the GUI** (it takes about 1 minute):
 
    ```powershell
-   .\scripts\ghidra-analyze.ps1          # Ghidra en otra carpeta: -GhidraDir "ruta" o $env:GHIDRA_INSTALL_DIR
+   .\scripts\ghidra-analyze.ps1          # Ghidra in another folder: -GhidraDir "path" or $env:GHIDRA_INSTALL_DIR
    ```
 
-   El script crea el proyecto en `ghidra/` (ignorado por Git) y escribe `config/gow.toml` + `config/gow_functions.csv`. Si el proyecto ya existe, solo vuelve a exportar; `-Reanalyze` empieza de cero.
-5. Para investigar funciones con el descompilador, abre la interfaz (`C:\ghidra\ghidra_12.1.4_PUBLIC\ghidraRun.bat`) y en ella el proyecto `ghidra/GodOfWar.gpr`. Si corriges límites de función, vuelve a ejecutar `ghidra-analyze.ps1` (con Ghidra cerrado) para reexportar.
+   The script creates the project in `ghidra/` (ignored by Git) and writes `config/gow.toml` + `config/gow_functions.csv`. If the project already exists, it only exports again; `-Reanalyze` starts from scratch.
+5. To investigate functions with the decompiler, open the GUI (`C:\ghidra\ghidra_12.1.4_PUBLIC\ghidraRun.bat`) and in it the project `ghidra/GodOfWar.gpr`. If you fix function boundaries, run `ghidra-analyze.ps1` again (with Ghidra closed) to re-export.
 
-## 7. Recompilar y arrancar
+## 7. Recompile and run
 
 ```powershell
-.\scripts\recompile.ps1                        # ELF → C++ (generated/) → runner de PS2Recomp
-.\scripts\run.ps1 -Config RelWithDebInfo       # compila ps2EntryRunner y arranca el juego; log en out/logs/
+.\scripts\recompile.ps1                        # ELF → C++ (generated/) → PS2Recomp runner
+.\scripts\run.ps1 -Config RelWithDebInfo       # builds ps2EntryRunner and starts the game; log in out/logs/
 ```
 
-- Antes hay que tener `config/recomp.template.toml` y `config/funcmap.csv` (fase 1 de [ROADMAP.md](ROADMAP.md)).
-- La primera compilación del runner **va a tardar bastante** (20–40 min).
-- Si solo cambiaste algo en `overrides/`: `.\scripts\recompile.ps1 -SyncOnly` y luego `.\scripts\run.ps1`.
+- You need `config/recomp.template.toml` and `config/funcmap.csv` first (phase 1 of [ROADMAP.md](ROADMAP.md)).
+- The first build of the runner **will take quite a while** (20–40 min).
+- If you only changed something in `overrides/`: `.\scripts\recompile.ps1 -SyncOnly` and then `.\scripts\run.ps1`.
 
-## 7b. VU1 e IOP nativos (en GoW1, de 7–8 a ~60 FPS)
+## 7b. Native VU1 and IOP (in GoW1, from 7–8 to ~60 FPS)
 
-Para cuando GoW II ya arranque (fase 4). Sin esto la VU1 se interpreta y va muy lenta. Los datos salen del juego, así que cada uno los captura en su PC y **nunca se suben**.
+For when GoW II already boots (phase 4). Without this the VU1 is interpreted and runs very slowly. The data comes from the game, so everyone captures it on their own PC and it is **never uploaded**.
 
 ```powershell
-# 1. Capturar (una partida de ~3 min hasta la primera zona jugable). Las carpetas tienen que existir.
+# 1. Capture (a ~3 min playthrough up to the first playable area). The folders have to exist.
 New-Item -ItemType Directory -Force out\capturas\vu1, out\capturas\iop
-$env:GOW_VU1_CAPTURA = "$PWD\out\capturas\vu1"       # microprogramas de la VU1
-$env:GOW_VU1_NATIVE_OFF = '1'                         # sin esto no captura nada
-$env:PS2X_IOP_DUMP_MODULES = "$PWD\out\capturas\iop"  # los 8 IRX del juego
-$env:GOW2_PAD_SCRIPT = '15:start,20-120/3:x'         # llega solo a la primera zona (o juega con el teclado)
-.\scripts\run.ps1 -Config RelWithDebInfo -NoBuild    # ciérralo a los ~4 min: cuanto más juegues, más microprogramas
+$env:GOW_VU1_CAPTURA = "$PWD\out\capturas\vu1"       # VU1 microprograms
+$env:GOW_VU1_NATIVE_OFF = '1'                         # without this nothing is captured
+$env:PS2X_IOP_DUMP_MODULES = "$PWD\out\capturas\iop"  # the game's 8 IRX
+$env:GOW2_PAD_SCRIPT = '15:start,20-120/3:x'         # gets to the first area on its own (or play with the keyboard)
+.\scripts\run.ps1 -Config RelWithDebInfo -NoBuild    # close it after ~4 min: the more you play, the more microprograms
 Remove-Item Env:GOW_VU1_CAPTURA, Env:GOW_VU1_NATIVE_OFF, Env:PS2X_IOP_DUMP_MODULES, Env:GOW2_PAD_SCRIPT
 
-# 2. Generar y compilar con ellos
+# 2. Generate and build with them
 $env:GOW_VU1_MICROCODIGO = "$PWD\out\capturas\vu1"
 $env:GOW_IOP_MODULOS = "$PWD\out\capturas\iop"
 .\scripts\recompile.ps1 -SyncOnly
 .\scripts\run.ps1 -Config RelWithDebInfo
 ```
 
-- Con `$env:GOW_VU1_STATS = '1'`, el log dice cuántos pares de la VU1 se interpretan: con todo capturado, 0.
-- En GoW II (PC de cxldsakeb, 2026-10-16): 4 min de captura dan ~1 000 microprogramas de la VU1 y los 8 IRX; el paso 2 tarda ~20 min (genera y compila la VU1). Las variables `GOW_VU1_MICROCODIGO` y `GOW_IOP_MODULOS` tienen que estar puestas en **cada** `recompile.ps1`: sin ellas, CMake se reconfigura sin VU1 nativa.
-- Memory card: `$env:GOW_MC0 = "$PWD\game\disc\play.mcd"` (se crea sola).
+- With `$env:GOW_VU1_STATS = '1'`, the log says how many VU1 pairs are interpreted: with everything captured, 0.
+- In GoW II (cxldsakeb's PC, 2026-10-16): 4 min of capture give ~1,000 VU1 microprograms and the 8 IRX; step 2 takes ~20 min (it generates and builds the VU1). The `GOW_VU1_MICROCODIGO` and `GOW_IOP_MODULOS` variables have to be set on **every** `recompile.ps1`: without them, CMake reconfigures itself without native VU1.
+- Memory card: `$env:GOW_MC0 = "$PWD\game\disc\play.mcd"` (it is created automatically).
 
-## 8. Herramientas de apoyo recomendadas
+## 8. Recommended helper tools
 
-- **PCSX2** (con su debugger): ejecuta el juego real, pon breakpoints en direcciones y mira qué devuelve una función. Es la forma más rápida de saber cómo *debería* comportarse algo que en el port falla.
-- **ripgrep** (`winget install BurntSushi.ripgrep.MSVC`): sirve para buscar direcciones en `generated/`, que tiene miles de archivos.
-- **Python 3 + `capstone` + `pyelftools`** (`py -3 -m pip install capstone pyelftools`): para los scripts de `tools/` (ver `tools/README.md`).
-- **OpenCode** (`npm install -g opencode-ai`, necesita Node.js): para encargar a DeepSeek, gratis, tareas de lectura de mucho volumen con `scripts/deepseek.ps1`. Solo material público; ver "Tareas para DeepSeek" en `CLAUDE.md`.
-- **Discord de PS2Recomp**: https://discord.gg/JQ8mawxUEf
-- **PS2Tek** (documentación del hardware): https://psi-rockin.github.io/ps2tek/
+- **PCSX2** (with its debugger): runs the real game; set breakpoints on addresses and see what a function returns. It is the fastest way to find out how something that fails in the port *should* behave.
+- **ripgrep** (`winget install BurntSushi.ripgrep.MSVC`): useful for searching for addresses in `generated/`, which has thousands of files.
+- **Python 3 + `capstone` + `pyelftools`** (`py -3 -m pip install capstone pyelftools`): for the scripts in `tools/` (see `tools/README.md`).
+- **OpenCode** (`npm install -g opencode-ai`, needs Node.js): to hand DeepSeek high-volume reading tasks, for free, with `scripts/deepseek.ps1`. Public material only; see "Tasks for DeepSeek" in `CLAUDE.md`.
+- **PS2Recomp Discord**: https://discord.gg/JQ8mawxUEf
+- **PS2Tek** (hardware documentation): https://psi-rockin.github.io/ps2tek/

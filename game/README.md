@@ -1,23 +1,23 @@
-# game/ (solo local)
+# game/ (local only)
 
-Aquí vive **tu** copia del juego. Git ignora todo lo que hay en esta carpeta salvo este archivo.
+This is where **your** copy of the game lives. Git ignores everything in this folder except this file.
 
-Se rellena con:
+It is filled in with:
 
 ```powershell
-.\scripts\extract-iso.ps1 -IsoPath "ruta\a\God of War II.iso"
+.\scripts\extract-iso.ps1 -IsoPath "path\to\God of War II.iso"
 ```
 
-Resultado:
+Result:
 
 ```
 game/
-  disc/            ← los archivos del DVD (las dos capas), cada uno en su sector original
-    SCUS_974.81    ← ELF principal (versión USA; el nombre depende de la región)
-    .disc_layout   ← mapa de sectores que usa el runtime para leer los datos
-    IOP_MOD/       ← copia de los IRX, donde el juego los busca
-  elf-name.txt     ← nombre del ELF detectado (lo leen los scripts)
-  iso-path.txt     ← ruta a tu ISO
+  disc/            ← the DVD files (both layers), each one at its original sector
+    SCUS_974.81    ← main ELF (USA version; the name depends on the region)
+    .disc_layout   ← sector map that the runtime uses to read the data
+    IOP_MOD/       ← copy of the IRX, where the game looks for them
+  elf-name.txt     ← name of the detected ELF (read by the scripts)
+  iso-path.txt     ← path to your ISO
 ```
 
-**Nunca** subas nada de aquí al repo ni lo compartas por Discord u otros sitios. Cada uno usa su propia copia del juego.
+**Never** upload anything from here to the repo or share it on Discord or anywhere else. Everyone uses their own copy of the game.

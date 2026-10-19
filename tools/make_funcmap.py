@@ -10,7 +10,7 @@ formato que imprime tools/scan_missing_functions.py ("vfn_xxxxxxxx@0xXXXXXXXX").
 empieza la siguiente función conocida. Van aquí y no en entry_points de la plantilla porque
 ps2_recomp llama "entry_XXXX" a las funciones de entry_points y no registra sus puntos de
 reanudación (isEntryFunctionName): un hilo suspendido dentro de una llamada hecha desde una de ellas
-no se podía reanudar (docs/NOTES.md, "Bloqueos", fase 2).
+no se podía reanudar (docs/NOTES.md, "Blockers", fase 2).
 
     py -3 tools/make_funcmap.py                                   # solo Ghidra
     py -3 tools/scan_missing_functions.py --csv config/funcmap.csv > out/scan_missing.txt

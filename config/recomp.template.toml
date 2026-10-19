@@ -14,7 +14,7 @@ patch_cop0 = true
 patch_cache = true
 
 # Funciones con manejador propio en el runtime: los stubs de GoW1, localizados en GoW II (SDK 3.0.0).
-# Método y verificación de cada grupo en docs/NOTES.md, "Stubs de librerías de Sony".
+# Método y verificación de cada grupo en docs/NOTES.md, "Sony library stubs".
 stubs = [
   "sceMpegCreate@0x002AB3E0",
   "sceMpegInit@0x002ABE88",
@@ -99,7 +99,7 @@ stubs = [
 
 # Las funciones que Ghidra no ve (vfn_/cfn_/fn_ de tools/scan_missing_functions.py) van en config/funcmap.csv
 # (tools/make_funcmap.py --extra), no aquí: ps2_recomp llama "entry_XXXX" a las de entry_points y no registra sus
-# puntos de reanudación (docs/NOTES.md, "Bloqueos", fase 2).
+# puntos de reanudación (docs/NOTES.md, "Blockers", fase 2).
 entry_points = [
   # ps2_analyzer (base de símbolos de Sony): dentro de otra función según Ghidra
   "__sjpopnthrow@0x002C1838",
@@ -110,7 +110,7 @@ skip = []
 
 # Accesos del juego a registros del hardware (lw/sw a direcciones fijas de 0x10000000-0x14000000 y del
 # scratchpad) que el runtime convierte en llamadas nativas. Salida de ps2_analyzer sobre el ELF de GoW II,
-# igual que la tabla de GoW1 (ver docs/NOTES.md, "Tabla [mmio]").
+# igual que la tabla de GoW1 (ver docs/NOTES.md, "[mmio] table").
 [mmio]
 "0x186ccc" = "0x10000000"
 "0x2ab67c" = "0x1000f520"

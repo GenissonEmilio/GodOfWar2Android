@@ -1,204 +1,211 @@
-# Contexto para Claude: port nativo de God of War II (PS2 → PC)
+# Context for Claude: native port of God of War II (PS2 → PC)
 
-Este archivo lo carga Claude Code automáticamente. Es el **hilo compartido** entre las sesiones de Claude de todo el equipo: lo que no esté aquí o en `docs/` no lo sabe el Claude de los demás.
+Claude Code loads this file automatically. It is the **shared thread** between the Claude sessions of the whole team: whatever is not here or in `docs/`, the others' Claude does not know.
 
-## Proyecto
+## Project
 
-- **Objetivo:** recompilar estáticamente God of War II (PS2, 2007) a un ejecutable nativo de Windows con [PS2Recomp](https://github.com/ran-j/PS2Recomp).
-- **Viene de GoW1:** el repo [cxldsakeb/ROMS-nativas-PS2](https://github.com/cxldsakeb/ROMS-nativas-PS2) ya es jugable a ~60 FPS sobre el **runtime de Waffle565** (GS nativo, VU1 e IOP compilados por adelantado, sonido, mando, vídeos, memory card). GoW II usa una evolución del mismo motor: partimos de ese runtime y lo que hay que hacer aquí es **lo propio del juego** (mapa de funciones, configuración del recompilador, overrides) y los arreglos del runtime que pida.
-- **Submódulo `PS2Recomp/`:** nuestro fork [DaniSBR1/PS2Recomp](https://github.com/DaniSBR1/PS2Recomp), **rama `godofwar2`** (sale de `godofwar` en `083a286`, la base de Waffle565). Es una rama distinta de la de GoW1 para que los cambios de un juego no rompan el otro. Si un arreglo vale para los dos, se hace en una y se lleva a la otra con `cherry-pick`.
-- **Equipo:** @cxldsakeb (dueño del repo), @DaniSBR1 y @Alejrr2. Están aprendiendo: Claude hace de guía, así que explica el porqué de las cosas y no solo el qué.
-- **Idioma:** todo en español (conversación, docs, comentarios y commits). Excepción: los comentarios de código dentro del fork de PS2Recomp van en inglés.
-- **Repo:** **público** desde el 2026-10-18 (GPLv3), como aviso de trabajo en curso y para que otros puedan colaborar o hacer su fork. Por eso la regla 1 importa todavía más: todo lo que se sube lo puede ver cualquiera, también en el historial.
+- **Goal:** statically recompile God of War II (PS2, 2007) into a native Windows executable with [PS2Recomp](https://github.com/ran-j/PS2Recomp).
+- **Comes from GoW1:** the repo [cxldsakeb/ROMS-nativas-PS2](https://github.com/cxldsakeb/ROMS-nativas-PS2) is already playable at ~60 FPS on top of **Waffle565's runtime** (native GS, VU1 and IOP compiled ahead of time, sound, controller, videos, memory card). GoW II uses an evolution of the same engine: we start from that runtime, and what has to be done here is **what is specific to the game** (function map, recompiler configuration, overrides) plus whatever runtime fixes it needs.
+- **`PS2Recomp/` submodule:** our fork [DaniSBR1/PS2Recomp](https://github.com/DaniSBR1/PS2Recomp), **branch `godofwar2`** (branched off `godofwar` at `083a286`, Waffle565's base). It is a different branch from GoW1's so that changes for one game do not break the other. If a fix is valid for both, it is made in one and carried over to the other with `cherry-pick`.
+- **Team:** @cxldsakeb (repo owner), @DaniSBR1 and @Alejrr2. They are learning: Claude acts as a guide, so explain the why of things and not just the what.
+- **Language** (changed on 2026-10-19, when the repo went public): **documentation in English** (README, CONTRIBUTING, `docs/`, the `README.md` files, this file) **and new code comments in English** (existing Spanish comments are not translated just for the sake of it). **Conversation with the team and commit/PR messages stay in Spanish.** When you add to `docs/NOTES.md` or to "Current status" below, write in English even if the conversation is in Spanish.
+- **Repo:** **public** since 2026-10-18 (GPLv3), as a notice of work in progress and so that others can collaborate or make their own fork. That is why rule 1 matters even more: everything that is pushed can be seen by anyone, including in the history.
 
-## Reglas que no se rompen
+## Rules that are never broken
 
-1. **Nunca se sube nada del juego:** ni ISO, ni ELF, ni archivos del disco, ni el C++ de `generated/`, ni las capturas de la VU1 o del IOP (`out/capturas/`), ni imágenes del juego. Todo eso es local y está en `.gitignore`. Tampoco se le pasa a servicios externos (DeepSeek incluido).
-2. **Las direcciones solo valen para el ELF de referencia**, identificado por el SHA1 de `docs/NOTES.md`. **Las de GoW1 no valen aquí**: `referencia/gow1/` es para entender qué hace cada cosa, no para copiar direcciones.
-3. **Todo hallazgo va a `docs/NOTES.md`:** funciones identificadas, bloqueos y soluciones. Al terminar una tarea, actualízalo en la misma rama.
-4. **Los parches temporales** (`ret0`/`ret1`, apaños) llevan un comentario `TEMPORAL` en el código y una fila en NOTES.md.
-5. **Cambios en `PS2Recomp/`:** primero intenta arreglarlo con un override (`overrides/`). Si hay que cambiar el runtime: commit en la rama `godofwar2` **dentro** de `PS2Recomp/`, push a `DaniSBR1/PS2Recomp` y luego commit del nuevo puntero del submódulo aquí. **Nunca subas trazas de diagnóstico al fork.**
-6. **Licencias:** del repo de Waffle565 solo usamos su rama `runtime` (GPL-3.0) y lo que KIexster redistribuye de su `main`. Su `main` no tiene licencia (pedida en [su issue #2](https://github.com/Waffle565/God-Of-War-Native-Port/issues/2)): se puede **leer y aprender** de su documentación, pero no copiar su código ni su texto. Todo lo adaptado cita su origen.
+1. **Nothing from the game is ever pushed:** no ISO, no ELF, no disc files, no C++ from `generated/`, no VU1 or IOP captures (`out/capturas/`), no images of the game. All of that is local and is in `.gitignore`. Nor is it passed to external services (DeepSeek included).
+2. **Addresses are only valid for the reference ELF**, identified by the SHA1 in `docs/NOTES.md`. **GoW1's are not valid here**: `referencia/gow1/` is for understanding what each thing does, not for copying addresses.
+3. **Every finding goes to `docs/NOTES.md`:** identified functions, blockers and solutions. When you finish a task, update it in the same branch.
+4. **Temporary patches** (`ret0`/`ret1`, hacks) carry a `TEMPORAL` comment in the code and a row in NOTES.md.
+5. **Changes in `PS2Recomp/`:** first try to fix it with an override (`overrides/`). If the runtime has to change: commit on the `godofwar2` branch **inside** `PS2Recomp/`, push to `DaniSBR1/PS2Recomp`, and then commit the new submodule pointer here. **Never push diagnostic traces to the fork.**
+6. **Licenses:** from Waffle565's repo we only use its `runtime` branch (GPL-3.0) and what KIexster redistributes from its `main`. Its `main` has no license (requested in [their issue #2](https://github.com/Waffle565/God-Of-War-Native-Port/issues/2)): you may **read and learn** from its documentation, but not copy its code or its text. Everything adapted cites its source.
 
-## Estructura y flujo
+## Structure and workflow
 
 ```
-scripts/extract-iso.ps1 -IsoPath <iso>   ISO → game/disc/ con .disc_layout e IOP_MOD/ (imprime el SHA1)
-scripts/build-tools.ps1                  compila ps2_analyzer y ps2_recomp (Release, VS 2022)
+scripts/extract-iso.ps1 -IsoPath <iso>   ISO → game/disc/ with .disc_layout and IOP_MOD/ (prints the SHA1)
+scripts/build-tools.ps1                  builds ps2_analyzer and ps2_recomp (Release, VS 2022)
 scripts/ghidra-analyze.ps1 [-Reanalyze]  Ghidra headless (r5900) → config/gow.toml + config/gow_functions.csv
-scripts/recompile.ps1 [-SyncOnly]        config/recomp.template.toml + config/funcmap.csv → generated/ → runner; reconfigura CMake
-scripts/run.ps1 [-Config] [-NoBuild]     compila ps2EntryRunner y arranca; log en out/logs/
-scripts/deepseek.ps1 -Tarea -Archivos    tarea de solo lectura para DeepSeek (ver más abajo)
-tools/                                   extractor del disco, generadores de la VU1 y el IOP, desensambladores (tools/README.md)
-referencia/gow1/                         configuración y overrides de GoW1 (KIexster/Waffle565), solo como modelo
+scripts/recompile.ps1 [-SyncOnly]        config/recomp.template.toml + config/funcmap.csv → generated/ → runner; reconfigures CMake
+scripts/run.ps1 [-Config] [-NoBuild]     builds ps2EntryRunner and runs it; log in out/logs/
+scripts/deepseek.ps1 -Tarea -Archivos    read-only task for DeepSeek (see below)
+tools/                                   disc extractor, VU1 and IOP generators, disassemblers (tools/README.md)
+referencia/gow1/                         GoW1 configuration and overrides (KIexster/Waffle565), only as a model
 ```
 
-- **`config/` está vacío al empezar.** `recompile.ps1` espera `config/recomp.template.toml` (con `@ELF@`, `@MAP@` y `@OUT@`) y `config/funcmap.csv` (`Name,Start,End,Size`). Construirlos es la fase 1 (ver `docs/ROADMAP.md`): Ghidra da el mapa de funciones, y la plantilla de GoW1 (`referencia/gow1/config/recomp.template.toml`) sirve de modelo para los stubs y la tabla `[mmio]`, **buscando las direcciones equivalentes en el ELF de GoW II**.
-- **Ghidra:** 12.1.4 + extensión ghidra-emotionengine-reloaded (`r5900:LE:32:default`) + JDK 21. El proyecto vive en `ghidra/` (ignorado). Ghidra no ve las funciones que solo se llaman por puntero (métodos virtuales): después de cada export, `py -3 tools/scan_missing_functions.py`.
-- **IOP y VU1 nativos** (la gran ganancia de velocidad en GoW1, de 7–8 a ~60 FPS): se generan con datos del juego capturados en local. Ver la sección 7b de `docs/SETUP.md`. Para capturar la VU1 hace falta `GOW_VU1_NATIVE_OFF=1` y que la carpeta exista.
-- **Al copiar overrides a mano, actualiza su fecha** (`(Get-Item $destino).LastWriteTime = Get-Date`): si no, MSBuild puede no recompilarlos.
-- **Unity build:** varios overrides comparten unidad de compilación. Prefijos por archivo (`kIop…`, `g_iop…`) y que `PS2_REGISTER_GAME_OVERRIDE` no caiga en la misma línea que en otro override (usa `__LINE__`).
-- Los scripts están en PowerShell 5.1 y se guardan en UTF-8 **con BOM**.
-- Si VS Code tiene la extensión C/C++, excluye `generated/` y `PS2Recomp/ps2xRuntime/src/runner/` en `.vscode/settings.json` (`C_Cpp.files.exclude`).
-- Método de depuración (el mismo de GoW1): ejecutar, arreglar el **primer** bloqueo del log y repetir. Guía: wiki de PS2Recomp, "PS2Recomp Stripped Game Walkthrough".
+- **`config/` is empty at the start.** `recompile.ps1` expects `config/recomp.template.toml` (with `@ELF@`, `@MAP@` and `@OUT@`) and `config/funcmap.csv` (`Name,Start,End,Size`). Building them is phase 1 (see `docs/ROADMAP.md`): Ghidra provides the function map, and GoW1's template (`referencia/gow1/config/recomp.template.toml`) serves as the model for the stubs and the `[mmio]` table, **looking up the equivalent addresses in GoW II's ELF**.
+- **Ghidra:** 12.1.4 + the ghidra-emotionengine-reloaded extension (`r5900:LE:32:default`) + JDK 21. The project lives in `ghidra/` (ignored). Ghidra does not see functions that are only called through a pointer (virtual methods): after each export, `py -3 tools/scan_missing_functions.py`.
+- **Native IOP and VU1** (the big speed gain in GoW1, from 7–8 to ~60 FPS): they are generated from game data captured locally. See section 7b of `docs/SETUP.md`. To capture the VU1 you need `GOW_VU1_NATIVE_OFF=1` and the folder must exist.
+- **When copying overrides by hand, update their timestamp** (`(Get-Item $destino).LastWriteTime = Get-Date`): otherwise MSBuild may not recompile them.
+- **Unity build:** several overrides share a compilation unit. Use per-file prefixes (`kIop…`, `g_iop…`) and make sure `PS2_REGISTER_GAME_OVERRIDE` does not fall on the same line as in another override (use `__LINE__`).
+- The scripts are in PowerShell 5.1 and are saved in UTF-8 **with BOM**.
+- If VS Code has the C/C++ extension, exclude `generated/` and `PS2Recomp/ps2xRuntime/src/runner/` in `.vscode/settings.json` (`C_Cpp.files.exclude`).
+- Debugging method (the same as GoW1): run, fix the **first** blocker in the log and repeat. Guide: PS2Recomp wiki, "PS2Recomp Stripped Game Walkthrough".
 
-## Cómo colaboramos
+## How we collaborate
 
-- Una rama por tarea y PR a `main`. **No hace falta revisión** (acordado el 2026-10-15): quien la abre la fusiona.
-- **PRs e issues de fuera del equipo** (desde que el repo es público): los revisa alguien del equipo antes de fusionar, comprobando sobre todo la regla 1 (que no entre nada del juego) y que las direcciones sean del ELF de referencia. Las normas para colaboradores están en `CONTRIBUTING.md`.
-- Antes de empezar: `git pull`, `git submodule sync --recursive` y `git submodule update --init --recursive`. Lee `docs/NOTES.md` y `docs/ROADMAP.md`.
-- Quien vaya a cambiar el fork (`godofwar2`) lo avisa antes.
-- Al terminar: actualiza NOTES.md y, si cambia la fase, la sección **Estado actual** de abajo.
+- One branch per task and a PR to `main`. **No review needed** (agreed on 2026-10-15): whoever opens it merges it.
+- **PRs and issues from outside the team** (since the repo is public): someone from the team reviews them before merging, checking above all rule 1 (that nothing from the game gets in) and that the addresses are from the reference ELF. The rules for contributors are in `CONTRIBUTING.md`.
+- Before starting: `git pull`, `git submodule sync --recursive` and `git submodule update --init --recursive`. Read `docs/NOTES.md` and `docs/ROADMAP.md`.
+- Whoever is going to change the fork (`godofwar2`) gives notice beforehand.
+- When finishing: update NOTES.md and, if the phase changes, the **Current status** section below.
 
-## Tareas para DeepSeek (OpenCode)
+## Tasks for DeepSeek (OpenCode)
 
-Igual que en GoW1: **DeepSeek V4.1 Flash, gratis en OpenCode**, para trabajo de lectura de mucho volumen. Claude: cuando una tarea encaje, propón delegarla, lánzala con `scripts/deepseek.ps1` y **revisa siempre el resultado**.
+Same as in GoW1: **DeepSeek V4.1 Flash, free on OpenCode**, for high-volume reading work. Claude: when a task fits, propose delegating it, launch it with `scripts/deepseek.ps1` and **always review the result**.
 
-- Instalación: `npm install -g opencode-ai`. Uso: `.\scripts\deepseek.ps1 -Tarea tarea.md -Archivos <archivos>`. Trabaja en `%TEMP%\gow-deepseek\`, fuera del repo, en solo lectura.
-- **Sí:** resumir, clasificar o cruzar material público (PS2Recomp, PCSX2, KIexster, la documentación de Waffle565, nuestro repo de GoW1).
-- **No:** nada derivado del juego (regla 1) ni decidir arreglos.
-- Tareas con formato de salida exacto (tablas) para poder comprobarlas; las entradas grandes, en trozos de ~70 KB en paralelo.
+- Installation: `npm install -g opencode-ai`. Usage: `.\scripts\deepseek.ps1 -Tarea tarea.md -Archivos <archivos>`. It works in `%TEMP%\gow-deepseek\`, outside the repo, read-only.
+- **Yes:** summarizing, classifying or cross-referencing public material (PS2Recomp, PCSX2, KIexster, Waffle565's documentation, our GoW1 repo).
+- **No:** anything derived from the game (rule 1), nor deciding fixes.
+- Tasks with an exact output format (tables) so they can be checked; large inputs, in ~70 KB chunks in parallel.
 
-## Estado actual
+## Current status
 
-> Actualizar esta sección al cerrar cada hito, para que la vean las sesiones de todos.
+> Update this section when closing each milestone, so that everyone's sessions see it.
 
-### Repo público (cxldsakeb, 2026-10-18)
+### Documentation in English (cxldsakeb, 2026-10-19)
 
-- El repo pasa a **público** para avisar de que el port está en marcha (en Twitter se preguntaba por uno) y abrirlo a colaboradores y forks. Antes se revisó el historial entero: solo texto, nada del juego, sin credenciales.
-- README de cara al público (estado, aviso de que no hay versión jugable todavía, resumen en inglés), `CONTRIBUTING.md` y `.recomp.json` en `in-progress`. **Ojo con lo que se sube a partir de ahora:** lo ve cualquiera.
+- **All documentation is now in English** (README, CONTRIBUTING, `docs/`, the `README.md` files and this file), so that people outside the team can follow the project now that it is public. Nothing was summarized: same sections and content, same addresses and commands.
+- **New rule (see "Language" above):** docs and new code comments in English; conversation and commit/PR messages stay in Spanish. Your Claude will keep talking to you in Spanish, but it writes what goes into NOTES.md and here in English.
+- NOTES.md section titles changed accordingly (e.g. "Estado del repositorio" → "Repository status", "Bloqueos" → "Blockers", "Diagnóstico de bloqueos" → "Diagnosing blockers"); the references in code comments were updated too. "bloqueo N" is now "blocker N".
+- Nothing to regenerate after `git pull`: only text and comments changed (one comment in `overrides/gow2_overrides.cpp`, so the next `recompile.ps1 -SyncOnly` + `cmake --build` recompiles just that block, ~20 s).
 
-### Fase 4: cinemáticas (bloqueo 17), velocidad medida y adiós al TEMPORAL (cxldsakeb, 2026-10-17, tarde)
+### Public repo (cxldsakeb, 2026-10-18)
 
-**Tras el `git pull`:** `git submodule update --init --recursive` (submódulo en **`6d3379b`**), **`recompile.ps1`** con `GOW_VU1_MICROCODIGO` y `GOW_IOP_MODULOS` puestas (cambió la traducción de `movn`/`movz`: hay que regenerar `generated/`) y compilar el runner.
+- The repo becomes **public** to let people know the port is under way (people on Twitter were asking about one) and to open it to contributors and forks. Beforehand the whole history was reviewed: only text, nothing from the game, no credentials.
+- Public-facing README (status, notice that there is no playable version yet, summary in English), `CONTRIBUTING.md` and `.recomp.json` set to `in-progress`. **Be careful with what gets pushed from now on:** anyone can see it.
 
-- **Bloqueo 17, las cinemáticas:** no se veían ni la inicial ni la de tras el primer QTE contra el Coloso. Sus vídeos llevan audio **ADPCM** y el runtime solo se lo entregaba al juego si lo registraba como PCM (el caso de GoW1): el reproductor esperaba el primer paquete de audio y dejaba la película. Arreglado en el fork (`ac9dfaf`). Además, las películas iban a ~0,57× por una espera activa de libmpeg: override de `0x190A08` con `catchUpToHost`, como GoW1. **La cinemática inicial se ve entera, a 30 imágenes por segundo y con el audio a la par.** La de tras el QTE, por confirmar jugando. **Su audio era un pitido** (bloqueo 18): el runtime no hacía el DMA del scratchpad en modo entrelazado, con el que el juego separa los dos canales; arreglado en el fork (`6d3379b`) y **comprobado de oído**. Falta probar guardar en un punto de guardado.
-- **Velocidad real, por fin medida:** `GOW_PERF_DIAG=1` + `GOW_PERF_FRAME_PC=0x14E380` → `guest_flip_hz`. En el PC de cxldsakeb: **60 FPS en el menú y ~44–59 en la primera zona con combate**. El **F10 ya marca esos FPS reales** (`[G]`, fork `19c65a5`). Lo que limita: el juego envía cada frame y espera su FINISH antes de preparar el siguiente, así que EE (~12 ms) y VU1 (~12 ms) van en serie; `Release` y una cola del GS mayor no cambian nada (NOTES.md, "Estado del repositorio").
-- También en el fork: `SetupThread` da `argc`/`argv` como una consola (**ya no queda ningún TEMPORAL**), `movn`/`movz` escriben solo 64 bits (como el R5900) y la memory card deja su archivo abierto entre escrituras (guardar debería ir más rápido; **falta probarlo guardando**).
-- Pendientes de imagen, sin cambios (NOTES.md, "Estado del repositorio"): línea azul con Kratos, líneas onduladas bajo el agua, fantasma a la izquierda de Kratos (para DaniSBR1).
+### Phase 4: cutscenes (blocker 17), speed measured and goodbye to TEMPORAL (cxldsakeb, 2026-10-17, evening)
 
-### Fase 4: memory card, guarda y carga (bloqueo 16) (cxldsakeb, 2026-10-17)
+**After the `git pull`:** `git submodule update --init --recursive` (submodule at **`6d3379b`**), **`recompile.ps1`** with `GOW_VU1_MICROCODIGO` and `GOW_IOP_MODULOS` set (the translation of `movn`/`movz` changed: `generated/` has to be regenerated) and build the runner.
 
-**Tras el `git pull`: hay que regenerar** (`recompile.ps1` con `GOW_VU1_MICROCODIGO` y `GOW_IOP_MODULOS` puestas, ~1 min) y compilar el runner (~14 min en el PC de cxldsakeb): cambió `config/funcmap.csv`.
+- **Blocker 17, the cutscenes:** neither the opening one nor the one after the first QTE against the Colossus was showing. Their videos carry **ADPCM** audio and the runtime only delivered it to the game if it was registered as PCM (GoW1's case): the player waited for the first audio packet and gave up on the movie. Fixed in the fork (`ac9dfaf`). Also, the movies ran at ~0.57× because of a busy-wait in libmpeg: override of `0x190A08` with `catchUpToHost`, as in GoW1. **The opening cutscene plays in full, at 30 frames per second and with the audio in sync.** The one after the QTE is still to be confirmed by playing. **Its audio was a beep** (blocker 18): the runtime did not do the scratchpad DMA in interleaved mode, which the game uses to split the two channels; fixed in the fork (`6d3379b`) and **checked by ear**. Saving at a save point is still to be tested.
+- **Real speed, finally measured:** `GOW_PERF_DIAG=1` + `GOW_PERF_FRAME_PC=0x14E380` → `guest_flip_hz`. On cxldsakeb's PC: **60 FPS in the menu and ~44–59 in the first area with combat**. **F10 now shows those real FPS** (`[G]`, fork `19c65a5`). What limits it: the game sends each frame and waits for its FINISH before preparing the next one, so the EE (~12 ms) and the VU1 (~12 ms) run in series; `Release` and a bigger GS queue change nothing (NOTES.md, "Repository status").
+- Also in the fork: `SetupThread` provides `argc`/`argv` like a console does (**there is no TEMPORAL left**), `movn`/`movz` write only 64 bits (like the R5900) and the memory card keeps its file open between writes (saving should be faster; **still to be tested by saving**).
+- Pending image issues, unchanged (NOTES.md, "Repository status"): blue line with Kratos, wavy lines underwater, ghost to the left of Kratos (for DaniSBR1).
 
-- Guardar no llegaba a escribir la tarjeta (y pedía formatear en cada arranque): el `switch` de libmc2 que reparte sus operaciones (`0x2B8CC0`) estaba partido en dos funciones en `funcmap.csv`, y sus casos daban `missing-target`. Unido con `tools/find_split_switches.py --fix` (solo había este caso). **Comprobado jugando: formatea, guarda (~10–20 s la primera vez) y carga sin pedir formatear.** Además, la tarjeta reabre su archivo de 8 MB en cada página escrita: lento (NOTES.md, "Memory card: rendimiento").
-- Pendientes para DaniSBR1 en NOTES.md ("Estado del repositorio"): línea azul con Kratos, líneas onduladas bajo el agua, cinemáticas que se saltan (la inicial y la de tras el primer QTE contra el Coloso), fantasma a la izquierda de Kratos.
+### Phase 4: memory card, saves and loads (blocker 16) (cxldsakeb, 2026-10-17)
 
-### Fase 4: la sala ya se ve entera (bloqueo 15) y PCSX2 como referencia (cxldsakeb, 2026-10-17)
+**After the `git pull`: you have to regenerate** (`recompile.ps1` with `GOW_VU1_MICROCODIGO` and `GOW_IOP_MODULOS` set, ~1 min) and build the runner (~14 min on cxldsakeb's PC): `config/funcmap.csv` changed.
 
-**Tras el `git pull`:** `git submodule update --init --recursive` (submódulo en **`eb5657e`**) y `cmake --build` (solo cambia `gs_hw_backend.cpp`).
+- Saving never got to write to the card (and it asked to format on every boot): libmc2's `switch` that dispatches its operations (`0x2B8CC0`) was split into two functions in `funcmap.csv`, and its cases gave `missing-target`. Joined with `tools/find_split_switches.py --fix` (this was the only case). **Checked by playing: it formats, saves (~10–20 s the first time) and loads without asking to format.** Also, the card reopens its 8 MB file on every page written: slow (NOTES.md, "Memory card: performance").
+- Pending items for DaniSBR1 in NOTES.md ("Repository status"): blue line with Kratos, wavy lines underwater, cutscenes that get skipped (the opening one and the one after the first QTE against the Colossus), ghost to the left of Kratos.
 
-- **Bloqueo 15:** paredes, techos y NPC a más de unos metros desaparecían detrás del cielo. El juego borra el Z dibujando sprites con **formato de Z en la memoria del Z** (y con su propio `ZBUF` para la mitad inferior), y el backend los descartaba. Arreglado en el fork; la primera zona se ve como en la PS2 (ventanales con el Coloso).
-- **PCSX2 portátil como referencia** y `tools/gsdump/` para leer sus volcados del GS (Z por dibujo, simulación del buffer de Z). Cómo montarlo en NOTES.md, "PCSX2 para comparar".
-- **Pendientes nuevos** (NOTES.md, "Estado del repositorio"): línea azul que acompaña a Kratos (para DaniSBR1), la cinemática inicial de la traición que no aparece, el fantasma a la izquierda de Kratos y el borde tenue del horizonte lejano.
+### Phase 4: the hall now shows in full (blocker 15) and PCSX2 as a reference (cxldsakeb, 2026-10-17)
 
-### Fase 4: VU1 e IOP nativos, de ~3 a ~35–40 FPS estimados (cxldsakeb, 2026-10-16, noche)
+**After the `git pull`:** `git submodule update --init --recursive` (submodule at **`eb5657e`**) and `cmake --build` (only `gs_hw_backend.cpp` changes).
 
-- **Cada uno tiene que capturar y generar en su PC** (SETUP.md, 7b; los datos son del juego y no se suben): 4 min de partida con `GOW_VU1_CAPTURA` + `GOW_VU1_NATIVE_OFF=1` + `PS2X_IOP_DUMP_MODULES`, y después `recompile.ps1 -SyncOnly` con `GOW_VU1_MICROCODIGO` y `GOW_IOP_MODULOS` puestas (~20 min). Sin esto el juego va a ~3 FPS: la VU1 interpretada se lleva el 97 % del tiempo.
-- Hizo falta arreglar `tools/iop/iopn_gen.py` (etiquetas de *delay slot* en LIBSD y 989NOMID de GoW II). Mediciones en NOTES.md, "VU1 e IOP nativos en GoW II".
-- **Siguiente para la velocidad:** medir FPS reales con `GOW_PERF_FRAME_PC` (falta la dirección del *flip* de GoW II). Con la velocidad ya razonable, se puede volver a los gráficos.
+- **Blocker 15:** walls, ceilings and NPCs more than a few meters away disappeared behind the sky. The game clears Z by drawing sprites with **a Z format into Z memory** (and with its own `ZBUF` for the lower half), and the backend discarded them. Fixed in the fork; the first area looks as on the PS2 (big windows with the Colossus).
+- **Portable PCSX2 as a reference** and `tools/gsdump/` to read its GS dumps (Z per draw, Z buffer simulation). How to set it up in NOTES.md, "PCSX2 for comparison".
+- **New pending items** (NOTES.md, "Repository status"): blue line that follows Kratos (for DaniSBR1), the opening betrayal cutscene that does not show up, the ghost to the left of Kratos and the faint edge of the distant horizon.
 
-### Fase 4: los contornos azules son del escalado (cxldsakeb, 2026-10-16, noche)
+### Phase 4: native VU1 and IOP, from ~3 to an estimated ~35–40 FPS (cxldsakeb, 2026-10-16, night)
 
-- **Contornos azules:** solo salían a escala 2. **La línea azul brillante está resuelta (bloqueo 14, fork `2b20dc4`)**: el bloom pondera por el alfa del frame, y una lectura reinterpretada lo dejaba a resolución PS2. Tras el `git pull`: `git submodule update --init --recursive` y `cmake --build` (solo cambia `gs_hw_backend.cpp`, unos minutos). **Queda** un borde tenue solo en el horizonte lejano, que ya está antes del bloom (sospecha y método en NOTES.md, "Estado del repositorio"). Lo que PCSX2 activa para GoW II está en NOTES.md, "Opciones de PCSX2 para God of War II".
-- **No te fíes del contador F10:** en el PC de cxldsakeb marca 60 FPS y velocidad 100 %, pero el juego va a ~2 FPS. La velocidad se mira después de los gráficos.
-- **Memory card:** MC2_D, SIO2D y SIO2MAN son idénticos a los de GoW1, así que sus sustituciones del IOP valen.
+- **Everyone has to capture and generate on their own PC** (SETUP.md, 7b; the data comes from the game and is not pushed): 4 min of play with `GOW_VU1_CAPTURA` + `GOW_VU1_NATIVE_OFF=1` + `PS2X_IOP_DUMP_MODULES`, and then `recompile.ps1 -SyncOnly` with `GOW_VU1_MICROCODIGO` and `GOW_IOP_MODULOS` set (~20 min). Without this the game runs at ~3 FPS: the interpreted VU1 takes 97% of the time.
+- `tools/iop/iopn_gen.py` had to be fixed (*delay slot* labels in GoW II's LIBSD and 989NOMID). Measurements in NOTES.md, "Native VU1 and IOP in GoW II".
+- **Next for speed:** measure real FPS with `GOW_PERF_FRAME_PC` (GoW II's *flip* address is still missing). With the speed now reasonable, we can go back to the graphics.
 
-### Compilación más rápida (DaniSBR1, 2026-10-16)
+### Phase 4: the blue outlines come from upscaling (cxldsakeb, 2026-10-16, night)
 
-**Tras el `git pull`:** `git submodule update --init --recursive` (submódulo en **`a50613b`**). No hace falta nada más: CMake se reconfigura solo y activar `/MP` no recompila nada.
+- **Blue outlines:** they only appeared at scale 2. **The bright blue line is solved (blocker 14, fork `2b20dc4`)**: the bloom weights by the frame's alpha, and a reinterpreted read left it at PS2 resolution. After the `git pull`: `git submodule update --init --recursive` and `cmake --build` (only `gs_hw_backend.cpp` changes, a few minutes). **What remains** is a faint edge only on the distant horizon, which is already there before the bloom (suspicion and method in NOTES.md, "Repository status"). What PCSX2 enables for GoW II is in NOTES.md, "PCSX2 settings for God of War II".
+- **Do not trust the F10 counter:** on cxldsakeb's PC it shows 60 FPS and 100% speed, but the game runs at ~2 FPS. Speed gets looked at after the graphics.
+- **Memory card:** MC2_D, SIO2D and SIO2MAN are identical to GoW1's, so their IOP replacements are valid.
 
-- **`/MP`** (fork): el runner y el runtime se compilan con varios `cl.exe` a la vez; antes, de uno en uno. El número sale de la RAM y los núcleos de cada PC (al configurar: `PS2X: MSVC parallel compilation /MPn`; se cambia con `-DPS2X_MSVC_MP_PROCESSES=N`). Recompilación completa en el PC de DaniSBR1: **40 min 24 s → 21 min 13 s**.
-- **`recompile.ps1`** copia al runner solo los archivos cuyo contenido cambió: un `-SyncOnly` sin cambios ya no recompila nada, y un override cambiado recompila un solo bloque (~20 s).
-- Mediciones y detalles en NOTES.md, "Compilación más rápida". Con esto ya no hace falta copiar el override a mano para iterar rápido: `recompile.ps1 -SyncOnly` + `cmake --build` hace lo mismo.
+### Faster builds (DaniSBR1, 2026-10-16)
 
-### Fase 4: cielo arreglado, F12/F10 y velocidad medida (DaniSBR1, 2026-10-16, tarde)
+**After the `git pull`:** `git submodule update --init --recursive` (submodule at **`a50613b`**). Nothing else is needed: CMake reconfigures itself and enabling `/MP` does not recompile anything.
 
-**Tras el `git pull`:** `git submodule update --init --recursive` (submódulo en **`3b71410`**), `cmake -S PS2Recomp -B out/build` (opciones nuevas de raylib) y **recompilar el runner entero** (~45 min: cambió `gs_frontend.h`, que lo incluye todo).
+- **`/MP`** (fork): the runner and the runtime are compiled with several `cl.exe` at once; before, one at a time. The number comes from each PC's RAM and cores (at configure time: `PS2X: MSVC parallel compilation /MPn`; it is changed with `-DPS2X_MSVC_MP_PROCESSES=N`). Full rebuild on DaniSBR1's PC: **40 min 24 s → 21 min 13 s**.
+- **`recompile.ps1`** copies to the runner only the files whose content changed: a `-SyncOnly` with no changes no longer recompiles anything, and a changed override recompiles a single chunk (~20 s).
+- Measurements and details in NOTES.md, "Faster builds". With this you no longer need to copy the override by hand to iterate quickly: `recompile.ps1 -SyncOnly` + `cmake --build` does the same.
 
-**Hecho:** bloqueo 13 (un polígono azul sobre el cielo: la copia Z16 de las sombras leía el target de profundidad equivocado, fork `d0b6162`). **F12** = pantalla completa sin bordes / ventana; **F10** = contador de FPS como el de PCSX2 (`GOW_SHOW_FPS=1` lo muestra al arrancar). Con él se midió la primera zona en el PC de DaniSBR1: **~58–60 FPS reales y velocidad 100 %** (`FPS … [B]`: GoW II copia cada frame a un único búfer de pantalla). Se desactivó la captura F12 de serie de raylib, que dejaba `screenshotNNN.png` (imágenes del juego) en la raíz del repo.
+### Phase 4: sky fixed, F12/F10 and speed measured (DaniSBR1, 2026-10-16, afternoon)
 
-**Siguiente:** los contornos azules finos contra el cielo a escala 2 (comparar la misma escena a `PS2X_GS_HW_SCALE=1`), el "fantasma" de Kratos, y revisar combate, HUD y guardar/cargar jugando. Detalle en NOTES.md, "Estado del repositorio".
+**After the `git pull`:** `git submodule update --init --recursive` (submodule at **`3b71410`**), `cmake -S PS2Recomp -B out/build` (new raylib options) and **recompile the whole runner** (~45 min: `gs_frontend.h` changed, and everything includes it).
 
-### Fase 4: el escenario ya no sale verde (DaniSBR1, 2026-10-16)
+**Done:** blocker 13 (a blue polygon over the sky: the shadows' Z16 copy read the wrong depth target, fork `d0b6162`). **F12** = borderless fullscreen / window; **F10** = FPS counter like PCSX2's (`GOW_SHOW_FPS=1` shows it at startup). With it the first area was measured on DaniSBR1's PC: **~58–60 real FPS and 100% speed** (`FPS … [B]`: GoW II copies each frame to a single display buffer). raylib's built-in F12 screenshot was disabled, since it left `screenshotNNN.png` files (images of the game) in the repo root.
 
-**Para el Claude de quien siga: lee primero "Estado del repositorio" en `docs/NOTES.md`.** Tras el `git pull`: `git submodule update --init --recursive` (el submódulo apunta a **`8a4abab`**) y recompilar el runner (solo cambia `gs_hw_backend.cpp`: `cmake --build`, unos minutos, si `generated/` ya está al día).
+**Next:** the thin blue outlines against the sky at scale 2 (compare the same scene at `PS2X_GS_HW_SCALE=1`), Kratos's "ghost", and checking combat, HUD and save/load by playing. Details in NOTES.md, "Repository status".
 
-**Hecho, bloqueo 12:** el backend del GS descartaba las copias por columnas con las que el juego restaura el canal verde, porque **acaban en una fracción de píxel** (`y = 895.4375`) y `tryShuffle` exigía extremos enteros. La máscara parcial que se sospechaba no era la causa (`0x3FFF` cubre bytes enteros). Arreglado en el fork: el escenario sale bien y se dibuja la sombra de Kratos (comprobado con captura). Las fases 2 y 3 están cerradas en el ROADMAP.
+### Phase 4: the scenery is no longer green (DaniSBR1, 2026-10-16)
 
-**Siguiente:** (1) un polígono azul translúcido en el cielo; (2) la copia Z16 → framebuffer de las sombras, que el backend aún descarta (`shuffleWhy=13`); (3) la velocidad (VU1 e IOP nativos). Método para el GS: un contador local de los motivos de rechazo del backend (no se sube al fork), descrito en NOTES.md. DeepSeek ayuda a leer PCSX2 y el backend (material público), nunca capturas ni logs del juego.
+**For the next person's Claude: read "Repository status" in `docs/NOTES.md` first.** After the `git pull`: `git submodule update --init --recursive` (the submodule points to **`8a4abab`**) and recompile the runner (only `gs_hw_backend.cpp` changes: `cmake --build`, a few minutes, if `generated/` is already up to date).
 
-### Fase 2, inicialización superada: el juego carga sus recursos y dibuja (cxldsakeb, 2026-10-16)
+**Done, blocker 12:** the GS backend discarded the column copies the game uses to restore the green channel, because **they end at a fraction of a pixel** (`y = 895.4375`) and `tryShuffle` required integer endpoints. The partial mask that was suspected was not the cause (`0x3FFF` covers whole bytes). Fixed in the fork: the scenery looks right and Kratos's shadow is drawn (checked with a screenshot). Phases 2 and 3 are closed in the ROADMAP.
 
-**Para el Claude de quien siga: lee primero "Estado del repositorio" en `docs/NOTES.md`.** Tras el `git pull`: `git submodule update --init --recursive` (el submódulo apunta a `9ccffe1`) y recompilar el runner (si `generated/` ya está al día, `cmake --build`, unos minutos).
+**Next:** (1) a translucent blue polygon in the sky; (2) the shadows' Z16 → framebuffer copy, which the backend still discards (`shuffleWhy=13`); (3) speed (native VU1 and IOP). Method for the GS: a local counter of the backend's rejection reasons (not pushed to the fork), described in NOTES.md. DeepSeek helps read PCSX2 and the backend (public material), never captures or logs from the game.
 
-**Hecho:** bloqueos 8 y 9, los dos en el runtime.
-- **8:** el registro `Count` del EE no avanzaba, y el cargador de recursos (`0x18CF70`, con un presupuesto de tiempo por frame) no terminaba nunca.
-- **9:** en GoW II no se aplicaba **ninguna** sustitución nativa del IOP (LIBSD, memory card, SIO2). El juego nombra los módulos `NAME.IRX;1` y su LIBSD es otra compilación, con otros desplazamientos. Sin ellas, subir un banco de sonido esperaba un DMA de la SPU2 que no existe.
+### Phase 2, initialization passed: the game loads its resources and draws (cxldsakeb, 2026-10-16)
 
-Ahora el juego carga (`R_PermA`, `SBP_general`…), entra en su bucle principal y el GS dibuja de forma estable. El protocolo con SMPD y el cargador están en NOTES.md ("Cargador de recursos y protocolo con SMPD"). Herramientas nuevas en el override: `GOW2_CALL_PROFILE` (funciones más llamadas) y `GOW2_PEEK` (variables en memoria).
+**For the next person's Claude: read "Repository status" in `docs/NOTES.md` first.** After the `git pull`: `git submodule update --init --recursive` (the submodule points to `9ccffe1`) and recompile the runner (if `generated/` is already up to date, `cmake --build`, a few minutes).
 
-**Después (bloqueo 10):** salía el aviso "no hay mando conectado". Se arregló con el override de `libpad2` (adaptado de GoW1, direcciones de GoW II verificadas). Sin mando funciona el teclado: `Intro` = Start, `X` = cruz, flechas, `WASD`… (el mapa completo está en NOTES.md, "Estado del repositorio").
+**Done:** blockers 8 and 9, both in the runtime.
+- **8:** the EE's `Count` register did not advance, and the resource loader (`0x18CF70`, with a per-frame time budget) never finished.
+- **9:** in GoW II **no** native IOP replacement was applied (LIBSD, memory card, SIO2). The game names its modules `NAME.IRX;1` and its LIBSD is a different build, with different offsets. Without them, uploading a sound bank waited for an SPU2 DMA that does not exist.
 
-**Fase 3: se llega al gameplay, con sonido** (cxldsakeb, 2026-10-16). El escenario sale **verde** (bloqueo 12, abierto). El juego cuenta las sombras de los personajes en el canal verde y lo restaura con copias de 16 bits con máscara de bits que el backend del GS (`tryShuffle`) aún no hace; el diagnóstico completo, con capturas que lo comprueban, está en NOTES.md. **Siguiente tarea: implementar esas copias en `gs_hw_backend.cpp` (fork).** Un apaño desde el juego (anular `0x16EDB8`) deja la pantalla negra: descartado.
+Now the game loads (`R_PermA`, `SBP_general`…), enters its main loop and the GS draws stably. The SMPD protocol and the loader are in NOTES.md ("Resource loader and SMPD protocol"). New tools in the override: `GOW2_CALL_PROFILE` (most-called functions) and `GOW2_PEEK` (variables in memory).
 
-**Antes:** sale la pantalla de título completa (a pocos FPS), el menú responde y, al empezar partida nueva, se reproduce el primer vídeo. Para eso hizo falta el bloqueo 11: el stub genérico de `sceIpuInit` del runtime lleva direcciones de otro juego, y se sustituyó por un override con las de GoW II. **Siguiente:** confirmar que el vídeo se ve bien y llegar al gameplay. Sin teclado, `GOW2_PAD_SCRIPT=15:start,20-60/3:x` (NOTES.md, "Diagnóstico de bloqueos"). Vigilar el sonido, que ahora pasa por las sustituciones de LIBSD de GoW II.
+**Afterwards (blocker 10):** the "no controller connected" warning came up. It was fixed with the `libpad2` override (adapted from GoW1, GoW II addresses verified). Without a controller the keyboard works: `Enter` = Start, `X` = cross, arrows, `WASD`… (the full map is in NOTES.md, "Repository status").
 
-### Fase 2: bloqueos 6 y 7 resueltos en el runtime; el juego pide recursos a SMPD (cxldsakeb, 2026-10-16)
+**Phase 3: gameplay is reached, with sound** (cxldsakeb, 2026-10-16). The scenery comes out **green** (blocker 12, open). The game counts the characters' shadows in the green channel and restores it with 16-bit bit-masked copies that the GS backend (`tryShuffle`) does not do yet; the full diagnosis, with captures that confirm it, is in NOTES.md. **Next task: implement those copies in `gs_hw_backend.cpp` (fork).** A workaround from the game side (nulling out `0x16EDB8`) leaves the screen black: discarded.
 
-**Para el Claude de quien siga: lee primero "Estado del repositorio" en `docs/NOTES.md`.** Tras el `git pull`: `git submodule update --init --recursive` (el submódulo apunta a `df2a082` de `godofwar2`) y recompila el runner (si `generated/` ya está al día con el `funcmap.csv` de la fase 2, basta `cmake --build`, ~2 min; si no, `recompile.ps1` y ~25–50 min).
+**Before:** the full title screen shows up (at a few FPS), the menu responds and, when starting a new game, the first video plays. That required blocker 11: the runtime's generic `sceIpuInit` stub carries another game's addresses, and it was replaced with an override using GoW II's. **Next:** confirm the video looks right and reach gameplay. Without a keyboard, `GOW2_PAD_SCRIPT=15:start,20-60/3:x` (NOTES.md, "Diagnosing blockers"). Keep an eye on the sound, which now goes through GoW II's LIBSD replacements.
 
-**Hecho:** la rama `godofwar2-ioman` de Daniel funciona (SMPD lee el TOC entero) y está fusionada en `godofwar2`. Bloqueo 7: SMPD troceaba sus rutas con `strtok` (el runtime devolvía 0, `files = NULL`) y usaba `GetSystemTimeLow`, que no existía. Arreglados en el fork; además, los imports del IOP sin atender ya dejan siempre el aviso `[IOP] unhandled import`. **Método nuevo:** `tools/irx_imports.py` cruzado con el catálogo de lo que implementa el runtime (NOTES.md, "Imports del IOP que usa GoW II"): predijo el bloqueo 7 antes de ejecutar.
+### Phase 2: blockers 6 and 7 solved in the runtime; the game requests resources from SMPD (cxldsakeb, 2026-10-16)
 
-**~~Siguiente: bloqueo 8~~ hecho, ver arriba.** El EE pide recursos a SMPD (`R_LglScA…`, `R_PermA…`), SMPD lee 384 KB de `PART1.PAK` y los dos se quedan esperando; el hilo 1, en el bucle de `0x18CF70`. Detalles y trazas útiles (`PS2X_IOP_TRACE`, `PS2X_TRACE_RPC=123`) en NOTES.md.
+**For the next person's Claude: read "Repository status" in `docs/NOTES.md` first.** After the `git pull`: `git submodule update --init --recursive` (the submodule points to `df2a082` on `godofwar2`) and recompile the runner (if `generated/` is already up to date with phase 2's `funcmap.csv`, `cmake --build` is enough, ~2 min; if not, `recompile.ps1` and ~25–50 min).
 
-### Fase 2 en marcha: arranca, carga los IRX y empieza a leer el disco (DaniSBR1, 2026-10-16)
+**Done:** Daniel's `godofwar2-ioman` branch works (SMPD reads the whole TOC) and is merged into `godofwar2`. Blocker 7: SMPD split its paths with `strtok` (the runtime returned 0, `files = NULL`) and used `GetSystemTimeLow`, which did not exist. Fixed in the fork; also, unhandled IOP imports now always leave the `[IOP] unhandled import` warning. **New method:** `tools/irx_imports.py` cross-referenced with the catalog of what the runtime implements (NOTES.md, "IOP imports used by GoW II"): it predicted blocker 7 before running.
 
-**Para el Claude de quien siga: lee primero "Estado del repositorio" en `docs/NOTES.md`.** Resumen:
+**~~Next: blocker 8~~ done, see above.** The EE requests resources from SMPD (`R_LglScA…`, `R_PermA…`), SMPD reads 384 KB of `PART1.PAK` and both end up waiting; thread 1, in the loop at `0x18CF70`. Details and useful traces (`PS2X_IOP_TRACE`, `PS2X_TRACE_RPC=123`) in NOTES.md.
 
-**Hecho (en `main`):** el juego arranca, carga sus 8 IRX en el intérprete del IOP (`SIO2MAN`, `DBCMAN`, `SIO2D`, `MC2_D`, `DS2U_D`, `LIBSD`, `989NOMID`, `SMPD`), se enlaza a sus servidores RPC y empieza a leer el disco. Cinco bloqueos resueltos, todos en `overrides/gow2_overrides.cpp` (registrado para `SCUS_974.81`):
-1. `sceCdReadDvdDualInfo` (`0x2B6BF0`), como en GoW1.
-2. **TEMPORAL** `0x1875E0`: el `SetupThread` del runtime ignora el bloque de argumentos y `main` recibe `argc = 0`; las rutas de los IRX salían vacías. Arreglo de verdad: que el runtime rellene los argumentos (propuesta en NOTES.md).
-3. `setPrivateGuestHeap(0xA0000, 0xFF000)`: el heap interno del runtime pisaba el heap principal del juego (como en GoW1).
-4. Puntos de reanudación: `ps2_recomp` no los registra en las funciones de `entry_points` (las llama `entry_XXXX`). **Las 733 funciones del escáner van ahora en `config/funcmap.csv`** (`tools/make_funcmap.py --extra`), no en `entry_points`.
-5. `sceSifLoadStartModuleBuffer` (`0x2D4850`): el módulo del IOP que va dentro del ELF (como en GoW1).
+### Phase 2 under way: it boots, loads the IRXs and starts reading the disc (DaniSBR1, 2026-10-16)
 
-**~~Siguiente paso (pendiente de probar)~~ hecho, ver arriba:** el bloqueo 6. SMPD lee `cdrom0:\GODOFWAR.TOC` con `ioman` (`open`/`read`/`lseek`/`close`) y el IOP del runtime no lo implementaba: carga un índice vacío y el juego se cuelga en `0x27D7E8` (pila de estados vacía). **La implementación está en la rama `godofwar2-ioman` del fork** (`b14b951`, sin fusionar en `godofwar2`): compila, pero no se llegó a probar en el juego. Para probarla:
-1. `git pull`, `git submodule update --init --recursive` y luego `git -C PS2Recomp fetch` + `git -C PS2Recomp switch godofwar2-ioman`.
-2. `.\scripts\recompile.ps1` (hay que regenerar: `funcmap.csv` cambió) y `.\scripts\run.ps1 -Config RelWithDebInfo` (~50 min la primera vez).
-3. En el log, sin `unhandled import ioman`. Con `GOW2_THREAD_WATCH=5`, el hilo 1 ya no debe quedarse en `pc=0x0027d7e8`.
-4. Si funciona: fusionar `godofwar2-ioman` en `godofwar2` del fork, push, y commit del nuevo puntero del submódulo aquí (regla 5). Si no: el siguiente bloqueo, con el mismo método.
+**For the next person's Claude: read "Repository status" in `docs/NOTES.md` first.** Summary:
 
-Para investigar: `GOW2_THREAD_WATCH=5` y `GOW2_BOOT_TRACE=1` (NOTES.md, "Diagnóstico de bloqueos", que explica también cómo probar un override en ~1 min sin recompilar todo). DeepSeek solo sirve para leer material público (el runtime, `referencia/gow1/`): NOTES.md, "DeepSeek en la fase 2".
+**Done (on `main`):** the game boots, loads its 8 IRXs into the IOP interpreter (`SIO2MAN`, `DBCMAN`, `SIO2D`, `MC2_D`, `DS2U_D`, `LIBSD`, `989NOMID`, `SMPD`), binds to their RPC servers and starts reading the disc. Five blockers solved, all in `overrides/gow2_overrides.cpp` (registered for `SCUS_974.81`):
+1. `sceCdReadDvdDualInfo` (`0x2B6BF0`), as in GoW1.
+2. **TEMPORAL** `0x1875E0`: the runtime's `SetupThread` ignores the argument block and `main` receives `argc = 0`; the IRX paths came out empty. The real fix: have the runtime fill in the arguments (proposal in NOTES.md).
+3. `setPrivateGuestHeap(0xA0000, 0xFF000)`: the runtime's internal heap was stomping on the game's main heap (as in GoW1).
+4. Resume points: `ps2_recomp` does not register them in the `entry_points` functions (it calls them `entry_XXXX`). **The scanner's 733 functions now go in `config/funcmap.csv`** (`tools/make_funcmap.py --extra`), not in `entry_points`.
+5. `sceSifLoadStartModuleBuffer` (`0x2D4850`): the IOP module that ships inside the ELF (as in GoW1).
 
-### Fase 1 cerrada: primera configuración que recompila y compila (DaniSBR1 y cxldsakeb, 2026-10-15)
+**~~Next step (pending testing)~~ done, see above:** blocker 6. SMPD reads `cdrom0:\GODOFWAR.TOC` with `ioman` (`open`/`read`/`lseek`/`close`) and the runtime's IOP did not implement it: it loads an empty index and the game hangs at `0x27D7E8` (empty state stack). **The implementation is on the fork's `godofwar2-ioman` branch** (`b14b951`, not merged into `godofwar2`): it compiles, but it was never tested in the game. To test it:
+1. `git pull`, `git submodule update --init --recursive` and then `git -C PS2Recomp fetch` + `git -C PS2Recomp switch godofwar2-ioman`.
+2. `.\scripts\recompile.ps1` (you have to regenerate: `funcmap.csv` changed) and `.\scripts\run.ps1 -Config RelWithDebInfo` (~50 min the first time).
+3. In the log, no `unhandled import ioman`. With `GOW2_THREAD_WATCH=5`, thread 1 should no longer stay at `pc=0x0027d7e8`.
+4. If it works: merge `godofwar2-ioman` into the fork's `godofwar2`, push, and commit the new submodule pointer here (rule 5). If not: the next blocker, with the same method.
 
-**Hecho:** fase 0 de DaniSBR1 (mismo SHA1). Ghidra → 5 874 funciones; `tools/make_funcmap.py` → `config/funcmap.csv` (solo funciones: el export trae además 31 986 etiquetas internas que no deben ir); escáner → 733 funciones más (al principio en `entry_points`, como en GoW1; **desde la fase 2 van en `funcmap.csv`**, ver arriba). `recompile.ps1` genera 6 607 funciones **sin errores** y **el runner compila y enlaza** (0 símbolos sin resolver). Arreglados restos de GoW1: `$ConfigToml` sin definir en `_common.ps1` y los scripts de `tools/` apuntando al ELF de GoW1.
+To investigate: `GOW2_THREAD_WATCH=5` and `GOW2_BOOT_TRACE=1` (NOTES.md, "Diagnosing blockers", which also explains how to test an override in ~1 min without recompiling everything). DeepSeek is only good for reading public material (the runtime, `referencia/gow1/`): NOTES.md, "DeepSeek in phase 2".
 
-**Pendiente para cerrar la fase 1:**
-1. ~~Stubs de Sony~~ **hecho: 76 de 79** (los otros 3, `exit`, `read` y `sceTtyRead`, no están enlazados en GoW II). **GoW II usa el SDK 3.0.0**: las librerías están desplazadas en bloque respecto a GoW1 (+0x3C0E8 libmpeg, +0x3C0F0 ipu/graph/dma/cdvd, +0x3BB68 sif/deci2) y cada stub se verificó en el ELF de GoW II. Método en NOTES.md ("Stubs de librerías de Sony"). Ojo: en el SDK 3.0, `StartThread`, `iWakeupThread` e `InitTLB` son funciones en C delante del envoltorio de la syscall, y el stub va en la función en C.
-2. ~~Tabla `[mmio]`~~ **hecho: 240 entradas** de `ps2_analyzer`, equivalentes a la tabla de GoW1 (que era la salida del analizador sin retocar). El analizador, con su base de símbolos de Sony, también confirma los 76 stubs en las mismas direcciones. Ver NOTES.md ("Tabla [mmio] y contraste con ps2_analyzer").
-3. Cada `recompile.ps1` regenera todo `generated/` y el runner tarda ~50 min en recompilarse entero: juntar cambios antes de regenerar.
+### Phase 1 closed: first configuration that recompiles and builds (DaniSBR1 and cxldsakeb, 2026-10-15)
 
-~~Falta confirmar que el runner compila con la tabla `[mmio]`~~ **Fase 1 cerrada** (cxldsakeb, 2026-10-15): con stubs y `[mmio]`, el runner `RelWithDebInfo` compila y enlaza sin `LNK2001`/`LNK2019`/`LNK4088`. Ojo: el runner se enlaza con `/FORCE` y siempre sale un `.exe`; lo que vale es que el log del enlazador no tenga esos errores.
+**Done:** DaniSBR1's phase 0 (same SHA1). Ghidra → 5,874 functions; `tools/make_funcmap.py` → `config/funcmap.csv` (functions only: the export also brings 31,986 internal labels that must not go in); scanner → 733 more functions (at first in `entry_points`, as in GoW1; **since phase 2 they go in `funcmap.csv`**, see above). `recompile.ps1` generates 6,607 functions **without errors** and **the runner compiles and links** (0 unresolved symbols). Leftovers from GoW1 fixed: `$ConfigToml` undefined in `_common.ps1` and the `tools/` scripts pointing to GoW1's ELF.
 
-**Siguiente: fase 2** (primer arranque), ya en marcha (ver arriba). Vigilar los 8 `sceSif*` que `ps2_recomp` convierte en stub por nombre.
+**Pending to close phase 1:**
+1. ~~Sony stubs~~ **done: 76 of 79** (the other 3, `exit`, `read` and `sceTtyRead`, are not linked in GoW II). **GoW II uses SDK 3.0.0**: the libraries are shifted as a block relative to GoW1 (+0x3C0E8 libmpeg, +0x3C0F0 ipu/graph/dma/cdvd, +0x3BB68 sif/deci2) and each stub was verified in GoW II's ELF. Method in NOTES.md ("Sony library stubs"). Watch out: in SDK 3.0, `StartThread`, `iWakeupThread` and `InitTLB` are C functions in front of the syscall wrapper, and the stub goes on the C function.
+2. ~~`[mmio]` table~~ **done: 240 entries** from `ps2_analyzer`, equivalent to GoW1's table (which was the analyzer's output untouched). The analyzer, with its Sony symbol database, also confirms the 76 stubs at the same addresses. See NOTES.md ("[mmio] table and cross-check with ps2_analyzer").
+3. Each `recompile.ps1` regenerates all of `generated/` and the runner takes ~50 min to rebuild entirely: batch changes before regenerating.
 
-### Traspaso a DaniSBR1: fase 1, mapa de funciones y primera configuración (cxldsakeb, 2026-10-15)
+~~Still to confirm that the runner compiles with the `[mmio]` table~~ **Phase 1 closed** (cxldsakeb, 2026-10-15): with stubs and `[mmio]`, the `RelWithDebInfo` runner compiles and links without `LNK2001`/`LNK2019`/`LNK4088`. Watch out: the runner is linked with `/FORCE` and an `.exe` always comes out; what counts is that the linker log has none of those errors.
 
-cxldsakeb cerró la fase 0 por su parte y le pasa la fase 1 a Daniel. Claude de Daniel: guíale paso a paso y explica el porqué.
+**Next: phase 2** (first boot), already under way (see above). Keep an eye on the 8 `sceSif*` that `ps2_recomp` turns into stubs by name.
 
-**Hecho (fase 0, cxldsakeb):** repo creado (scripts y herramientas de GoW1, submódulo en `godofwar2`, `referencia/gow1/`), disco extraído, **ELF de referencia en NOTES.md** (`SCUS_974.81` v1.01, SHA1 `E6A62A0F3E781C29513F563F4625B9B3A9103C56`) y `build-tools.ps1` compilando. Hallazgos: el disco tiene la misma estructura que GoW1 (solo cambia `SMPD.IRX`) y los microprogramas de la VU van dentro del ELF (`.DVP.overlay`).
+### Handover to DaniSBR1: phase 1, function map and first configuration (cxldsakeb, 2026-10-15)
 
-**Pasos para Daniel, en orden:**
-1. Aceptar la invitación al repo y clonarlo con submódulos (`docs/SETUP.md`, pasos 1–5). Con su ISO, `.\scripts\extract-iso.ps1` y **comprobar que el SHA1 coincide**. Si no coincide (por ejemplo, una v1.00), parar y avisar: las direcciones no valdrían.
-2. Ghidra (SETUP, paso 6) y `.\scripts\ghidra-analyze.ps1` → `config/gow.toml` y `config/gow_functions.csv`. Después, `py -3 tools/scan_missing_functions.py` para las funciones que Ghidra no ve (en GoW1 fueron 634, sobre todo métodos virtuales).
-3. **`config/funcmap.csv`**: el CSV de Ghidra (mismo formato, `Name,Start,End,Size`) más las funciones del escáner.
-4. **`config/recomp.template.toml`**, tomando como modelo `referencia/gow1/config/recomp.template.toml`:
-   - `[general]` con `input = "@ELF@"`, `ghidra_output = "@MAP@"`, `output = "@OUT@"` (los rellena `recompile.ps1`);
-   - **stubs**: cada función de librería de Sony de la plantilla de GoW1 (`sceMpeg*`, `sceIpu*`, `sceGs*`, `sceCd*`, `sceDma*`, libkernel…) hay que **encontrarla en GoW II** y poner su dirección. Pistas: cadenas cercanas, el patrón de instrucciones de la función en GoW1 (`tools/elf_dis.py`), y quién la llama (`tools/elf_xref.py`). Una lista que no se encuentre, mejor dejarla fuera y anotarla en NOTES.md que poner una dirección dudosa;
-   - `[mmio]`: igual, los accesos a registros del hardware, buscando en GoW II los equivalentes de GoW1. Puede ir después del primer arranque si cuesta.
-   - **DeepSeek puede ayudar** a cruzar listas (por ejemplo, la tabla de stubs de GoW1 contra un listado de funciones de GoW II que solo contenga nombres y patrones públicos), pero **nunca con desensamblado ni datos del ELF** (regla 1).
-5. `.\scripts\recompile.ps1` hasta que genere C++ **sin errores**, y compilar el runner: es el criterio de "hecho" de la fase 1. Apuntar en NOTES.md las funciones identificadas y los problemas, y actualizar esta sección.
+cxldsakeb closed phase 0 on his side and passes phase 1 to Daniel. Daniel's Claude: guide him step by step and explain the why.
 
-Lo de GoW1 que no se ha llevado aquí: sus overrides se rehacen con direcciones de GoW II solo cuando un bloqueo lo pida (fase 2).
+**Done (phase 0, cxldsakeb):** repo created (GoW1's scripts and tools, submodule on `godofwar2`, `referencia/gow1/`), disc extracted, **reference ELF in NOTES.md** (`SCUS_974.81` v1.01, SHA1 `E6A62A0F3E781C29513F563F4625B9B3A9103C56`) and `build-tools.ps1` building. Findings: the disc has the same structure as GoW1's (only `SMPD.IRX` changes) and the VU microprograms ship inside the ELF (`.DVP.overlay`).
+
+**Steps for Daniel, in order:**
+1. Accept the invitation to the repo and clone it with submodules (`docs/SETUP.md`, steps 1–5). With his ISO, `.\scripts\extract-iso.ps1` and **check that the SHA1 matches**. If it does not match (for example, a v1.00), stop and let us know: the addresses would not be valid.
+2. Ghidra (SETUP, step 6) and `.\scripts\ghidra-analyze.ps1` → `config/gow.toml` and `config/gow_functions.csv`. Then, `py -3 tools/scan_missing_functions.py` for the functions Ghidra does not see (in GoW1 there were 634, mostly virtual methods).
+3. **`config/funcmap.csv`**: Ghidra's CSV (same format, `Name,Start,End,Size`) plus the scanner's functions.
+4. **`config/recomp.template.toml`**, taking `referencia/gow1/config/recomp.template.toml` as the model:
+   - `[general]` with `input = "@ELF@"`, `ghidra_output = "@MAP@"`, `output = "@OUT@"` (filled in by `recompile.ps1`);
+   - **stubs**: each Sony library function in GoW1's template (`sceMpeg*`, `sceIpu*`, `sceGs*`, `sceCd*`, `sceDma*`, libkernel…) has to be **found in GoW II** and given its address. Hints: nearby strings, the function's instruction pattern in GoW1 (`tools/elf_dis.py`), and who calls it (`tools/elf_xref.py`). If one cannot be found, better to leave it out and note it in NOTES.md than to put in a doubtful address;
+   - `[mmio]`: the same, the hardware register accesses, looking for GoW1's equivalents in GoW II. It can come after the first boot if it is hard.
+   - **DeepSeek can help** cross-reference lists (for example, GoW1's stub table against a listing of GoW II functions that only contains names and public patterns), but **never with disassembly or ELF data** (rule 1).
+5. `.\scripts\recompile.ps1` until it generates C++ **without errors**, and build the runner: that is phase 1's "done" criterion. Note the identified functions and the problems in NOTES.md, and update this section.
+
+What from GoW1 has not been brought over here: its overrides get redone with GoW II addresses only when a blocker calls for it (phase 2).

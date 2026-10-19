@@ -1,23 +1,23 @@
 # tools/
 
-Scripts de análisis en Python para investigar bloqueos sin abrir Ghidra. Leen **tu copia local** del juego (`game/disc/`); no contienen ni generan nada del juego que se suba al repo.
+Python analysis scripts for investigating blockers without opening Ghidra. They read **your local copy** of the game (`game/disc/`); they neither contain nor generate anything from the game that gets uploaded to the repo.
 
 ```powershell
 py -3 -m pip install capstone pyelftools
 ```
 
-| Script | Para qué |
+| Script | What it's for |
 |---|---|
-| `elf_dis.py 0xINICIO 0xFIN` | Desensamblar un rango del ELF. `--str 0xDIR …` lee cadenas (nombres de recursos, mensajes de error). |
-| `elf_xref.py "jal 0x13d710"` | Buscar quién llama a una función o quién accede a una global (`"-0x3b24("` con base `0x2A0000`). |
-| `irx_dis.py game/disc/X.IRX 0xINICIO 0xFIN` | Desensamblar un módulo del IOP marcando sus imports (`sysmem:4`, `cdvdman:6`…). Direcciones relativas al módulo: súmales la `base=` que sale en el log al cargarlo. |
-| `irx_imports.py game/disc/IOP_MOD/*.IRX` | Lista, por librería y ordinal, las funciones del IOP que piden los IRX (`thbase 43 SMPD.IRX`) y las librerías que exportan ellos mismos (`libsd`, `snd989`…). Para cruzarlo con lo que implementa el runtime (NOTES.md, "Imports del IOP que usa GoW II"). Sin dependencias. |
-| `vu_dis.py volcado.bin 0xINICIO 0xFIN` | Desensamblar microcódigo de la VU1 a partir de un volcado (16 KB de código al principio): la parte upper (`MUL`, `MADD`, `CLIP`, `FTOI4`…) y la lower (saltos, aritmética entera, cargas/escrituras, `DIV`, `XGKICK`), con los bits I/E/M/D/T. `--trace traza.txt [salida.txt]` anota una traza de instrucciones (líneas `PC c=… U=… L=…`, como la de `[vu-trace]`) con el desensamblado de cada línea. Sin dependencias. |
-| `scan_missing_functions.py` | Buscar funciones que Ghidra no detecta: métodos virtuales (`vfn_`), destinos de `JAL` en huecos (`fn_`) y punteros que el código construye con `lui`+`addiu` (`cfn_`, callbacks). **Ejecutadlo después de cada export de Ghidra** y regenerad `funcmap.csv` con `make_funcmap.py --extra` (no van en `entry_points`: ahí el recompilador no registra sus puntos de reanudación). |
-| `make_funcmap.py [--extra out/scan_missing.txt]` | Genera `config/funcmap.csv`: las funciones del export de Ghidra (sin las etiquetas internas `entry_XXXX`, `caseD_*`) y, con `--extra`, las del escáner. |
-| `find_split_switches.py [--fix]` | Busca en `config/funcmap.csv` funciones partidas a mitad de un `switch`: una función que empieza justo detrás de un `jr $reg` (no `$ra`), donde el escáner tomó el primer caso de una tabla de saltos por un comienzo de función. Síntoma en el log: `missing-target kind=IndirectJump`. `--fix` une cada pareja (luego hay que regenerar). Bloqueo 16. |
-| `gsdump/gsdump_z.py volcado.gs [frame]` | Lee un volcado del GS de PCSX2 (`.gs` **sin comprimir**: *GS Dump Compression = Uncompressed*) y resume, por estado de dibujo y en orden de aparición, cuántos vértices hay y su rango de Z (`FRAME`, `ZBUF`, `TEST`, `TEX0`). Para comparar con los registros del port lo que llega al GS en la PS2 emulada. |
-| `gsdump/gsdump_zsim.py volcado.gs frame [alpha]` | Simula solo el buffer de Z del frame en una cuadrícula de píxeles con las reglas del GS (interpolación lineal, `ZTST`, `ZMSK`, saturación; con `alpha`, la prueba de alfa con alfa de textura `0x80`) e imprime qué dibujo deja el Z en cada punto. Así se vio que faltaba el borrado del Z (bloqueo 15). |
-| `gsdump/gsdump_zclear.py volcado.gs frame` | Lista los sprites con formato de Z dibujados en la memoria del Z (`FRAME.FBP` = 120): coordenadas, color, `XYOFFSET`, `SCISSOR`. |
+| `elf_dis.py 0xSTART 0xEND` | Disassemble a range of the ELF. `--str 0xADDR …` reads strings (resource names, error messages). |
+| `elf_xref.py "jal 0x13d710"` | Find who calls a function or who accesses a global (`"-0x3b24("` with base `0x2A0000`). |
+| `irx_dis.py game/disc/X.IRX 0xSTART 0xEND` | Disassemble an IOP module, marking its imports (`sysmem:4`, `cdvdman:6`…). Addresses are relative to the module: add the `base=` that appears in the log when it is loaded. |
+| `irx_imports.py game/disc/IOP_MOD/*.IRX` | Lists, by library and ordinal, the IOP functions that the IRX request (`thbase 43 SMPD.IRX`) and the libraries they export themselves (`libsd`, `snd989`…). For cross-checking against what the runtime implements (NOTES.md, "IOP imports used by GoW II"). No dependencies. |
+| `vu_dis.py dump.bin 0xSTART 0xEND` | Disassemble VU1 microcode from a dump (16 KB of code at the start): the upper part (`MUL`, `MADD`, `CLIP`, `FTOI4`…) and the lower part (branches, integer arithmetic, loads/stores, `DIV`, `XGKICK`), with the I/E/M/D/T bits. `--trace trace.txt [output.txt]` annotates an instruction trace (lines `PC c=… U=… L=…`, like the one from `[vu-trace]`) with the disassembly of each line. No dependencies. |
+| `scan_missing_functions.py` | Find functions that Ghidra doesn't detect: virtual methods (`vfn_`), `JAL` targets in gaps (`fn_`) and pointers that the code builds with `lui`+`addiu` (`cfn_`, callbacks). **Run it after every Ghidra export** and regenerate `funcmap.csv` with `make_funcmap.py --extra` (they don't go in `entry_points`: there the recompiler doesn't register their resume points). |
+| `make_funcmap.py [--extra out/scan_missing.txt]` | Generates `config/funcmap.csv`: the functions from the Ghidra export (without the internal labels `entry_XXXX`, `caseD_*`) and, with `--extra`, the scanner's. |
+| `find_split_switches.py [--fix]` | Searches `config/funcmap.csv` for functions split in the middle of a `switch`: a function that starts right after a `jr $reg` (not `$ra`), where the scanner took the first case of a jump table for the start of a function. Symptom in the log: `missing-target kind=IndirectJump`. `--fix` joins each pair (then you have to regenerate). Blocker 16. |
+| `gsdump/gsdump_z.py dump.gs [frame]` | Reads a PCSX2 GS dump (`.gs` **uncompressed**: *GS Dump Compression = Uncompressed*) and summarizes, per draw state and in order of appearance, how many vertices there are and their Z range (`FRAME`, `ZBUF`, `TEST`, `TEX0`). For comparing what reaches the GS on the emulated PS2 with the port's registers. |
+| `gsdump/gsdump_zsim.py dump.gs frame [alpha]` | Simulates only the frame's Z buffer on a pixel grid with the GS rules (linear interpolation, `ZTST`, `ZMSK`, saturation; with `alpha`, the alpha test with texture alpha `0x80`) and prints which draw leaves the Z at each point. That is how we saw that the Z clear was missing (blocker 15). |
+| `gsdump/gsdump_zclear.py dump.gs frame` | Lists the sprites with a Z format drawn into the Z memory (`FRAME.FBP` = 120): coordinates, color, `XYOFFSET`, `SCISSOR`. |
 
-Capstone decodifica MIPS32 estándar: lo propio del Emotion Engine (`sq`/`lq` de 128 bits, MMI, `daddu`…) sale como `.byte`. Para eso, Ghidra con la extensión EE o los comentarios `// 0x…` de los archivos de `generated/`.
+Capstone decodes standard MIPS32: what is specific to the Emotion Engine (128-bit `sq`/`lq`, MMI, `daddu`…) comes out as `.byte`. For that, use Ghidra with the EE extension or the `// 0x…` comments in the files in `generated/`.
