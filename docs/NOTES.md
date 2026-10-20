@@ -184,10 +184,10 @@ Measurements on DaniSBR1's PC (Ryzen 5 5500, 6 cores / 12 threads, 16 GB, repo o
 
 ## Launcher (DaniSBR1, 2026-10-20)
 
-`launcher/` (see its README): a borderless 960 × 600 window in C++ with raylib + Dear ImGui (the runtime's own libraries and versions), to adjust settings before playing without recompiling anything. **Front end only for now:** the controls react but nothing is saved or applied and PLAY does not start the game. Built with `.\scripts\build-launcher.ps1 -Run` (`out\launcher-build`).
+`launcher/` (see its README): a borderless 960 × 600 window in C++ with raylib + Dear ImGui (the runtime's own libraries and versions), to adjust settings before playing without recompiling anything. **Settings saved, not applied yet:** Save settings writes `GoW2Launcher.ini` next to the executable (read at startup; format in the launcher's README), Cancel and Restore defaults work, but nothing passes the settings to the game yet and PLAY does not start it. Window: the 960 × 600 mockup scaled by 1.125 (1080 × 675). Built with `.\scripts\build-launcher.ps1 -Run` (`out\launcher-build`).
 - Fonts: Cinzel Bold and Inter (SIL OFL 1.1, no Reserved Font Name), static weights cut from the Google Fonts variable fonts with `fontTools.varLib.instancer`: ImGui's loader only reads a variable font's default instance.
 - The rounded corners need a transparent window, and then the usual blend also lowers the framebuffer's alpha at every antialiased text edge: the desktop showed through the glyphs (pink/teal tinted letters). Fix: alpha blends separately (`ONE, ONE_MINUS_SRC_ALPHA`, `BLEND_CUSTOM_SEPARATE`), so the window is opaque once the ground is drawn.
-- Next: wire the settings to what the runner reads (`PS2X_GS_HW_SCALE`, `GOW_SHOW_FPS`…), save them, start the runner from PLAY; aspect ratio, FXAA, CAS and vsync still have to be added to the runtime.
+- Next: pass the saved settings to what the runner reads (`PS2X_GS_HW_SCALE`, `GOW_SHOW_FPS`…) and start the runner from PLAY; aspect ratio, FXAA, CAS and vsync still have to be added to the runtime.
 
 ## PCSX2 settings for God of War II (cxldsakeb, 2026-10-16)
 
