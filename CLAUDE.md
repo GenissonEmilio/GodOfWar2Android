@@ -63,6 +63,14 @@ Same as in GoW1: **DeepSeek V4.1 Flash, free on OpenCode**, for high-volume read
 
 > Update this section when closing each milestone, so that everyone's sessions see it.
 
+### Phase 4: the flicker after the Blade of Olympus (blocker 22) (cxldsakeb, 2026-10-19, night)
+
+**After the `git pull`:** `git submodule update --init --recursive` (submodule at **`9499406`**) and `cmake --build` (only runtime library files change, a few minutes).
+
+- **Blocker 22:** from the cutscene where Zeus sends the Blade of Olympus on, giant polygons flickered over whole frames (and sometimes the VIF1 lost its place). Cause: the runtime kept its RPC/TLS pools at fixed addresses `0x01F00000`–`0x01F30FFF`, **inside GoW II's heap**, and every SMPD call rewrote a fake server descriptor in the middle of the game's VU1 packets. Fixed in the fork: the pools now live in the private heap below the ELF. **Checked playing 20+ minutes** (bridge included). The full trail and the local diagnostics that found it are in NOTES.md ("Blockers").
+- **For DaniSBR1:** the greenish block that follows Kratos in the room with the gate was probably this same bug; check it again. **New:** in the underworld, the same wavy lines as under water.
+- From here, according to cxldsakeb, what's left is mostly **speed and graphics improvements**.
+
 ### Phase 4: upscaling fixes, the ghost, the right edge and the blue line (DaniSBR1, 2026-10-19)
 
 **After the `git pull`:** `git submodule update --init --recursive` (submodule at **`c012422`**) and `cmake --build` (only `gs_hw_backend.cpp` changes). If you come from before `6d3379b`, run **`build-tools.ps1` before `recompile.ps1`**: `recompile.ps1` does not rebuild `ps2_recomp.exe`, and with the old one the `movn`/`movz` fix is silently missing.
