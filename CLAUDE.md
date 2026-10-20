@@ -63,6 +63,12 @@ Same as in GoW1: **DeepSeek V4.1 Flash, free on OpenCode**, for high-volume read
 
 > Update this section when closing each milestone, so that everyone's sessions see it.
 
+### Phase 4: 16:9 (cxldsakeb, 2026-10-19, night)
+
+**After the `git pull`: regenerate** (`recompile.ps1` with `GOW_VU1_MICROCODIGO` and `GOW_IOP_MODULOS` set, ~1 min) and `cmake --build` (only 2 files change: the patched function and the override). Without regenerating, the image is 16:9 but crops vertically instead of widening the view.
+
+- The game rendered 4:3 and the runtime stretched it to 16:9. Now it renders real 16:9 with **Hor+** (more view at the sides), using PCSX2's widescreen patch for GoW II: its data part in the controller override (every frame) and its one instruction as the **first recompiler patch** in `[patches]` of `config/recomp.template.toml`. Checked playing. Details in NOTES.md ("Image stretched to 16:9").
+
 ### Phase 4: the flicker after the Blade of Olympus (blocker 22) (cxldsakeb, 2026-10-19, night)
 
 **After the `git pull`:** `git submodule update --init --recursive` (submodule at **`9499406`**) and `cmake --build` (only runtime library files change, a few minutes).

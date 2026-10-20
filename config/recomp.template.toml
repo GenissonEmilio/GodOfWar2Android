@@ -354,4 +354,9 @@ skip = []
 "0x2dcedc" = "0x1000f000"
 
 [patches]
-instructions = []
+# Hor+ 16:9 (PCSX2's SCUS-97481_2F123FD8.pnach "Widescreen 16:9", nemesis2000): in the game's widescreen mode,
+# 0x234A48 "add.s $f16, $f0, $f16" (0x46100400, delay slot of jal 0x1777C0) becomes "mov.s $f16, $f0": the game
+# widens the horizontal view instead of cropping it vertically. The data part lives in overrides/gow2_overrides.cpp.
+instructions = [
+  { address = "0x00234A48", value = "0x46000406" },
+]
