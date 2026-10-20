@@ -63,6 +63,13 @@ Same as in GoW1: **DeepSeek V4.1 Flash, free on OpenCode**, for high-volume read
 
 > Update this section when closing each milestone, so that everyone's sessions see it.
 
+### Phase 4: upscaling fixes, the ghost, the right edge and the blue line (DaniSBR1, 2026-10-19)
+
+**After the `git pull`:** `git submodule update --init --recursive` (submodule at **`c012422`**) and `cmake --build` (only `gs_hw_backend.cpp` changes). If you come from before `6d3379b`, run **`build-tools.ps1` before `recompile.ps1`**: `recompile.ps1` does not rebuild `ps2_recomp.exe`, and with the old one the `movn`/`movz` fix is silently missing.
+
+- **Blockers 19–21, all at internal scale > 1**, in how the GS backend reads a render target drawn at scale k: linear reads took the picture half a host pixel to the right (the bloom drifted left: **Kratos's ghost**); CLAMP mode clamped at the target's edge instead of `TW × TH` (the **bright band on the right edge**); point-sampled reads at texel centres took the next host texel (the depth haze one pixel off: **the blue line ahead of Kratos and the blue outlines on pillars**). Checked by DaniSBR1 playing. Details and the game's post-processing chain in NOTES.md ("Repository status", "Blockers").
+- **Open for DaniSBR1:** underwater bubbles drawn as white pillars, far too much light in the pool room, flicker in the second cutscene, a moving pixelated filter, a greenish block that follows Kratos (NOTES.md, "Repository status").
+
 ### Screenshots in the README and the 16:9 stretch (cxldsakeb, 2026-10-19)
 
 - **Exception to rule 1, agreed by cxldsakeb:** four example screenshots of the port (title screen, a cutscene and combat in the first area) in `docs/screenshots/`, shown in the README. It is the only exception: no other game images go into the repo.
