@@ -573,6 +573,18 @@ namespace
     // y sticks con WASD (izquierdo) e IJKL (derecho).
     void gow2Pad2Read(uint8_t *rdram, R5900Context *ctx, PS2Runtime *runtime)
     {
+        // 16:9, as in GoW1: the runtime always presents a 16:9 image, and GoW II renders 4:3 unless its own
+        // widescreen option is on. Data part of PCSX2's SCUS-97481_2F123FD8.pnach "Widescreen 16:9" (CRASHARKI &
+        // nemesis2000): the game's widescreen flag (its Options menu setting) and three aspect floats (16/9), written
+        // every frame because loading a save restores the saved options. The pnach's Hor+ instruction (0x234A48) is
+        // applied by the recompiler: [patches] in config/recomp.template.toml.
+        rdram[0x002D86D8u] = 1u;
+        for (uint32_t address : {0x0032F300u, 0x0032F338u, 0x00363810u})
+        {
+            const uint32_t aspect169 = 0x3FE38E39u;
+            std::memcpy(rdram + address, &aspect169, sizeof(aspect169));
+        }
+
         uint8_t *buffer = gow2PadBuffer(rdram, GPR_U32(ctx, 5), 18);
         const Gow2PadSocket *socket = gow2PadSocket(ctx);
         uint8_t state[32]{};
