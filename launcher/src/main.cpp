@@ -96,12 +96,19 @@ Settings loadSettings()
     std::string line;
     while (std::getline(in, line))
     {
-        if (!line.empty() && line.back() == '\r')
-            line.pop_back();
+        // "key = value ; comment": comments (also at the end of a line) and spaces around key and value are ignored
+        const size_t comment = line.find_first_of(";#");
+        if (comment != std::string::npos)
+            line.erase(comment);
+        const auto trim = [](std::string s)
+        {
+            const size_t a = s.find_first_not_of(" \t\r"), b = s.find_last_not_of(" \t\r");
+            return a == std::string::npos ? std::string() : s.substr(a, b - a + 1);
+        };
         const size_t eq = line.find('=');
-        if (line.empty() || line[0] == ';' || line[0] == '#' || line[0] == '[' || eq == std::string::npos)
+        if (eq == std::string::npos || trim(line).empty() || trim(line)[0] == '[')
             continue;
-        const std::string key = line.substr(0, eq), value = line.substr(eq + 1);
+        const std::string key = trim(line.substr(0, eq)), value = trim(line.substr(eq + 1));
         if (key == "resolution")
             s.resolution = indexOf(kResolutionKey, 4, value, s.resolution);
         else if (key == "aspect_ratio")
