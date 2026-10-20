@@ -45,8 +45,9 @@ add_library(launcher_rlimgui STATIC "${rlimgui_SOURCE_DIR}/rlImGui.cpp")
 target_include_directories(launcher_rlimgui PUBLIC "${rlimgui_SOURCE_DIR}")
 target_link_libraries(launcher_rlimgui PUBLIC raylib launcher_imgui)
 
-add_executable(GoW2Launcher src/main.cpp)
-target_link_libraries(GoW2Launcher PRIVATE raylib launcher_imgui launcher_rlimgui)
+add_executable(GoW2Launcher src/main.cpp src/game_win.cpp)
+target_link_libraries(GoW2Launcher PRIVATE raylib launcher_imgui launcher_rlimgui shell32)
+set_target_properties(GoW2Launcher PROPERTIES CXX_STANDARD 20) # std::u8string in game_win.cpp
 if(MSVC)
     # a window application: no console behind the launcher (raylib keeps its plain main())
     set_target_properties(GoW2Launcher PROPERTIES WIN32_EXECUTABLE TRUE)

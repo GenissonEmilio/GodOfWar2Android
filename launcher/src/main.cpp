@@ -1,7 +1,10 @@
 // Launcher for the God of War II native port. The settings are saved to GoW2Launcher.ini next to the executable and
-// loaded at startup, but nothing applies them to the game yet and PLAY does not start it. The layout follows the
-// approved mockup (bronze on near-black, Cinzel for display text and Inter for everything else). Every position and
-// size below is in mockup pixels (a 960 x 600 design) and goes through px(), which scales the whole window by kScale.
+// loaded at startup; PLAY saves them and starts the runner with the ones it understands (see gameEnvironment). The
+// layout follows the approved mockup (bronze on near-black, Cinzel for display text and Inter for everything else).
+// Every position and size below is in mockup pixels (a 960 x 600 design) and goes through px(), which scales the whole
+// window by kScale.
+
+#include "game.h"
 
 #include "raylib.h"
 #include "rlgl.h"
@@ -151,18 +154,78 @@ bool saveSettings(const Settings &s)
 Settings g_saved;   // what the file holds
 Settings g_edit;    // what the controls show
 int g_tab = 0;
+bool g_quit = false;
 std::string g_flash; // short footer message after Save / Cancel / Restore defaults
 double g_flashUntil = 0.0;
 bool g_flashError = false;
 
-void flash(const char *message, bool error = false)
+void flash(const std::string &message, bool error = false)
 {
     g_flash = message;
     g_flashError = error;
-    g_flashUntil = GetTime() + 2.5;
+    g_flashUntil = GetTime() + (error ? 6.0 : 2.5);
 }
 
-bool g_quit = false;
+// ---- starting the game ----------------------------------------------------------------------------------------------
+
+GamePaths g_game;          // found at startup and again on PLAY
+bool g_launching = false;  // the runner was started and the launcher waits to see it stay up
+double g_launchAt = 0.0;
+constexpr double kLaunchGrace = 4.0; // seconds the game must stay up before the launcher closes
+
+// What the runner reads today. The aspect ratio (16:9 is built in), window mode, anti-aliasing and vertical sync have
+// no switch in the runtime yet; sharpening is only on/off (its present pass has a fixed light sharpen). The first three
+// are run.ps1's defaults (Waffle565's play.cmd), kept if the user already set them.
+std::vector<std::pair<std::string, std::string>> gameEnvironment(const Settings &s)
+{
+    std::vector<std::pair<std::string, std::string>> env;
+    for (const auto &[name, value] : {std::pair<const char *, const char *>{"PS2X_GS_WORKER", "1"},
+                                      {"GOW_GS_FINISH_ASINCRONO", "1"}, {"GOW_AUDIO_DEVICE", "default"}})
+        if (!std::getenv(name))
+            env.emplace_back(name, value);
+    env.emplace_back("PS2X_GS_HW_SCALE", std::to_string(s.resolution + 1));
+    env.emplace_back("GOW_SHOW_FPS", s.showFps ? "1" : "");
+    env.emplace_back("GOW_SCALER", s.sharpening > 0 ? "sharp" : "bilinear");
+    return env;
+}
+
+void startGame()
+{
+    if (g_launching)
+        return;
+    if (saveSettings(g_edit))
+        g_saved = g_edit;
+    g_game = findGame(GetApplicationDirectory());
+    if (!g_game.error.empty())
+    {
+        flash(g_game.error, true);
+        return;
+    }
+    std::string error;
+    if (!launchGame(g_game, gameEnvironment(g_edit), newLogPath(g_game.root), error))
+    {
+        flash(error, true);
+        return;
+    }
+    g_launching = true;
+    g_launchAt = GetTime();
+}
+
+// the launcher closes once the game has stayed up a moment; a game that quits at once leaves it open with the reason
+void watchLaunch()
+{
+    if (!g_launching)
+        return;
+    const long status = gameStatus();
+    if (status >= 0)
+    {
+        g_launching = false;
+        flash("The game closed right away (exit code " + std::to_string(status) + "): see View logs", true);
+    }
+    else if (GetTime() - g_launchAt > kLaunchGrace)
+        g_quit = true;
+}
+
 bool g_dragging = false;
 Vector2 g_dragFrom{};
 
@@ -394,13 +457,16 @@ void leftPanel(ImDrawList *dl)
     float by = y + std::floor((infoTop - y - groupH) * 0.5f);
 
     const Hit play = hit("##play", ImVec2(x, by), ImVec2(w, 56));
-    const unsigned playBg = play.held ? kEmberLo : play.hovered ? kEmberHi : kEmber;
+    const unsigned playBg = g_launching ? kEmberLo : play.held ? kEmberLo : play.hovered ? kEmberHi : kEmber;
     rectFilled(dl, x, by, x + w, by + 56, col(playBg), 8.0f);
     rect(dl, x, by, x + w, by + 56, col(kEmberEdge), 8.0f);
-    const float labelW = textSize(g_font.display, 20, "PLAY", 2.8f).x, contentW = 18.0f + 12.0f + labelW;
+    const char *playLabel = g_launching ? "STARTING" : "PLAY";
+    const float labelW = textSize(g_font.display, 20, playLabel, 2.8f).x, contentW = 18.0f + 12.0f + labelW;
     const float cx = x + std::floor((w - contentW) * 0.5f);
-    iconPlay(dl, ImVec2(cx, by + 19), 18, col(0xFFF7F0));
-    text(dl, g_font.display, 20, ImVec2(cx + 30, by + 16), col(0xFFF7F0), "PLAY", 2.8f);
+    iconPlay(dl, ImVec2(cx, by + 19), 18, col(0xFFF7F0, g_launching ? 0.6f : 1.0f));
+    text(dl, g_font.display, 20, ImVec2(cx + 30, by + 16), col(0xFFF7F0, g_launching ? 0.6f : 1.0f), playLabel, 2.8f);
+    if (play.clicked)
+        startGame();
     by += 56.0f + 10.0f;
 
     if (sideButton(dl, "##defaults", ImVec2(x, by), "Restore defaults", iconSliders))
@@ -409,15 +475,38 @@ void leftPanel(ImDrawList *dl)
         flash("Defaults restored: Save settings to keep them");
     }
     by += 54.0f;
-    sideButton(dl, "##folder", ImVec2(x, by), "Open game folder", iconFolder);
+    if (sideButton(dl, "##folder", ImVec2(x, by), "Open game folder", iconFolder))
+    {
+        if (g_game.root.empty())
+            flash(g_game.error, true);
+        else
+            openFolder(g_game.root);
+    }
     by += 54.0f;
-    sideButton(dl, "##logs", ImVec2(x, by), "View logs", iconLog);
+    if (sideButton(dl, "##logs", ImVec2(x, by), "View logs", iconLog))
+    {
+        if (g_game.root.empty())
+            flash(g_game.error, true);
+        else
+            openFolder(g_game.root + "\\out\\logs");
+    }
 
     float iy = infoTop;
-    iconCheck(dl, ImVec2(x, iy + 1), 14, col(kOk), 2.2f);
-    text(dl, g_font.regular, 12, ImVec2(x + 22, iy), col(kMuted), "Reference ELF: SCUS_974.81 (v1.01)");
+    if (g_game.error.empty())
+    {
+        iconCheck(dl, ImVec2(x, iy + 1), 14, col(kOk), 2.2f);
+        const std::string found = "Game found: " + g_game.elfName;
+        text(dl, g_font.regular, 12, ImVec2(x + 22, iy), col(kMuted), found.c_str());
+    }
+    else
+    {
+        const Icon i = icon(dl, ImVec2(x, iy + 1), 14);
+        i.line(6, 6, 18, 18, col(kEmberEdge), 2.2f);
+        i.line(18, 6, 6, 18, col(kEmberEdge), 2.2f);
+        text(dl, g_font.regular, 12, ImVec2(x + 22, iy), col(kMuted), g_game.root.empty() ? "Game not found" : "Game not ready");
+    }
     iy += 18.0f;
-    text(dl, g_font.regular, 12, ImVec2(x, iy), col(kMuted), "Version 0.1.0 \xC2\xB7 front-end preview");
+    text(dl, g_font.regular, 12, ImVec2(x, iy), col(kMuted), "Version 0.1.0 \xC2\xB7 preview");
     iy += 18.0f;
     text(dl, g_font.regular, 12, ImVec2(x, iy), col(kMuted), "Unofficial project, not affiliated with Sony.");
 }
@@ -528,19 +617,20 @@ void graphicsTab(ImDrawList *dl)
     float c = rowTop(dl, y, "Internal resolution", "Multiplies the PS2 resolution (640\xC3\x97" "448)", false);
     combo("##resolution", c, &g_edit.resolution, kResolution, 4);
     y += 60.0f;
-    c = rowTop(dl, y, "Aspect ratio", "16:9 widens the view at the sides (Hor+)", false);
+    // the hints say which settings the game does not take yet (see gameEnvironment)
+    c = rowTop(dl, y, "Aspect ratio", "16:9 widens the view at the sides (Hor+) \xC2\xB7 coming soon", false);
     combo("##aspect", c, &g_edit.aspect, kAspect, 2);
     y += 60.0f;
-    c = rowTop(dl, y, "Window mode", "F12 also switches it in game", false);
+    c = rowTop(dl, y, "Window mode", "F12 switches it in game \xC2\xB7 at startup: coming soon", false);
     combo("##window", c, &g_edit.windowMode, kWindow, 2);
     y += 60.0f;
-    c = rowTop(dl, y, "Anti-aliasing", "Smooths jagged edges", false);
+    c = rowTop(dl, y, "Anti-aliasing", "Smooths jagged edges \xC2\xB7 coming soon", false);
     combo("##aa", c, &g_edit.antiAliasing, kAa, 2);
     y += 60.0f;
-    c = rowTop(dl, y, "Sharpening (CAS)", "Brings back detail after upscaling", false);
+    c = rowTop(dl, y, "Sharpening (CAS)", "Brings back detail after upscaling \xC2\xB7 on/off for now", false);
     slider(dl, "##sharpening", c, &g_edit.sharpening);
     y += 60.0f;
-    c = rowTop(dl, y, "Vertical sync", "Prevents screen tearing", false);
+    c = rowTop(dl, y, "Vertical sync", "Prevents screen tearing \xC2\xB7 coming soon", false);
     checkbox(dl, "##vsync", c, &g_edit.vsync, "On");
     y += 60.0f;
     c = rowTop(dl, y, "FPS counter", "Show it at startup (F10 toggles it)", true);
@@ -594,7 +684,12 @@ void footer(ImDrawList *dl)
     // status on the left: the last action for a moment, otherwise whether there is something to save
     const char *status = nullptr;
     unsigned statusCol = kMuted;
-    if (GetTime() < g_flashUntil)
+    if (g_launching)
+    {
+        status = "Starting the game\xE2\x80\xA6";
+        statusCol = kBronze;
+    }
+    else if (GetTime() < g_flashUntil)
     {
         status = g_flash.c_str();
         statusCol = g_flashError ? kEmberEdge : kOk;
@@ -701,6 +796,7 @@ int main()
 
     g_saved = loadSettings();
     g_edit = g_saved;
+    g_game = findGame(GetApplicationDirectory());
 
     rlImGuiBeginInitImGui();
     ImGui::GetIO().IniFilename = nullptr; // no imgui.ini next to the launcher
@@ -710,6 +806,7 @@ int main()
 
     while (!WindowShouldClose() && !g_quit)
     {
+        watchLaunch();
         BeginDrawing();
         ClearBackground(BLANK); // transparent outside the rounded frame
         // The window is transparent (rounded corners). With the usual blend the framebuffer's alpha also drops at
