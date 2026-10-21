@@ -64,6 +64,14 @@ Same as in GoW1: **DeepSeek V4.1 Flash, free on OpenCode**, for high-volume read
 
 > Update this section when closing each milestone, so that everyone's sessions see it.
 
+### Phase 4: the lines at scale 3 (blocker 23) and the launcher comes back (DaniSBR1, 2026-10-21)
+
+**After the `git pull`:** `git submodule update --init --recursive` (submodule at **`1d9f4b6`**), `cmake --build` (only `gs_hw_backend.cpp` changes) and, for the launcher, `.\scripts\build-launcher.ps1`.
+
+- **Blocker 23:** at internal scale 3, thin bright vertical lines every 32 PS2 pixels in bands at the bottom and top of the screen, outdoors. A bug in blocker 21's fix: `fract(h / 3)` on the GPU (approximate division) made some host pixels read the texel on their left, and the `T8H` haze pass, which reads the target it writes, applied the haze twice at every strip seam. Fixed in the fork with whole-number arithmetic. **Checked by DaniSBR1 playing.** Details in NOTES.md ("Blockers").
+- **Launcher:** it now hides while the game runs and **comes back when the game closes**, to try other settings without starting it again.
+- **Debugging method that worked** (NOTES.md, "Repository status"): for scenes the pad script can't reach, local keys for whoever is playing there, one that logs the frame's draws and one that leaves out one pass or fix at a time. Never pushed to the fork.
+
 ### Launcher (DaniSBR1, 2026-10-20)
 
 **After the `git pull`:** nothing to regenerate. To try it: `.\scripts\build-launcher.ps1 -Run` (builds `out\launcher-build`, a minute or two; it reuses the libraries the runner build already downloaded).
@@ -71,7 +79,7 @@ Same as in GoW1: **DeepSeek V4.1 Flash, free on OpenCode**, for high-volume read
 - **`launcher/`:** a borderless window in C++ with raylib + Dear ImGui (the runtime's own libraries), the approved design, English UI. **Save settings** writes `GoW2Launcher.ini` next to the executable; **PLAY** saves, finds the repo and the newest runner build and starts it like `run.ps1` (log in `out\logs\launcher-*.log`), hides while the game runs and comes back when it closes (to try other settings). Details and the `.ini` format in `launcher/README.md`.
 - **What reaches the game:** internal resolution (`PS2X_GS_HW_SCALE`), FPS counter (`GOW_SHOW_FPS`) and sharpening on/off (`GOW_SCALER`). Aspect ratio, fullscreen at startup, FXAA and vsync say "coming soon": the runtime has no switch for them yet (next step, in the fork).
 - **Remember after every pull:** the `.exe` does not update itself. A runner built before the latest fork or `config/` changes keeps the old bugs (it happened with the 16:9 and blocker 22): follow the "After the `git pull`" line of each section here.
-- **Open:** thin vertical lines every 32 PS2 pixels at internal scale 3, outdoors (NOTES.md, "Repository status").
+- ~~Open: thin vertical lines every 32 PS2 pixels at internal scale 3~~ solved (blocker 23, see the section above).
 
 ### Phase 4: 16:9 (cxldsakeb, 2026-10-19, night)
 
