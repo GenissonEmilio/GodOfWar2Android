@@ -27,6 +27,8 @@ show_fps=0
 
 A missing file or a bad value keeps the default for that setting.
 
+**The controller does nothing in the game?** Close Steam (also from the tray). With Steam open, Steam Input takes over PlayStation controllers: the runner still lists the pad (`[pad] gamepad slot 0: DualSense Wireless Controller` in the log) but never receives a button (`[gow2-pad2] read buttons=` stays at `ffff`). It is not the launcher: the same happens with `run.ps1`. Alternatives: turn off Steam Input for PlayStation controllers in Steam's settings, or add the runner to Steam as a non-Steam game.
+
 ## Build and run
 
 ```powershell
