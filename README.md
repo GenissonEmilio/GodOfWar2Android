@@ -47,6 +47,8 @@ You need Windows, Visual Studio 2022 and your copy of the game. Follow [docs/SET
 
 **Controls:** a PC controller or the keyboard. Keyboard: arrows = D-pad, `Z`/`X`/`C`/`V` = square/cross/circle/triangle, `Enter` = Start, `Q`/`E` = L1/R1, `1`/`3` = L2/R2, `WASD` and `IJKL` = sticks.
 
+**Launcher (optional):** `.\scripts\build-launcher.ps1 -Run` builds and opens a small window to choose the internal resolution and the FPS counter and start the game with **PLAY**, without recompiling anything. Some of its options (aspect ratio, fullscreen at startup, FXAA, vsync) are not wired to the game yet. Details in [launcher/README.md](launcher/README.md).
+
 **Window keys:** `F12` = fullscreen / windowed · `F10` = FPS counter (like PCSX2's) · `F1` = debug panel.
 
 ## Contributing

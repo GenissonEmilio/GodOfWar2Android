@@ -28,6 +28,7 @@ scripts/build-tools.ps1                  builds ps2_analyzer and ps2_recomp (Rel
 scripts/ghidra-analyze.ps1 [-Reanalyze]  Ghidra headless (r5900) → config/gow.toml + config/gow_functions.csv
 scripts/recompile.ps1 [-SyncOnly]        config/recomp.template.toml + config/funcmap.csv → generated/ → runner; reconfigures CMake
 scripts/run.ps1 [-Config] [-NoBuild]     builds ps2EntryRunner and runs it; log in out/logs/
+scripts/build-launcher.ps1 [-Run]        builds the launcher (launcher/) into out/launcher-build; -Run opens it
 scripts/deepseek.ps1 -Tarea -Archivos    read-only task for DeepSeek (see below)
 tools/                                   disc extractor, VU1 and IOP generators, disassemblers (tools/README.md)
 referencia/gow1/                         GoW1 configuration and overrides (KIexster/Waffle565), only as a model
@@ -62,6 +63,15 @@ Same as in GoW1: **DeepSeek V4.1 Flash, free on OpenCode**, for high-volume read
 ## Current status
 
 > Update this section when closing each milestone, so that everyone's sessions see it.
+
+### Launcher (DaniSBR1, 2026-10-20)
+
+**After the `git pull`:** nothing to regenerate. To try it: `.\scripts\build-launcher.ps1 -Run` (builds `out\launcher-build`, a minute or two; it reuses the libraries the runner build already downloaded).
+
+- **`launcher/`:** a borderless window in C++ with raylib + Dear ImGui (the runtime's own libraries), the approved design, English UI. **Save settings** writes `GoW2Launcher.ini` next to the executable; **PLAY** saves, finds the repo and the newest runner build and starts it like `run.ps1` (log in `out\logs\launcher-*.log`), and closes once the game has stayed up 4 s. Details and the `.ini` format in `launcher/README.md`.
+- **What reaches the game:** internal resolution (`PS2X_GS_HW_SCALE`), FPS counter (`GOW_SHOW_FPS`) and sharpening on/off (`GOW_SCALER`). Aspect ratio, fullscreen at startup, FXAA and vsync say "coming soon": the runtime has no switch for them yet (next step, in the fork).
+- **Remember after every pull:** the `.exe` does not update itself. A runner built before the latest fork or `config/` changes keeps the old bugs (it happened with the 16:9 and blocker 22): follow the "After the `git pull`" line of each section here.
+- **Open:** thin vertical lines every 32 PS2 pixels at internal scale 3, outdoors (NOTES.md, "Repository status").
 
 ### Phase 4: 16:9 (cxldsakeb, 2026-10-19, night)
 
