@@ -169,9 +169,9 @@ void flash(const std::string &message, bool error = false)
 // ---- starting the game ----------------------------------------------------------------------------------------------
 
 GamePaths g_game;          // found at startup and again on PLAY
-bool g_launching = false;  // the runner was started and the launcher waits to see it stay up
+bool g_launching = false;  // the runner is running: the launcher is hidden until it exits
 double g_launchAt = 0.0;
-constexpr double kLaunchGrace = 4.0; // seconds the game must stay up before the launcher closes
+constexpr double kQuickExit = 4.0; // a game that exits sooner than this failed to start
 
 // What the runner reads today. The aspect ratio (16:9 is built in), window mode, anti-aliasing and vertical sync have
 // no switch in the runtime yet; sharpening is only on/off (its present pass has a fixed light sharpen). The first three
@@ -209,21 +209,28 @@ void startGame()
     }
     g_launching = true;
     g_launchAt = GetTime();
+    SetWindowState(FLAG_WINDOW_HIDDEN); // out of the way (and off the taskbar) while the game runs
 }
 
-// the launcher closes once the game has stayed up a moment; a game that quits at once leaves it open with the reason
+// The launcher comes back when the game exits, to try other settings without starting it again; it says how the game
+// ended, and a game that quit at once (it failed to start) points to the log.
 void watchLaunch()
 {
     if (!g_launching)
         return;
     const long status = gameStatus();
-    if (status >= 0)
-    {
-        g_launching = false;
-        flash("The game closed right away (exit code " + std::to_string(status) + "): see View logs", true);
-    }
-    else if (GetTime() - g_launchAt > kLaunchGrace)
-        g_quit = true;
+    if (status < 0)
+        return;
+    g_launching = false;
+    ClearWindowState(FLAG_WINDOW_HIDDEN);
+    SetWindowFocused();
+    const std::string code = std::to_string(status);
+    if (GetTime() - g_launchAt < kQuickExit)
+        flash("The game closed right away (exit code " + code + "): see View logs", true);
+    else if (status != 0)
+        flash("The game ended with exit code " + code + ": see View logs", true);
+    else
+        flash("Game closed");
 }
 
 bool g_dragging = false;
@@ -819,6 +826,8 @@ int main()
         rlImGuiEnd();
         EndBlendMode();
         EndDrawing();
+        if (g_launching)
+            WaitTime(0.25); // hidden: only look at the game a few times a second
     }
 
     rlImGuiShutdown();
