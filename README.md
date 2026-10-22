@@ -21,7 +21,7 @@ resultados desta adaptação Linux estão em [docs/LINUX-VALIDATION.md](docs/LIN
 
 O pacote inclui GTK, GCC 13, PS2Recomp, fontes e bibliotecas necessárias. Não exige
 Python, Docker, BIOS de PS2 ou SDK instalado para usar o pacote. Requisitos:
-Linux x86_64 com glibc 2.39 ou superior, OpenGL 4.6, 8 GB de RAM e 25 GB livres
+Linux x86_64 com SSE4.1, glibc 2.39 ou superior, OpenGL 4.6, 8 GB de RAM e 25 GB livres
 para importar um arquivo compactado e compilar. Ubuntu 24.04+ e Fedora 40+ são as bases.
 
 **Dados e saves:** `~/.local/share/GodOfWar2PC` (respeita `XDG_DATA_HOME`). Após a
