@@ -48,6 +48,7 @@ a tela cheia continua na resolução do monitor. O contador de FPS pode iniciar
 ativado. Essas preferências preservam saves e reutilizam o jogo já compilado.
 Diagnóstico da seleção: `last-performance.json` e `last-gpu-probe.log` na pasta de dados;
 o renderizador efetivamente usado aparece em `last-game.log`.
+Medições locais e limites da melhoria: [docs/PERFORMANCE.md](docs/PERFORMANCE.md).
 
 | Ação | Tecla |
 |---|---|

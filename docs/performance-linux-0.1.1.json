@@ -1,0 +1,230 @@
+{
+  "date": "2026-10-22",
+  "compiler_build_id": "b2a91af7fdd6cdc4b6d1446e",
+  "code": "d9a35bda8de34a44fd608b2e99bb829e8307ed09",
+  "scope": "Opening room in Rhodes, scripted combat, 180\u2013230 wall seconds, 5-second windows; full campaign not tested",
+  "cases": [
+    {
+      "case": "baseline-intel-2x",
+      "renderer": "[gs-hw] render-target renderer ready, scale 2.00 (Mesa Intel(R) Graphics (RPL-P))",
+      "exit": 0,
+      "no_missing_targets": true,
+      "combat": {
+        "samples": 10,
+        "game_fps_mean": 36.334,
+        "game_fps_min": 32.71,
+        "host_fps_mean": 41.446999999999996
+      },
+      "windows": [
+        {
+          "t": 180.63,
+          "window": 5.01,
+          "guest_flip_hz": 33.7,
+          "host_hz": 39.29
+        },
+        {
+          "t": 185.72,
+          "window": 5.09,
+          "guest_flip_hz": 38.3,
+          "host_hz": 43.41
+        },
+        {
+          "t": 190.72,
+          "window": 5.0,
+          "guest_flip_hz": 36.97,
+          "host_hz": 39.76
+        },
+        {
+          "t": 195.73,
+          "window": 5.01,
+          "guest_flip_hz": 37.72,
+          "host_hz": 43.7
+        },
+        {
+          "t": 200.75,
+          "window": 5.02,
+          "guest_flip_hz": 35.49,
+          "host_hz": 41.87
+        },
+        {
+          "t": 205.82,
+          "window": 5.08,
+          "guest_flip_hz": 32.71,
+          "host_hz": 38.42
+        },
+        {
+          "t": 210.82,
+          "window": 5.0,
+          "guest_flip_hz": 37.38,
+          "host_hz": 39.78
+        },
+        {
+          "t": 215.83,
+          "window": 5.01,
+          "guest_flip_hz": 37.76,
+          "host_hz": 44.55
+        },
+        {
+          "t": 220.84,
+          "window": 5.01,
+          "guest_flip_hz": 37.54,
+          "host_hz": 41.73
+        },
+        {
+          "t": 225.84,
+          "window": 5.0,
+          "guest_flip_hz": 35.77,
+          "host_hz": 41.96
+        }
+      ]
+    },
+    {
+      "case": "improved-auto-2x",
+      "renderer": "[gs-hw] render-target renderer ready, scale 2.00 (NVIDIA GeForce RTX 3050 6GB Laptop GPU/PCIe/SSE2)",
+      "exit": 0,
+      "no_missing_targets": true,
+      "combat": {
+        "samples": 10,
+        "game_fps_mean": 48.589999999999996,
+        "game_fps_min": 43.8,
+        "host_fps_mean": 59.16799999999999
+      },
+      "windows": [
+        {
+          "t": 180.32,
+          "window": 5.0,
+          "guest_flip_hz": 52.2,
+          "host_hz": 60.0
+        },
+        {
+          "t": 185.32,
+          "window": 5.0,
+          "guest_flip_hz": 53.0,
+          "host_hz": 60.0
+        },
+        {
+          "t": 190.33,
+          "window": 5.01,
+          "guest_flip_hz": 49.71,
+          "host_hz": 55.9
+        },
+        {
+          "t": 195.33,
+          "window": 5.0,
+          "guest_flip_hz": 51.0,
+          "host_hz": 60.0
+        },
+        {
+          "t": 200.33,
+          "window": 5.0,
+          "guest_flip_hz": 49.4,
+          "host_hz": 60.0
+        },
+        {
+          "t": 205.33,
+          "window": 5.0,
+          "guest_flip_hz": 49.6,
+          "host_hz": 60.0
+        },
+        {
+          "t": 210.33,
+          "window": 5.0,
+          "guest_flip_hz": 46.19,
+          "host_hz": 55.78
+        },
+        {
+          "t": 215.33,
+          "window": 5.0,
+          "guest_flip_hz": 47.2,
+          "host_hz": 60.0
+        },
+        {
+          "t": 220.33,
+          "window": 5.0,
+          "guest_flip_hz": 43.8,
+          "host_hz": 60.0
+        },
+        {
+          "t": 225.33,
+          "window": 5.0,
+          "guest_flip_hz": 43.8,
+          "host_hz": 60.0
+        }
+      ]
+    },
+    {
+      "case": "nvidia-native-1x",
+      "renderer": "[gs-hw] render-target renderer ready, scale 1.00 (NVIDIA GeForce RTX 3050 6GB Laptop GPU/PCIe/SSE2)",
+      "exit": 0,
+      "no_missing_targets": true,
+      "combat": {
+        "samples": 10,
+        "game_fps_mean": 47.458,
+        "game_fps_min": 36.8,
+        "host_fps_mean": 59.254
+      },
+      "windows": [
+        {
+          "t": 180.31,
+          "window": 5.0,
+          "guest_flip_hz": 49.6,
+          "host_hz": 60.0
+        },
+        {
+          "t": 185.31,
+          "window": 5.0,
+          "guest_flip_hz": 51.6,
+          "host_hz": 60.0
+        },
+        {
+          "t": 190.32,
+          "window": 5.01,
+          "guest_flip_hz": 48.91,
+          "host_hz": 56.3
+        },
+        {
+          "t": 195.32,
+          "window": 5.0,
+          "guest_flip_hz": 51.4,
+          "host_hz": 60.0
+        },
+        {
+          "t": 200.32,
+          "window": 5.0,
+          "guest_flip_hz": 49.4,
+          "host_hz": 60.0
+        },
+        {
+          "t": 205.32,
+          "window": 5.0,
+          "guest_flip_hz": 51.4,
+          "host_hz": 60.0
+        },
+        {
+          "t": 210.34,
+          "window": 5.01,
+          "guest_flip_hz": 48.07,
+          "host_hz": 56.24
+        },
+        {
+          "t": 215.34,
+          "window": 5.0,
+          "guest_flip_hz": 46.6,
+          "host_hz": 60.0
+        },
+        {
+          "t": 220.34,
+          "window": 5.0,
+          "guest_flip_hz": 40.8,
+          "host_hz": 60.0
+        },
+        {
+          "t": 225.34,
+          "window": 5.0,
+          "guest_flip_hz": 36.8,
+          "host_hz": 60.0
+        }
+      ]
+    }
+  ]
+}
