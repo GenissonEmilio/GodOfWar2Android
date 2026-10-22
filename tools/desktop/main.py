@@ -252,7 +252,7 @@ class Launcher:
         panel.pack_start(self.aspect,False,False,0)
         self.fullscreen.connect("changed", self.save_graphics)
         self.aspect.connect("changed", self.save_graphics)
-        panel.pack_start(label("F11 alterna entre janela e tela cheia durante o jogo.\nOriginal mantém faixas laterais em monitores largos. Esticar ocupa toda a tela.","muted",wrap=True),False,False,0)
+        panel.pack_start(label("F11 alterna entre janela e tela cheia durante o jogo.\nPanorâmico preserva 16:9, com faixas em monitores ultralargos. Esticar ocupa toda a tela.","muted",wrap=True),False,False,0)
         page.pack_start(panel,False,False,0)
         panel = box(spacing=15,classes=("panel","graphics-panel"))
         panel.pack_start(label("Shaders e filtros", "panel-title"),False,False,0)
