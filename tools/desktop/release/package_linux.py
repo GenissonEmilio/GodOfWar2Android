@@ -9,7 +9,7 @@ NAME='GodOfWar2PC'
 VERSION='0.1.0'
 OUT=ROOT / 'dist' / NAME
 if OUT.exists():shutil.rmtree(OUT)
-shutil.copytree(ROOT / 'artifacts/frozen' / NAME,OUT)
+shutil.copytree(ROOT / 'artifacts/frozen' / NAME,OUT,ignore=shutil.ignore_patterns('compiler'))
 shutil.copytree(ROOT / 'artifacts/compiler',OUT / 'compiler')
 shutil.copy2(ROOT / 'LICENSE',OUT / 'LICENSE')
 shutil.copy2(ROOT / 'docs/SHADERS.md',OUT / 'SHADERS.md')
@@ -50,7 +50,7 @@ GCC 13 e bibliotecas Ubuntu: fontes em https://archive.ubuntu.com/ubuntu/pool/
 God of War II pertence a Sony / Santa Monica Studio. Projeto independente.
 ''',encoding='utf-8')
 for p in OUT.rglob('*'):
-    if p.is_file() and (p.suffix.lower() in ('.iso','.7z','.rar','.xff','.elf','.ps2') or p.name in ('NICO.DAT','SCUS_974.81') or p.name.startswith('func_') or p.name=='complete.json'):
+    if p.is_file() and (p.suffix.lower() in ('.iso','.7z','.rar','.xff','.elf','.ps2','.pak','.irx','.img','.cue','.mcd') or p.name in ('NICO.DAT','SCUS_974.81') or p.name.startswith('func_') or p.name=='complete.json'):
         raise ValueError('Unexpected game-derived file in package: '+str(p))
 archive=ROOT / 'dist' / f'{NAME}-{VERSION}-linux-x86_64.tar.gz'
 with tarfile.open(archive,'w:gz',compresslevel=6) as t:t.add(OUT,arcname=NAME)

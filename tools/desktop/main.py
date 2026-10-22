@@ -480,10 +480,10 @@ class Launcher:
             directory = self.library.directory / "game-test"
             captures = sorted(directory.glob("frame_*.png"))
             log = (self.library.directory / "last-game.log").read_text(errors="replace")
-            result = {"scope":"boot and native renderer; campaign not covered",
+            result = {"scope":"runtime startup and renderer snapshots; manual gameplay and full campaign are separate checks",
                       "native_opengl":"[gs-present] shared GPU textures active" in log,
-                      "gamecore":"missing-target" not in log, "captures":len(captures)}
-            result["passed"] = result["native_opengl"] and result["gamecore"] and bool(captures)
+                      "no_missing_targets":"missing-target" not in log, "captures":len(captures)}
+            result["passed"] = result["native_opengl"] and result["no_missing_targets"] and bool(captures)
             (directory / "report.json").write_text(json.dumps(result,indent=2)+"\n")
             self.failed |= not result["passed"]
             GLib.timeout_add(500,self.capture_and_exit)

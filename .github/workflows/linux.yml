@@ -24,7 +24,13 @@ jobs:
         run: tools/linux/build.sh
       - name: Check compiler relocation
         run: |
-          LD_LIBRARY_PATH="$PWD/artifacts/compiler/lib" artifacts/compiler/bin/ps2_recomp --help
+          python3 - <<'PYTHON'
+          import os, subprocess
+          env = dict(os.environ, LD_LIBRARY_PATH=os.path.abspath("artifacts/compiler/lib"))
+          result = subprocess.run(["artifacts/compiler/bin/ps2_recomp"], env=env, capture_output=True, text=True)
+          assert result.returncode == 1 and "Usage: ps2recomp" in result.stdout, (result.returncode, result.stdout, result.stderr)
+          print(result.stdout)
+          PYTHON
           test -f artifacts/compiler/manifest.json
       - name: Native memory-card persistence (synthetic data)
         run: |
