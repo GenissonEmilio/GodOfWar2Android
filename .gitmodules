@@ -1,5 +1,0 @@
-[submodule "PS2Recomp"]
-	path = PS2Recomp
-	url = https://github.com/DaniSBR1/PS2Recomp.git
-	branch = godofwar2
-	ignore = dirty

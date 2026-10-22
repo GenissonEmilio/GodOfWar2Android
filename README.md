@@ -1,72 +1,70 @@
-# God of War II: native PC port (PS2 → Windows)
+# God of War II PC — Linux
 
-> [!NOTE]
-> **Work in progress (WIP).** There is no version to download and play yet. What there is is real, documented progress: the game already reaches the first playable area, with sound, cutscenes and memory card, at ~60 FPS. If you want to follow it, help, or base your own fork on it, you're in the right place.
+Projeto de recompilação estática da versão de PS2 **USA SCUS-97481 v1.01**, com
+interface em português, importação local do DVD e compilador Linux incluído.
+Derivado de [cxldsakeb/GoW2-nativo-PS2](https://github.com/cxldsakeb/GoW2-nativo-PS2),
+com a experiência de instalação do [ShadowOfTheColossusPC](https://github.com/GenissonEmilio/ShadowOfTheColossusPC).
 
-Static recompilation of **God of War II** (PS2, 2007) into a native Windows executable with [PS2Recomp](https://github.com/ran-j/PS2Recomp). It is not an emulator: the game's code is translated to C++ and compiled as a PC program, together with a runtime that plays the part of the PS2 (GS, VU1, IOP, sound, controller, videos and memory card).
+**Em desenvolvimento:** a base upstream foi testada no início de Rhodes e tem
+limitações gráficas e de desempenho. Não há validação da campanha inteira. Os
+resultados desta adaptação Linux estão em [docs/LINUX-VALIDATION.md](docs/LINUX-VALIDATION.md).
 
-It is the team's second project after [God of War](https://github.com/cxldsakeb/ROMS-nativas-PS2), which is already playable at ~60 FPS on Waffle565's runtime. GoW II uses an evolution of the same engine, so we start from that runtime and what we do here is the game-specific part: the function map, the recompiler configuration, the overrides and the runtime fixes the game requires.
+## Usar
 
-> [!IMPORTANT]
-> This repository **contains nothing from the game** (ISO, ELF, IRX, disc data) nor the C++ generated from it, and **it never will**. The only exception are the few screenshots of the port below. Everyone needs **their own legal copy** of God of War II (NTSC-U, `SCUS-97481`, v1.01). Don't ask for or share ISOs in the issues.
+1. Baixe o pacote Linux em [Releases](https://github.com/GenissonEmilio/GodOfWar2PC/releases).
+2. Extraia e abra `GodOfWar2PC`.
+3. Escolha sua cópia em ISO, ZIP, RAR ou 7Z. O importador verifica o executável e
+   as duas camadas do DVD. Outras regiões ou executáveis modificados são rejeitados.
+4. Aguarde a compilação e a otimização automática inicial. São usadas até duas
+   tarefas de compilação. Pode levar bastante tempo na primeira preparação.
+5. Clique em **Iniciar jogo**. As próximas aberturas reutilizam o cache validado.
 
-## Screenshots
+O pacote inclui GTK, GCC 13, PS2Recomp, fontes e bibliotecas necessárias. Não exige
+Python, Docker, BIOS de PS2 ou SDK instalado para usar o pacote. Requisitos:
+Linux x86_64 com glibc 2.39 ou superior, OpenGL 4.6, 8 GB de RAM e 25 GB livres
+para importar um arquivo compactado e compilar. Ubuntu 24.04+ e Fedora 40+ são as bases.
 
-The port running on PC (October 2026, internal resolution x2): the title screen, the opening of the first level with the Colossus of Rhodes, and combat in the first area.
+**Dados e saves:** `~/.local/share/GodOfWar2PC` (respeita `XDG_DATA_HOME`). Após a
+preparação, o ZIP/ISO original é dispensável; preserve os dados importados e saves.
+A ROM não é alterada nem enviada para a internet. Nenhum arquivo do jogo ou código
+recompilado é distribuído no repositório ou nos releases.
 
-| | |
+## Imagem e controles
+
+A aba **Gráficos** oferece janela/tela cheia na resolução do monitor, proporção
+16:9 ou esticar, e fragment shaders GLSL 330 importados e validados no driver local.
+Há um filtro de nitidez pronto. Shaders são pós-processamento, não texturas HD.
+O jogo usa a câmera panorâmica Hor+ da base upstream.
+
+| Ação | Tecla |
 |---|---|
-| ![Title screen](docs/screenshots/1-title.jpg) | ![The Colossus of Rhodes](docs/screenshots/2-colossus.jpg) |
-| ![Combat in the first area](docs/screenshots/3-combat.jpg) | ![Combat in the first area](docs/screenshots/4-combat.jpg) |
+| Mover | WASD |
+| Esquiva / analógico direito | IJKL |
+| □ / ✕ / ○ / △ | Z / X / C / V |
+| L1 / R1 | Q / E |
+| L2 / R2 | 1 / 3 ou Shift esquerdo / direito |
+| Start / Select | Enter / Tab |
+| Tela cheia | F11 ou F12 |
+| FPS | F10 |
 
-## Status
+Controles USB/Bluetooth usam o suporte nativo da raylib/GLFW. Conecte antes de jogar.
+Os botões do controle mantêm o esquema original de PS2.
 
-**Phase 4 (playable), in progress.** What works today, verified by playing:
+## Desenvolver
 
-- Boots and gets through the logos, the title screen and the menu.
-- **Cutscenes** at 30 frames per second, with the audio in sync.
-- **First playable area (Rhodes)** with sound, scenery, shadows and combat.
-- **Memory card:** formats, saves and loads.
-- **Speed:** 60 FPS in the menu and ~44–59 FPS in the first area with combat (measured on a team member's PC), with the VU1 and the IOP compiled to native code.
+`tools/linux/build.sh` usa Docker para construir o runtime, o compilador portátil,
+o launcher congelado e o pacote sem ROM. A integração contínua testa importação,
+cache, compilação de dados sintéticos e apresentação OpenGL em monitores virtuais.
+Testes: `python3 -m unittest discover -s tests/linux -v`.
+A validação com uma cópia local usa `tools/linux/validate_local.py`; arquivos
+recompilados ficam apenas na pasta de dados do usuário.
 
-What's missing: some graphics glitches (a blue line that follows Kratos, wavy lines under water, a "ghost" to his left), checking the rest of the game beyond the first area, and reaching a stable 60 FPS in combat.
+## Créditos e licença
 
-| Phase | Status |
-|---|---|
-| 0. Environment | Done |
-| 1. Function map and recompiler configuration | Done: 6,607 functions, 76 Sony library stubs, 240 hardware register accesses |
-| 2. First boot | Done: loads the 8 IOP modules, reads the disc and reaches the title screen |
-| 3. Menu and videos | Done |
-| 4. Playable at full speed | In progress: 18 blockers solved so far; graphics details and combat speed remain |
+GPL-3.0. Base GoW II: cxldsakeb, DaniSBR1 e Alejrr2; PS2Recomp: ran-j e colaboradores;
+runtime: Waffle565; contexto OpenGL Linux: YYOzcan/Tobiichi-Port; referência de
+hardware: PCSX2. A interface e o kit portátil derivam dos projetos de GenissonEmilio
+ShadowOfTheColossusPC, ForbiddenMemoriesPC e CrashBandicootPC. Procedência em
+[docs/NOTES.md](docs/NOTES.md). O código correspondente e as licenças acompanham o pacote.
 
-Details in [docs/ROADMAP.md](docs/ROADMAP.md). Every blocker, with its cause and its fix, is in [docs/NOTES.md](docs/NOTES.md): it is also a good guide to how a PS2 game is brought to PC with PS2Recomp.
-
-## Getting started
-
-You need Windows, Visual Studio 2022 and your copy of the game. Follow [docs/SETUP.md](docs/SETUP.md). In short: extract your ISO with `scripts/extract-iso.ps1` (the ELF's SHA1 must match the one in NOTES.md), build the tools, `scripts/recompile.ps1` and `scripts/run.ps1 -Config RelWithDebInfo` (the first build takes ~20–50 min depending on the PC). To run at full speed you have to generate the native VU1 and IOP with data from your own playthrough (SETUP.md, section 7b).
-
-**Controls:** a PC controller or the keyboard. Keyboard: arrows = D-pad, `Z`/`X`/`C`/`V` = square/cross/circle/triangle, `Enter` = Start, `Q`/`E` = L1/R1, `1`/`3` = L2/R2, `WASD` and `IJKL` = sticks.
-
-**Launcher (optional):** `.\scripts\build-launcher.ps1 -Run` builds and opens a small window to choose the internal resolution and the FPS counter and start the game with **PLAY**, without recompiling anything. Some of its options (aspect ratio, fullscreen at startup, FXAA, vsync) are not wired to the game yet. Details in [launcher/README.md](launcher/README.md).
-
-**Window keys:** `F12` = fullscreen / windowed · `F10` = FPS counter (like PCSX2's) · `F1` = debug panel.
-
-## Contributing
-
-All help is welcome: testing on your PC, reporting bugs or sending fixes. Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening an issue or a PR. The runtime lives in our PS2Recomp fork ([DaniSBR1/PS2Recomp](https://github.com/DaniSBR1/PS2Recomp), branch `godofwar2`), which is the `PS2Recomp/` submodule.
-
-And if you'd rather take it your own way: it's GPLv3, so you can make your own fork as long as you keep the same license and credit the source.
-
-The context for Claude Code (and for anyone who joins) is in [CLAUDE.md](CLAUDE.md).
-
-## Credits
-
-- [**PS2Recomp**](https://github.com/ran-j/PS2Recomp) by ran-j and contributors (GPLv3): the recompiler and the base of the runtime.
-- [**Waffle565/God-Of-War-Native-Port**](https://github.com/Waffle565/God-Of-War-Native-Port): its `runtime` branch (GPL-3.0) is the base of our runtime; `tools/iso_extract.py`, `tools/iop/` and `tools/vu1/vu1n_gen.py` come from its `main` branch, with the author's permission and through KIexster.
-- [**KIexster/god-of-war-recomp**](https://github.com/KIexster/god-of-war-recomp) (GPLv3): the patches that put that base on top of PS2Recomp and, for GoW1, the configuration and overrides that we keep as a reference in `referencia/gow1/`.
-- [**PCSX2**](https://github.com/PCSX2/pcsx2) (GPLv3+): hardware reference.
-- Team: [@cxldsakeb](https://github.com/cxldsakeb), [@DaniSBR1](https://github.com/DaniSBR1) and [@Alejrr2](https://github.com/Alejrr2).
-
-## License
-
-**GPLv3** ([LICENSE](LICENSE)), same as PS2Recomp. God of War is a trademark of Sony Interactive Entertainment; this project is not affiliated with or endorsed by Sony. No game files, nor anything derived from them, are distributed.
+God of War II pertence à Sony / Santa Monica Studio. Projeto independente.

@@ -13,6 +13,10 @@ SECTOR = 2048
 
 
 def read_dir(f, lba, size, path, out, dirs, base=0):
+    if path.count("/") > 8 or len(dirs) > 4096 or (base+lba, size) in dirs:
+        raise ValueError("Invalid or cyclic ISO directory")
+    if size < 0 or size > 16*1024*1024 or (base+lba)*SECTOR+size > os.fstat(f.fileno()).st_size:
+        raise ValueError("ISO directory outside disc")
     dirs.append((base + lba, size))
     f.seek((base + lba) * SECTOR)
     data = f.read(size)
@@ -22,6 +26,8 @@ def read_dir(f, lba, size, path, out, dirs, base=0):
         if rlen == 0:  # records never span sectors
             off = (off // SECTOR + 1) * SECTOR
             continue
+        if rlen < 34 or off+rlen > len(data):
+            raise ValueError('Invalid ISO record')
         rec = data[off:off + rlen]
         ext_lba = struct.unpack_from('<I', rec, 2)[0]
         ext_len = struct.unpack_from('<I', rec, 10)[0]
@@ -31,7 +37,11 @@ def read_dir(f, lba, size, path, out, dirs, base=0):
         if name in (b'\x00', b'\x01'):
             continue
         name = name.decode('ascii', 'replace').split(';')[0]
+        if not name or name in ('.', '..') or any(c in name for c in ('/', '\\', ':', '\x00')):
+            raise ValueError('Unsafe ISO file name')
         full = f'{path}/{name}' if path else name
+        if (base+ext_lba)*SECTOR+ext_len > os.fstat(f.fileno()).st_size:
+            raise ValueError('Truncated ISO file')
         if flags & 2:
             read_dir(f, ext_lba, ext_len, full, out, dirs, base)
         else:
@@ -54,6 +64,8 @@ def scan(f):
         root1 = pvd1[156:156 + 34]
         read_dir(f, struct.unpack_from('<I', root1, 2)[0], struct.unpack_from('<I', root1, 10)[0], '', files,
                  dirs, layer1)
+    if len(files)>4096 or len({n.casefold() for n,_,_ in files}) != len(files):
+        raise ValueError('Duplicate or excessive ISO files')
     return files, layer1
 
 
@@ -100,6 +112,7 @@ def main():
                     left = size
                     while left:
                         chunk = f.read(min(left, 1 << 24))
+                        if not chunk: raise ValueError('Truncated ISO')
                         o.write(chunk)
                         left -= len(chunk)
         if outdir and '--layout' in sys.argv:

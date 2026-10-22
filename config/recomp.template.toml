@@ -7,6 +7,7 @@ input = "@ELF@"
 ghidra_output = "@MAP@"
 output = "@OUT@"
 single_file_output = false
+output_worker_threads = 2
 
 # Como en GoW1: las syscalls se tratan por instrucción, no parcheando los envoltorios
 patch_syscalls = false

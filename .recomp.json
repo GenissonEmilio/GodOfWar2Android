@@ -3,9 +3,11 @@
   "game": "God of War II",
   "system": "PS2",
   "type": "recomp",
-  "project": "God of War II: port nativo para PC",
+  "project": "God of War II PC — Linux",
   "status": "in-progress",
-  "targets": ["Windows"],
+  "targets": [
+    "Linux"
+  ],
   "toolchain": "PS2Recomp",
   "original": {
     "region": "USA",
@@ -14,14 +16,15 @@
     "sha1": "E6A62A0F3E781C29513F563F4625B9B3A9103C56"
   },
   "maintainers": [
-    { "name": "cxldsakeb", "link": "https://github.com/cxldsakeb" },
-    { "name": "DaniSBR1", "link": "https://github.com/DaniSBR1" },
-    { "name": "Alejrr2", "link": "https://github.com/Alejrr2" }
+    {
+      "name": "GenissonEmilio",
+      "link": "https://github.com/GenissonEmilio"
+    }
   ],
   "help": [
     "Probar en otros PC y GPU",
     "Fallos de imagen del backend del GS",
     "Velocidad en combate (EE y VU1 en serie)"
   ],
-  "notes": "Llega a la primera zona jugable con sonido, cinemáticas y memory card; 60 FPS en el menú y ~44-59 en combate. Faltan fallos de imagen y revisar el resto del juego."
+  "notes": "Linux adaptation of cxldsakeb/GoW2-nativo-PS2; full-campaign compatibility has not been established."
 }

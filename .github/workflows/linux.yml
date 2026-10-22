@@ -1,0 +1,54 @@
+name: Linux native port
+on:
+  push:
+    paths-ignore: ['docs/**', 'README.md', '.recomp.json']
+  pull_request:
+    paths-ignore: ['docs/**', 'README.md', '.recomp.json']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: linux-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Import and cache checks (synthetic data only)
+        run: |
+          python3 -m unittest discover -s tests/linux -v
+          python3 -m compileall -q tools/desktop tools/linux
+      - name: Build ROM-free compiler and desktop package
+        run: tools/linux/build.sh
+      - name: Check compiler relocation
+        run: |
+          LD_LIBRARY_PATH="$PWD/artifacts/compiler/lib" artifacts/compiler/bin/ps2_recomp --help
+          test -f artifacts/compiler/manifest.json
+      - name: Native memory-card persistence (synthetic data)
+        run: |
+          docker run --rm --init --cpus=2 --network=none -u "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:/src:z" \
+            gow2-linux-builder python3 tools/linux/test_memory_card.py \
+            --program /src/artifacts/compiler-check --out /src/artifacts/card-persistence
+      - name: Fullscreen and GPU shader checks (no ROM)
+        run: |
+          docker build -t gow2-linux-clean -f tools/linux/Test.Dockerfile .
+          for geometry in 1920x1080 2560x1080; do
+            docker run --rm --init --cpus=2 --network=none -u "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:/src:z" \
+              gow2-linux-clean xvfb-run -a -s "-screen 0 ${geometry}x24" \
+              /src/artifacts/compiler/bin/gow2-video-tool --self-test /src/artifacts/video-$geometry
+            python3 tools/linux/check_video.py artifacts/video-$geometry
+          done
+      - name: Package content check
+        run: |
+          test -f dist/GodOfWar2PC-0.1.0-linux-x86_64.tar.gz
+          cd dist
+          sha256sum -c GodOfWar2PC-0.1.0-linux-x86_64.tar.gz.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GodOfWar2PC-linux-x86_64
+          path: |
+            dist/*.tar.gz
+            dist/*.sha256
+          if-no-files-found: error

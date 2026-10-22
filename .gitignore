@@ -47,3 +47,11 @@ ps2_log.txt
 host_shot.png
 # raylib guarda capturas con F12 (screenshotNNN.png) si el runtime se compila sin desactivarlo: también son imágenes del juego
 screenshot*.png
+
+build/
+artifacts/
+dist/
+__pycache__/
+*.pyc
+*.ps2
+*.mcd

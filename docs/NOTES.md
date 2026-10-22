@@ -394,3 +394,17 @@ What needs to change in the runtime (`godofwar2` branch) and why. If it also wor
 | `df2a082` | `sysclib` `strtok` (35) with its position saved between calls; `thbase` `GetSystemTimeLow` (43); the ordinals that `thbase`/`thsemap`/`thevent`/`sifcmd`/`sifman`/`sysclib` do not handle now go to the `[IOP] unhandled import` warning (before, they failed silently and without writing `$v0`) | Yes, no risk: if GoW1's SMPD does not use them, nothing changes; the warning helps any game |
 | `b14b951` (merged into `godofwar2`, tested) | IOP `ioman` (`ps2xIOP/src/emulator/imports/iop_ioman.cpp`): `open`/`close`/`read`/`lseek` (ordinals 4/5/6/8) for `cdrom0:`, read-only, over the disc through `IopCdvd` (new `findDiscFile`/`readDiscFile`). Other devices (`host1:`) return `-ENOENT`, like on a console. Before, only `AddDrv`/`DelDrv` existed and everything else returned 0 | Yes, if any GoW1 IRX uses `ioman` (its SMPD reads by sectors with `cdvdman`, so it probably does not affect it) |
 | (proposal, not done) | `SetupThread` (syscall `0x3C`, `ps2xRuntime/src/lib/Kernel/Syscalls/System.cpp`) should fill the `$a3` argument block like the PS2 kernel does (`argc = 1`, `argv[0] = "cdrom0:\<ELF>;1"`). With that, the `TEMPORAL` override of `0x1875E0` would no longer be needed | Probably: any game that looks at `argv` |
+
+## GodOfWar2PC Linux integration (2026-10-22)
+
+This private Linux derivative uses cxldsakeb/GoW2-nativo-PS2 at its 2026-10-21 main,
+with DaniSBR1/PS2Recomp 1d9f4b696ec9f81ed2e66f93ba5c2e74d6e929ac vendored into the tree.
+The OpenGL context-sharing implementation comes from YYOzcan/Tobiichi-Port,
+retaining all GoW II hardware fixes in gs_hw_backend.cpp. The desktop launcher,
+portable GCC 13 kit, cache and shader validation are adapted from GenissonEmilio's
+ShadowOfTheColossusPC. Imported discs are checked against the exact SCUS-97481
+v1.01 executable SHA256 and both DVD layers. No game data is distributed.
+
+Linux verification results will be recorded in docs/LINUX-VALIDATION.md.
+
+Linux OpenGL reference pinned to YYOzcan/Tobiichi-Port 471c83180a8df575cff4abd3fae6c043b5096925.
