@@ -6,7 +6,7 @@ import shutil
 import tarfile
 ROOT=Path(__file__).resolve().parents[3]
 NAME='GodOfWar2PC'
-VERSION='0.1.0'
+VERSION='0.1.1'
 OUT=ROOT / 'dist' / NAME
 if OUT.exists():shutil.rmtree(OUT)
 shutil.copytree(ROOT / 'artifacts/frozen' / NAME,OUT,ignore=shutil.ignore_patterns('compiler'))
@@ -30,6 +30,9 @@ Enter/Tab: Start/Select. F10: FPS. Controle USB/Bluetooth também funciona.
 F11: alterna tela cheia na resolução do monitor e janela.
 
 Na aba Gráficos, escolha Panorâmico 16:9 (preservar proporção) ou Esticar (tela toda).
+GPU automática usa a NVIDIA dedicada quando disponível, com teste e retorno ao sistema em caso de falha.
+Resolução interna automática: 2x na NVIDIA, 1x nas demais configurações.
+Também é possível escolher 1x/2x/3x e mostrar o contador de FPS. Não exige recompilar.
 Importe fragment shaders GLSL 330 (.frag/.fs/.glsl) ou use Nitidez HD.
 Shaders são validados no driver local; mudanças valem na próxima abertura.
 São filtros da imagem final, não pacotes de texturas HD. Desativar remove o filtro.

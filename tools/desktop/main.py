@@ -13,6 +13,7 @@ import threading
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from model import Library, VERSION, assets_directory, program_directory
 from graphics import Graphics
+from performance import Performance, nvidia_offload_available
 
 if len(sys.argv) > 1 and sys.argv[1] == "--pipeline-helper":
     from pipeline import helper
@@ -97,6 +98,7 @@ class Launcher:
         self.args = args
         self.library = Library(args.data_dir)
         self.graphics = Graphics(self.library)
+        self.performance = Performance(self.library)
         self.busy = False; self.process = None; self.closing = False; self.failed = False
         provider = Gtk.CssProvider(); provider.load_from_path(str(assets_directory() / "style.css"))
         Gtk.StyleContext.add_provider_for_screen(Gdk.Screen.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
@@ -237,6 +239,31 @@ class Launcher:
         page = box(spacing=20)
         page.pack_start(label("Seu monitor. Sua imagem.", "section-title"),False,False,0)
         page.pack_start(label("Escolha como jogar. As mudanças serão usadas na próxima abertura do jogo.","muted",wrap=True),False,False,0)
+        panel = box(spacing=14,classes=("panel","graphics-panel"))
+        panel.pack_start(label("Desempenho", "panel-title"),False,False,0)
+        settings = self.performance.settings()
+        self.gpu = style(Gtk.ComboBoxText(),"graphics-select")
+        for text in ("GPU automática · preferir NVIDIA dedicada", "GPU padrão do sistema"):
+            self.gpu.append_text(text)
+        self.gpu.set_active(0 if settings["gpu"] == "auto" else 1)
+        self.gpu.get_accessible().set_name("Placa de vídeo")
+        panel.pack_start(self.gpu,False,False,0)
+        self.render_scale = style(Gtk.ComboBoxText(),"graphics-select")
+        for text in ("Resolução automática · equilibrar desempenho", "Nativa · 1× · mais desempenho",
+                     "Melhorada · 2× · mais definição", "Alta · 3× · exige mais da GPU"):
+            self.render_scale.append_text(text)
+        self.render_scale.set_active(("auto","1","2","3").index(settings["scale"]))
+        self.render_scale.get_accessible().set_name("Resolução interna")
+        panel.pack_start(self.render_scale,False,False,0)
+        self.show_fps = Gtk.CheckButton(label="Mostrar contador de FPS ao iniciar")
+        self.show_fps.set_active(settings["fps"])
+        panel.pack_start(self.show_fps,False,False,0)
+        detected = "GPU dedicada NVIDIA detectada." if nvidia_offload_available() else "Usando a seleção de GPU do sistema."
+        panel.pack_start(label(detected + "\nAutomático usa 2× com NVIDIA e 1× nas demais configurações.\nA tela cheia mantém a resolução do monitor em todas as opções.","muted",wrap=True),False,False,0)
+        self.gpu.connect("changed",self.save_performance)
+        self.render_scale.connect("changed",self.save_performance)
+        self.show_fps.connect("toggled",self.save_performance)
+        page.pack_start(panel,False,False,0)
         panel = box(spacing=16,classes=("panel","graphics-panel"))
         panel.pack_start(label("Tela e proporção", "panel-title"),False,False,0)
         fullscreen, mode = self.graphics.display()
@@ -278,6 +305,13 @@ class Launcher:
         page.pack_start(panel,False,False,0)
         page.pack_start(label("Shaders são copiados para a biblioteca e validados no seu driver.\nDepois da importação, você pode mover o arquivo original.","muted",wrap=True),False,False,0)
         return page
+
+    def save_performance(self,*_):
+        try:
+            self.performance.save(("auto","system")[self.gpu.get_active()],
+                                  ("auto","1","2","3")[self.render_scale.get_active()],self.show_fps.get_active())
+        except OSError as exc:
+            self.error("Não foi possível salvar o desempenho",str(exc))
 
     def save_graphics(self,*_):
         try:

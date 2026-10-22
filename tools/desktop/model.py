@@ -11,7 +11,7 @@ import tempfile
 from import_disc import import_disc, EXPECTED
 from pipeline import Pipeline
 
-VERSION = "0.1.0"
+VERSION = "0.1.1"
 SOURCE_ROOT = Path(__file__).resolve().parents[2]
 APPLICATION_ID = "io.github.GenissonEmilio.GodOfWar2PC"
 
@@ -87,7 +87,8 @@ class Library:
         selected = Graphics(self).selected()
         environment["GOW2_SHADER"] = str(selected) if selected else ""
         environment["GOW2_SHADER_STATUS"] = str(self.directory / "shader-status.txt")
-        return environment
+        from performance import Performance
+        return Performance(self).environment(environment)
 
     def prepare(self, source, progress=lambda text: None):
         source = Path(source).expanduser().resolve()
@@ -105,7 +106,9 @@ class Library:
         self.directory.mkdir(parents=True, exist_ok=True)
         self.player_directory.mkdir(parents=True, exist_ok=True)
         try:
-            executable = Pipeline(self.program, self.directory, self.game_environment(), progress).prepare(destination)
+            from performance import Performance
+            environment = Performance(self).checked_environment(self.game_environment(), progress)
+            executable = Pipeline(self.program, self.directory, environment, progress).prepare(destination)
         except subprocess.CalledProcessError as exc:
             raise ValueError(f"A compilação não terminou. Consulte os detalhes em:\n{self.directory / 'last-prepare.log'}") from exc
         state = {"disc": str(boot.relative_to(self.directory)), "name": source.name, "serial": "SCUS-97481", "executable": str(executable)}
@@ -138,6 +141,8 @@ class Library:
         graphics = Graphics(self)
         graphics.save_display(*graphics.display())
         environment = self.game_environment(test)
+        from performance import Performance
+        environment = Performance(self).checked_environment(environment, progress)
         executable = Pipeline(self.program, self.directory, environment, progress).prepare(boot.parent)
         self.player_directory.mkdir(parents=True, exist_ok=True)
         (self.player_directory / "memcards").mkdir(exist_ok=True)

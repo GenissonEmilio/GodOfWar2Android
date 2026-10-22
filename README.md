@@ -36,6 +36,19 @@ A aba **Gráficos** oferece janela/tela cheia na resolução do monitor, propor�
 Há um filtro de nitidez pronto. Shaders são pós-processamento, não texturas HD.
 O jogo usa a câmera panorâmica Hor+ da base upstream.
 
+Em **Gráficos → Desempenho**, a GPU automática prefere uma NVIDIA secundária com
+driver proprietário ativo. Um teste de OpenGL em janela oculta verifica a abertura;
+em caso de falha, o jogo usa a GPU do sistema. A opção **GPU padrão do sistema**
+desativa essa escolha automática. Opções PRIME definidas pelo usuário são respeitadas.
+A configuração vale apenas para este jogo.
+
+A resolução interna pode ser **1×**, **2×** ou **3×**. Automático usa 2× com offload
+NVIDIA e 1× nas demais configurações. Reduzir para 1× diminui o trabalho da GPU;
+a tela cheia continua na resolução do monitor. O contador de FPS pode iniciar
+ativado. Essas preferências preservam saves e reutilizam o jogo já compilado.
+Diagnóstico da seleção: `last-performance.json` e `last-gpu-probe.log` na pasta de dados;
+o renderizador efetivamente usado aparece em `last-game.log`.
+
 | Ação | Tecla |
 |---|---|
 | Mover | WASD |
