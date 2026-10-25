@@ -6,6 +6,8 @@
 #include <cstdio>
 #include <cstring>
 #include <vector>
+#include <sys/mman.h>
+#include <unistd.h>
 bool gowAndroidAsyncFinish(){return false;}
 int main(){
     PS2Memory memory;if(!memory.initialize())return 1;
@@ -50,14 +52,32 @@ int main(){
             ++cases;
         }
     }
+    // End each source exactly at an inaccessible page. A wider NEON load must
+    // never consume padding past the last complete VIF vector.
+    const size_t page=size_t(sysconf(_SC_PAGESIZE));
+    auto *guard=static_cast<uint8_t *>(mmap(nullptr,page*2,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANONYMOUS,-1,0));
+    if(guard==MAP_FAILED || mprotect(guard+page,page,PROT_NONE)!=0)return 3;
+    memory.vif1_regs.mode=0;
+    unsigned guarded=0;
+    for(unsigned cl:{1u,4u,17u,255u})for(unsigned format:{0x65u,0x6au,0x6du,0x6eu})for(unsigned count=1;count<=17;++count)for(bool zero:{false,true}){
+        memory.vif1_regs.cycle=0x0100|cl;
+        const unsigned components=((format>>2)&3)+1,bytes=4u>>(format&3),size=4+((components*bytes*count+3u)&~3u);
+        uint8_t *packet=guard+page-size;
+        const uint32_t command=(format<<24)|(count<<16)|(zero?0x4000:0)|1023;
+        std::memcpy(packet,&command,4);std::memset(packet+4,0x80,size-4);
+        memory.processVIF1Data(packet,size);++guarded;
+    }
+    munmap(guard,page*2);
+    std::printf("%u source-end guard-page cases: PASS\n",guarded);
     std::printf("%u V2/V3/V4-32/16/8 signed and unsigned cases: STCYCL skips, address wrap, TOPS, NUM=0, modes and mask fallback: PASS\n",cases);
-    memory.vif1_regs.mode=0;memory.vif1_regs.cycle=0x0101;
-    for(unsigned format:{0x65u,0x6au,0x6du,0x6eu}){
+    memory.vif1_regs.mode=0;
+    for(unsigned cycle:{0x0101u,0x0104u})for(unsigned format:{0x65u,0x6au,0x6du,0x6eu}){
+        memory.vif1_regs.cycle=cycle;
         const unsigned vn=(format>>2)&3,vl=format&3;
         std::vector<uint32_t> packet(1+256*(vn+1)/(1u<<vl),0x80ff017f);
         packet[0]=format<<24; // NUM=0, 256 vectors.
         const auto start=std::chrono::steady_clock::now();
         for(unsigned i=0;i<50000;++i)memory.processVIF1Data(reinterpret_cast<uint8_t*>(packet.data()),packet.size()*4);
-        std::printf("V%u-%u: 12800000 vectors in %.3f ms\n",vn+1,32u>>vl,std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count());
+        std::printf("V%u-%u CL=%u WL=%u: 12800000 vectors in %.3f ms\n",vn+1,32u>>vl,cycle&255,cycle>>8,std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count());
     }
 }

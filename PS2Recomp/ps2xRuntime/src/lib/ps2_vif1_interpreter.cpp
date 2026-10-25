@@ -9,6 +9,119 @@
 #include <cstdio>
 #include <cstdlib>
 
+#if defined(USE_SSE2NEON) && defined(__aarch64__)
+namespace
+{
+    // Expand four complete VIF vectors per load group. Signedness is selected
+    // once per run; neither path reads beyond the supplied input vector count.
+    template<bool Unsigned, bool Strided = false>
+    inline void widenVifRun(uint8_t *dest, const uint8_t *source, uint32_t count, uint32_t vn, uint32_t vl,
+                            uint32_t startVec = 0u, uint32_t step = 1u)
+    {
+        const auto store = [&](uint32_t i, uint32x4_t value)
+        {
+            const uint32_t offset = Strided ? ((startVec + i * step) & 1023u) : i;
+            vst1q_u32(reinterpret_cast<uint32_t *>(dest + offset * 16u), value);
+        };
+        const auto storeFour = [&](uint32_t i, const uint32x4x4_t &value)
+        {
+            if constexpr (Strided)
+            {
+                store(i, value.val[0]);
+                store(i + 1u, value.val[1]);
+                store(i + 2u, value.val[2]);
+                store(i + 3u, value.val[3]);
+            }
+            else
+                vst1q_u32_x4(reinterpret_cast<uint32_t *>(dest + i * 16u), value);
+        };
+        uint32_t i=0;
+        if (vn == 2u) // V3-8 preserves the existing W lane.
+        {
+            for (; i < count; ++i)
+            {
+                const uint8_t *value = source + i * 3u;
+                const uint32_t bits = uint32_t(value[0]) | (uint32_t(value[1]) << 8u) | (uint32_t(value[2]) << 16u);
+                const uint8x8_t packed = vcreate_u8(bits);
+                uint32x4_t out;
+                if constexpr (Unsigned)
+                    out = vmovl_u16(vget_low_u16(vmovl_u8(packed)));
+                else
+                    out = vreinterpretq_u32_s32(vmovl_s16(vget_low_s16(vmovl_s8(vreinterpret_s8_u8(packed)))));
+                const uint32_t offset = Strided ? ((startVec + i * step) & 1023u) : i;
+                uint32_t w;
+                std::memcpy(&w, dest + offset * 16u + 12u, sizeof(w));
+                store(i, vsetq_lane_u32(w, out, 3));
+            }
+        }
+        else if(vn==1u) // V2-16 repeats XY in ZW.
+        {
+            for(;i+4u<=count;i+=4u)
+            {
+                const uint16x8_t packed=vld1q_u16(reinterpret_cast<const uint16_t *>(source+i*4u));
+                uint32x4_t low,high;
+                if constexpr(Unsigned){low=vmovl_u16(vget_low_u16(packed));high=vmovl_u16(vget_high_u16(packed));}
+                else{low=vreinterpretq_u32_s32(vmovl_s16(vget_low_s16(vreinterpretq_s16_u16(packed))));high=vreinterpretq_u32_s32(vmovl_s16(vget_high_s16(vreinterpretq_s16_u16(packed))));}
+                const uint64x2_t l=vreinterpretq_u64_u32(low),h=vreinterpretq_u64_u32(high);
+                const uint32x4x4_t output{{vreinterpretq_u32_u64(vdupq_laneq_u64(l,0)),vreinterpretq_u32_u64(vdupq_laneq_u64(l,1)),
+                    vreinterpretq_u32_u64(vdupq_laneq_u64(h,0)),vreinterpretq_u32_u64(vdupq_laneq_u64(h,1))}};
+                storeFour(i, output);
+            }
+            for(;i<count;++i)
+            {
+                uint32_t bits;std::memcpy(&bits,source+i*4u,4);
+                const uint16x4_t packed=vreinterpret_u16_u32(vdup_n_u32(bits));
+                const uint32x4_t out=Unsigned?vmovl_u16(packed):vreinterpretq_u32_s32(vmovl_s16(vreinterpret_s16_u16(packed)));
+                store(i, out);
+            }
+        }
+        else if(vl==1u) // V4-16.
+        {
+            for(;i+4u<=count;i+=4u)
+            {
+                const uint16x8_t a=vld1q_u16(reinterpret_cast<const uint16_t *>(source+i*8u));
+                const uint16x8_t b=vld1q_u16(reinterpret_cast<const uint16_t *>(source+i*8u+16u));
+                uint32x4x4_t output;
+                if constexpr(Unsigned)output={{vmovl_u16(vget_low_u16(a)),vmovl_u16(vget_high_u16(a)),vmovl_u16(vget_low_u16(b)),vmovl_u16(vget_high_u16(b))}};
+                else output={{vreinterpretq_u32_s32(vmovl_s16(vget_low_s16(vreinterpretq_s16_u16(a)))),vreinterpretq_u32_s32(vmovl_s16(vget_high_s16(vreinterpretq_s16_u16(a)))),
+                    vreinterpretq_u32_s32(vmovl_s16(vget_low_s16(vreinterpretq_s16_u16(b)))),vreinterpretq_u32_s32(vmovl_s16(vget_high_s16(vreinterpretq_s16_u16(b))))}};
+                storeFour(i, output);
+            }
+            for(;i<count;++i)
+            {
+                const uint16x4_t packed=vld1_u16(reinterpret_cast<const uint16_t *>(source+i*8u));
+                const uint32x4_t out=Unsigned?vmovl_u16(packed):vreinterpretq_u32_s32(vmovl_s16(vreinterpret_s16_u16(packed)));
+                store(i, out);
+            }
+        }
+        else // V4-8.
+        {
+            for(;i+4u<=count;i+=4u)
+            {
+                const uint8x16_t packed=vld1q_u8(source+i*4u);
+                uint32x4x4_t output;
+                if constexpr(Unsigned){
+                    const uint16x8_t a=vmovl_u8(vget_low_u8(packed)),b=vmovl_u8(vget_high_u8(packed));
+                    output={{vmovl_u16(vget_low_u16(a)),vmovl_u16(vget_high_u16(a)),vmovl_u16(vget_low_u16(b)),vmovl_u16(vget_high_u16(b))}};
+                }else{
+                    const int16x8_t a=vmovl_s8(vget_low_s8(vreinterpretq_s8_u8(packed))),b=vmovl_s8(vget_high_s8(vreinterpretq_s8_u8(packed)));
+                    output={{vreinterpretq_u32_s32(vmovl_s16(vget_low_s16(a))),vreinterpretq_u32_s32(vmovl_s16(vget_high_s16(a))),
+                        vreinterpretq_u32_s32(vmovl_s16(vget_low_s16(b))),vreinterpretq_u32_s32(vmovl_s16(vget_high_s16(b)))}};
+                }
+                storeFour(i, output);
+            }
+            for(;i<count;++i)
+            {
+                uint32_t bits;std::memcpy(&bits,source+i*4u,4);
+                const uint8x8_t packed=vcreate_u8(bits);
+                const uint32x4_t out=Unsigned?vmovl_u16(vget_low_u16(vmovl_u8(packed))):vreinterpretq_u32_s32(vmovl_s16(vget_low_s16(vmovl_s8(vreinterpret_s8_u8(packed)))));
+                store(i, out);
+            }
+        }
+    }
+}
+#endif
+
 enum VIFCmd : uint8_t
 {
     VIF_NOP = 0x00,
@@ -263,6 +376,7 @@ void PS2Memory::processVIF1Data(const uint8_t *data, uint32_t sizeBytes)
     uint32_t pos = 0;
     static const bool traceVif = std::getenv("GOW_VIF_DIAG") != nullptr;
     static const bool statsEnabled = std::getenv("GOW_VIF_STATS") != nullptr;
+    static const bool quadWiden = std::getenv("GOW_VIF_QUAD_OFF") == nullptr;
     struct UnpackStats
     {
         struct Entry { uint64_t calls=0, vectors=0; } entries[1024]{};
@@ -669,16 +783,37 @@ void PS2Memory::processVIF1Data(const uint8_t *data, uint32_t sizeBytes)
                 const bool vectorFormat=(vn == 3u && vl <= 2u) || (vn == 1u && vl == 1u) || (vn == 2u && vl == 2u);
                 if (vectorFormat && !maskEnable && vif1_regs.mode == 0u && cl >= wl)
                 {
-                    uint32_t copied = 0u;
+#if defined(USE_SSE2NEON) && defined(__aarch64__)
+                    if (quadWiden && wl == 1u && cl > 1u &&
+                        ((vn == 1u && vl == 1u) || (vn == 2u && vl == 2u) || (vn == 3u && vl != 0u)))
+                    {
+                        // Interleaved streams write one vector then skip CL-1.
+                        // Widen groups directly into the wrapped destinations,
+                        // rather than call the contiguous kernel once per vector.
+                        if (zeroExtend)
+                            widenVifRun<true, true>(m_vu1Data, srcBase, writeVectorCount, vn, vl, vuAddr, cl);
+                        else
+                            widenVifRun<false, true>(m_vu1Data, srcBase, writeVectorCount, vn, vl, vuAddr, cl);
+                        pos += totalBytes;
+                        continue;
+                    }
+#endif
+                    uint32_t copied = 0u, cyclePos = 0u, destVec = vuAddr;
                     while (copied < writeVectorCount)
                     {
-                        const uint32_t cyclePos = copied % wl;
-                        const uint32_t destVec = (vuAddr + (copied / wl) * cl + cyclePos) & 0x3FFu;
                         uint32_t count = std::min(writeVectorCount - copied, 1024u - destVec);
                         if (cl != wl)
                             count = std::min(count, wl - cyclePos);
                         uint8_t *dest = m_vu1Data + destVec * 16u;
                         const uint8_t *source = srcBase + copied * bytesPerVector;
+#if defined(USE_SSE2NEON) && defined(__aarch64__)
+                        if(quadWiden && ((vn==1u && vl==1u) || (vn==3u && vl!=0u)))
+                        {
+                            if(zeroExtend)widenVifRun<true>(dest,source,count,vn,vl);
+                            else widenVifRun<false>(dest,source,count,vn,vl);
+                        }
+                        else
+#endif
                         if (vn == 1u)
                             for (uint32_t i=0u;i<count;++i)
                             {
@@ -717,6 +852,16 @@ void PS2Memory::processVIF1Data(const uint8_t *data, uint32_t sizeBytes)
                                 _mm_storeu_si128(reinterpret_cast<__m128i *>(dest + i * 16u), wide);
                             }
                         copied += count;
+                        destVec = (destVec + count) & 0x3FFu;
+                        if (cl != wl)
+                        {
+                            cyclePos += count;
+                            if (cyclePos == wl)
+                            {
+                                destVec = (destVec + cl - wl) & 0x3FFu;
+                                cyclePos = 0u;
+                            }
+                        }
                     }
                     pos += totalBytes;
                     continue;

@@ -24,6 +24,10 @@ jobs:
           /tmp/gow2-state-probe
       - name: Python syntax
         run: python3 -m compileall -q tools/android
+      - name: VU MAC flags against raw-bit oracle (SSE fallback)
+        run: |
+          c++ -std=c++20 -O3 -msse4.1 -ffp-contract=off -I PS2Recomp/ps2xRuntime/include tests/android/vu_mac_probe.cpp -o /tmp/gow2-vu-mac
+          /tmp/gow2-vu-mac
       - name: Conservative triangle culling against polygon clipping
         run: |
           c++ -std=c++20 -O2 -I PS2Recomp/ps2xRuntime/include tests/android/triangle_cull_probe.cpp -o /tmp/gow2-triangle-cull

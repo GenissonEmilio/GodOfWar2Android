@@ -128,6 +128,7 @@ extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivit
     setenv("GOW_PERF_FRAME_PC","0x14E380",1);
     const bool diagnostic=std::filesystem::exists(std::string(p)+"/perf-diagnostics");
     const bool counters=std::filesystem::exists(std::string(p)+"/perf-counters");
+    if(std::filesystem::exists(std::string(p)+"/perf-vif-quad-off"))setenv("GOW_VIF_QUAD_OFF","1",1);else unsetenv("GOW_VIF_QUAD_OFF");
     if(std::filesystem::exists(std::string(p)+"/perf-vif-only"))setenv("GOW_VIF_STATS","1",1);else unsetenv("GOW_VIF_STATS");
     performanceHints.store(!std::filesystem::exists(std::string(p)+"/perf-adpf-off"));
     if(std::filesystem::exists(std::string(p)+"/perf-stage-barriers"))setenv("PS2X_GS_STAGE_BARRIERS","1",1);else unsetenv("PS2X_GS_STAGE_BARRIERS");

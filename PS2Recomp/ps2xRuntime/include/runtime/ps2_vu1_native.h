@@ -425,6 +425,23 @@ namespace vu1n
     template <int M>
     VU1N_INLINE uint32_t macVal(__m128 r)
     {
+#if defined(USE_SSE2NEON) && defined(__aarch64__)
+        // DEST is constant in generated blocks. Build the final flag bits in
+        // each lane, avoiding three SSE movemasks and three reverse-bit lookups.
+        const uint32_t weights[4] = {(M & 1) ? 8u : 0u, (M & 2) ? 4u : 0u,
+                                     (M & 4) ? 2u : 0u, (M & 8) ? 1u : 0u};
+        const uint32x4_t weight = vld1q_u32(weights);
+        const uint32x4_t bits = vreinterpretq_u32_f32(r);
+        const uint32x4_t magnitude = vandq_u32(bits, vdupq_n_u32(0x7FFFFFFFu));
+        const uint32x4_t zero = vandq_u32(vceqq_u32(magnitude, vdupq_n_u32(0u)), weight);
+        const uint32x4_t sign = vandq_u32(
+            vreinterpretq_u32_s32(vshrq_n_s32(vreinterpretq_s32_u32(bits), 31)), vshlq_n_u32(weight, 4));
+        // FLT_MAX and every exponent-255 encoding count as overflow, including
+        // signed NaNs. Comparing integer magnitudes preserves their raw bits.
+        const uint32x4_t overflow = vandq_u32(
+            vcgeq_u32(magnitude, vdupq_n_u32(0x7F7FFFFFu)), vshlq_n_u32(weight, 12));
+        return vaddvq_u32(vorrq_u32(zero, vorrq_u32(sign, overflow)));
+#else
         const __m128i b = _mm_castps_si128(r);
         const __m128i expMask = _mm_set1_epi32(0x7F800000);
         const int z = _mm_movemask_ps(_mm_castsi128_ps(_mm_cmpeq_epi32(_mm_and_si128(b, _mm_set1_epi32(0x7FFFFFFF)), _mm_setzero_si128()))) & M;
@@ -433,6 +450,7 @@ namespace vu1n
         const __m128i big = _mm_cmpeq_epi32(_mm_and_si128(b, _mm_set1_epi32(0x7FFFFFFF)), _mm_set1_epi32(0x7F7FFFFF));
         const int o = _mm_movemask_ps(_mm_castsi128_ps(_mm_or_si128(_mm_cmpeq_epi32(_mm_and_si128(b, expMask), expMask), big))) & M;
         return static_cast<uint32_t>(kRev4[z] | (kRev4[sg] << 4) | (kRev4[o] << 12));
+#endif
     }
     VU1N_INLINE uint32_t clipVal(const VU1State &s, int fs, int ft, uint32_t prev)
     {
