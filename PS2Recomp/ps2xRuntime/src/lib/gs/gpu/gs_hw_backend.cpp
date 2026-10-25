@@ -399,8 +399,9 @@ void main()
 )";
     const char *kShuffleFs = R"(#version 430 core
 flat in vec2 vOff;
-out vec4 oColor;
+layout(location = 0) out vec4 oColor;
 uniform sampler2D uSrc;
+uniform int uSelfFetch;
 uniform int uSrcZ;     // source is a depth buffer (Z words)
 uniform float uZMax;
 uniform int uHs, uHd;  // source / destination halfword (0 low = R,G; 1 high = B,A)
@@ -410,6 +411,10 @@ void main()
 {
     ivec2 p = ivec2(gl_FragCoord.xy) + ivec2(round(vOff * uScale));
     vec4 c;
+#ifdef GOW_FRAMEBUFFER_FETCH
+    if (uSelfFetch != 0) c = oColor;
+    else
+#endif
     if (uSrcZ != 0)
     {
         uint z = uint(clamp(texelFetch(uSrc, p, 0).r, 0.0, 1.0) * uZMax + 0.5);
@@ -540,12 +545,12 @@ struct GSHwBackend::Impl
     GLint locIndexed = -1, locLinear = -1, locWrap = -1, locIdxPalette = -1;
     GLint locSwBlend = -1, locColClamp = -1, locAbcd = -1, locFix = -1, locZAlias = -1, locZAliasWrite = -1, locZAliasMax = -1;
 
-    GLuint tableTex = 0, paletteTex = 0;
+    GLuint tableTex = 0, paletteTex = 0, mobileNeutral = 0;
     GLuint presentProgram = 0, presentVao = 0, presentFbo = 0, presentTex = 0;
     GLint locPresentSrc = -1, locPresentOffset = -1, locPresentEdge = -1;
     uint32_t presentW = 0, presentH = 0;
     GLuint shuffleProgram = 0, shuffleVao = 0, shuffleVbo = 0;
-    GLint locShTexa = -1;
+    GLint locShTexa = -1, locShSelfFetch = -1;
     GLint locShInvSize = -1, locShSrc = -1, locShSrcZ = -1, locShZMax = -1, locShHs = -1, locShHd = -1, locShScale = -1;
     // queued shuffle sprites of one state, as owner-space quads per (source half, destination half)
     std::vector<ShuffleVertex> shuffleQuads[4];
@@ -684,7 +689,7 @@ struct GSHwBackend::Impl
                 size_t at = 0; while ((at = source.find(a, at)) != std::string::npos) { source.replace(at,a.size(),b); at += b.size(); }
             };
             std::string header="#version 320 es\n";
-            if (mobileFetch && type==kFragmentShader) header+="#extension GL_EXT_shader_framebuffer_fetch : require\n";
+            if (mobileFetch && type==kFragmentShader) header+="#extension GL_EXT_shader_framebuffer_fetch : require\n#define GOW_FRAMEBUFFER_FETCH 1\n";
             header+="precision highp float;\nprecision highp int;\nprecision highp usampler2D;";
             replaceAll("#version 430 core", header);
             if (mobileFetch && type==kFragmentShader)
@@ -788,7 +793,7 @@ struct GSHwBackend::Impl
         g.Uniform1i(locTex,0); g.Uniform1i(locRtColor,1); g.Uniform1i(locTables,2);
         g.Uniform1i(locPalette,3); g.Uniform1i(locDest,4); g.Uniform1i(locIdxPalette,5);
         GLuint neutral = 0; const uint8_t white[]{255,255,255,255};
-        g.GenTextures(1,&neutral); g.BindTexture(kTexture2D,neutral);
+        g.GenTextures(1,&neutral); mobileNeutral=neutral; g.BindTexture(kTexture2D,neutral);
         g.TexImage2D(kTexture2D,0,kRgba8,1,1,0,kRgba,kUnsignedByte,white);
         g.TexParameteri(kTexture2D,kTextureMinFilter,kNearest);
         g.TexParameteri(kTexture2D,kTextureMagFilter,kNearest);
@@ -807,6 +812,7 @@ struct GSHwBackend::Impl
                 g.LinkProgram(shuffleProgram);
                 const auto sloc = [&](const char *name) { return g.GetUniformLocation(shuffleProgram, name); };
                 locShInvSize = sloc("uInvSize"); locShSrc = sloc("uSrc"); locShSrcZ = sloc("uSrcZ"); locShZMax = sloc("uZMax");
+                locShSelfFetch = sloc("uSelfFetch");
                 locShHs = sloc("uHs"); locShHd = sloc("uHd"); locShScale = sloc("uScale"); locShTexa = sloc("uTexa");
                 g.GenVertexArrays(1, &shuffleVao);
                 g.BindVertexArray(shuffleVao);
@@ -1636,14 +1642,16 @@ struct GSHwBackend::Impl
         g.DepthMask(kFalse);
         g.UseProgram(shuffleProgram);
         g.ActiveTexture(kTexture0);
-        g.BindTexture(kTexture2D, shuffleSrcZ ? src.depth : sampleColor(src));
+        const bool selfFetch=mobileFetch && &src==&dst && !shuffleSrcZ;
+        g.Uniform1i(locShSelfFetch,selfFetch?1:0);
+        g.BindTexture(kTexture2D, selfFetch ? mobileNeutral : shuffleSrcZ ? src.depth : sampleColor(src));
         g.Uniform1i(locShSrc, 0);
         g.Uniform1i(locShSrcZ, shuffleSrcZ ? 1 : 0);
         g.Uniform1f(locShZMax, zMaxFor(c.zbuf.psm));
         g.Uniform1f(locShScale, scale);
         g.Uniform4i(locShTexa, shuffleState.texa.ta0 >> 7, shuffleState.texa.ta1 >> 7, shuffleState.texa.aem ? 1 : 0, 0);
         g.Uniform2f(locShInvSize, 1.0f / dst.pxW, 1.0f / dst.pxH);
-        if (&src == &dst)
+        if (&src == &dst && !selfFetch)
             feedbackBarrier(dst);
         g.BindVertexArray(shuffleVao);
         g.BindBuffer(kArrayBuffer, shuffleVbo);

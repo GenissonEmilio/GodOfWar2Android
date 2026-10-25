@@ -11,7 +11,7 @@ final class TouchOverlay extends View {
     private final List<Control> controls=new ArrayList<>();
     private final Map<Integer,Control> owners=new HashMap<>();
     private final Map<Integer,PointF> points=new HashMap<>();
-    float gameFps;
+    float gameFps; boolean movie;
     boolean editing;private boolean controller;private Control selected; private int presetApplied=-1;
     TouchOverlay(GameActivity activity){super(activity);game=activity;setContentDescription("Controle touch de God of War II");setFocusable(true);resetLayout();}
     void settingsChanged(){if(presetApplied!=game.prefs().getInt("preset",0))resetLayout();invalidate();}
@@ -32,7 +32,8 @@ final class TouchOverlay extends View {
     private float radius(Control c){return getHeight()*(c.name.equals("MOVER")||c.name.equals("ESQUIVA")?.12f:.065f)*game.prefs().getInt("size",100)/100f*c.r;}
     @Override protected void onDraw(Canvas canvas){super.onDraw(canvas);float w=getWidth(),h=getHeight();
         p.setStyle(Paint.Style.FILL);p.setColor(0xAA191313);canvas.drawRoundRect(w/2-45,12,w/2+45,64,16,16,p);p.setColor(MobileUi.GOLD);p.setTextSize(30);p.setTextAlign(Paint.Align.CENTER);canvas.drawText("Ⅱ",w/2,49,p);
-        p.setColor(MobileUi.GOLD);p.setTextSize(20);canvas.drawText(String.format(java.util.Locale.ROOT,"Jogo: %.1f FPS",gameFps),getWidth()-105,35,p);
+        p.setColor(MobileUi.GOLD);p.setTextSize(20);canvas.drawText(String.format(java.util.Locale.ROOT,"%s: %.1f FPS",movie?"Vídeo":"Jogo",gameFps),getWidth()-105,35,p);
+        if(movie && !editing)return;
         if(controller && game.prefs().getBoolean("autohide",true) && !editing)return;
         int alpha=game.prefs().getInt("opacity",65)*255/100;
         for(Control c:controls){float x=c.x*w,y=c.y*h,r=radius(c);p.setColor((alpha<<24)|0x221718);p.setStyle(Paint.Style.FILL);canvas.drawCircle(x,y,r,p);p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(2);p.setColor(c==selected&&editing?Color.WHITE:(alpha<<24)|0xDCB870);canvas.drawCircle(x,y,r,p);p.setStyle(Paint.Style.FILL);p.setTextSize(r*(c.name.length()>2?.34f:.75f));canvas.drawText(c.name,x,y+r*.23f,p);

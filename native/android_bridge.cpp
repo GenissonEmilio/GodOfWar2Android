@@ -11,7 +11,10 @@
 #include <unistd.h>
 namespace {
 std::atomic<uint64_t> input{0x808080800000ULL};
+std::atomic<uint16_t> pendingPress{0};
 std::atomic<bool> paused{false},backRequested{false};
+std::atomic<bool> movieActive{false};
+std::atomic<uint64_t> movieFrames{0};
 std::atomic<int> volume{80}, frameLimit{60};
 std::atomic<int> screenMode{0};
 std::atomic<float> deadzone{0.14f}, sensitivity{1.0f};
@@ -24,7 +27,7 @@ uint8_t axis(float v) {
 }
 bool gowAndroidPaused() { return paused.load(); }
 void gowAndroidReadPad(uint8_t *data) {
-    const auto state=paused.load()?0x808080800000ULL:input.load();
+    const auto state=paused.load()?0x808080800000ULL:(input.load()|pendingPress.exchange(0));
     const auto buttons=static_cast<uint16_t>(~state);
     data[2]=buttons&255; data[3]=buttons>>8;
     for (int i=0;i<4;++i) data[4+i]=(state>>(16+8*i))&255;
@@ -57,9 +60,10 @@ extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivit
     uint64_t state=static_cast<uint16_t>(buttons);
     const uint8_t axes[]{axis(rx),axis(ry),axis(lx),axis(ly)};
     for(int i=0;i<4;++i) state|=uint64_t(axes[i])<<(16+i*8);
-    input.store(state);
+    const auto previous=input.exchange(state);
+    pendingPress.fetch_or(static_cast<uint16_t>(state & ~previous));
 }
-extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivity_nativePause(JNIEnv *,jclass,jboolean value) { paused.store(value); input.store(0x808080800000ULL); if (IsAudioDeviceReady()) SetMasterVolume(value?0.0f:volume.load()/100.0f); }
+extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivity_nativePause(JNIEnv *,jclass,jboolean value) { paused.store(value); input.store(0x808080800000ULL); pendingPress.store(0); if (IsAudioDeviceReady()) SetMasterVolume(value?0.0f:volume.load()/100.0f); }
 extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivity_nativeSettings(JNIEnv *,jclass,jint vol,jint fps,jfloat dz,jfloat gain) {
     volume.store(std::clamp(int(vol),0,100)); frameLimit.store(fps==30?30:60);
     deadzone.store(std::clamp(dz,0.0f,0.5f)); sensitivity.store(std::clamp(gain,0.1f,3.0f));
@@ -72,3 +76,7 @@ extern "C" JNIEXPORT jlong JNICALL Java_io_github_genissonemilio_gow2_GameActivi
 extern "C" void glDrawBuffersEXT(GLsizei count,const GLenum *buffers) { glDrawBuffers(count,buffers); }
 
 extern "C" JNIEXPORT jboolean JNICALL Java_io_github_genissonemilio_gow2_GameActivity_nativeConsumeBack(JNIEnv *,jclass) { return backRequested.exchange(false); }
+
+void gowAndroidMovieFrame() { movieActive.store(true);movieFrames.fetch_add(1); }
+void gowAndroidMovieEnd() { movieActive.store(false); }
+extern "C" JNIEXPORT jlong JNICALL Java_io_github_genissonemilio_gow2_GameActivity_nativeMovieFrames(JNIEnv *,jclass) { return movieActive.load()?static_cast<jlong>(movieFrames.load()):-1; }

@@ -14,6 +14,8 @@
 #include <cstdio>
 #include <mutex>
 #include <string_view>
+#include <unordered_map>
+#include <cstring>
 
 // GOW-Port: presentación compartida (PS2X_GS_DIRECT_PRESENT, activa por defecto): el contexto del GS comparte
 // texturas con el de la ventana y entrega cada cuadro como textura, sin leerlo a la RAM. Los huecos, los fences y la
@@ -88,6 +90,32 @@ namespace
         loadWith(proc, api.Flush, "glFlush", missing);
         return missing.empty();
     }
+
+#if defined(__ANDROID__)
+    // The GS worker owns these programs. Skip redundant driver uniform updates;
+    // raylib's host context uses its own API and never shares this cache.
+    thread_local GSGL::Api uniformDriver;
+    thread_local GSGL::GLuint uniformProgram = 0;
+    struct UniformValue { std::array<uint32_t,4> words{}; size_t bytes = 0; };
+    thread_local std::unordered_map<uint64_t,UniformValue> uniformValues;
+    bool changedUniform(GSGL::GLint location,const void *value,size_t bytes) {
+        if(location<0) return false;
+        const uint64_t key=(uint64_t(uniformProgram)<<32)|uint32_t(location);
+        auto &previous=uniformValues[key];
+        if(previous.bytes==bytes && std::memcmp(previous.words.data(),value,bytes)==0)return false;
+        std::memcpy(previous.words.data(),value,bytes);previous.bytes=bytes;return true;
+    }
+    void cacheUniforms(GSGL::Api &api) {
+        uniformDriver=api;uniformProgram=0;uniformValues.clear();
+        api.UseProgram=[](GSGL::GLuint p){if(p!=uniformProgram){uniformDriver.UseProgram(p);uniformProgram=p;}};
+        api.Uniform1i=[](GSGL::GLint l,GSGL::GLint x){if(changedUniform(l,&x,sizeof(x)))uniformDriver.Uniform1i(l,x);};
+        api.Uniform1ui=[](GSGL::GLint l,GSGL::GLuint x){if(changedUniform(l,&x,sizeof(x)))uniformDriver.Uniform1ui(l,x);};
+        api.Uniform1f=[](GSGL::GLint l,float x){if(changedUniform(l,&x,sizeof(x)))uniformDriver.Uniform1f(l,x);};
+        api.Uniform2f=[](GSGL::GLint l,float x,float y){const float v[]{x,y};if(changedUniform(l,v,sizeof(v)))uniformDriver.Uniform2f(l,x,y);};
+        api.Uniform4f=[](GSGL::GLint l,float x,float y,float z,float w){const float v[]{x,y,z,w};if(changedUniform(l,v,sizeof(v)))uniformDriver.Uniform4f(l,x,y,z,w);};
+        api.Uniform4i=[](GSGL::GLint l,GSGL::GLint x,GSGL::GLint y,GSGL::GLint z,GSGL::GLint w){const GSGL::GLint v[]{x,y,z,w};if(changedUniform(l,v,sizeof(v)))uniformDriver.Uniform4i(l,x,y,z,w);};
+    }
+#endif
 
     // Todas las funciones del contexto del GS; missing recoge solo las obligatorias.
     void loadContextApi(ProcLoader proc, GSGL::Api &a, std::string &missing)
@@ -215,6 +243,9 @@ namespace
         if (!a.MaxShaderCompilerThreads)
             load(a.MaxShaderCompilerThreads, "glMaxShaderCompilerThreadsKHR", parallelMissing);
         a.graphics = graphicsMissing.empty();
+#if defined(__ANDROID__)
+        cacheUniforms(a);
+#endif
     }
 }
 

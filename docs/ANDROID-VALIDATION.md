@@ -58,6 +58,17 @@ Data dos testes: 24 de outubro de 2026 (America/Fortaleza).
   de 8–16 FPS no menu. Esses valores são observações iniciais, com desempenho
   ainda insuficiente, e não um benchmark da campanha.
 
+- New Game e seleção de dificuldade foram acionados pelo botão touch. O vídeo
+  de abertura foi visto no aparelho; depois o jogo entrou na primeira sala de
+  Rhodes, exibindo Kratos, inimigos, HUD e o tutorial de combate. Essa é evidência
+  de entrada na primeira área, não de campanha completa ou combate fluido.
+- O controle de opacidade foi alterado no menu e o valor persistiu após atualizar
+  o APK; o diálogo pausou a execução. O editor de posições ainda precisa de
+  uma validação funcional completa.
+- O teste sintético foi ampliado com uma cópia CT16 entre canais do mesmo alvo:
+  produziu RGB (150,150,150) a partir do resultado anterior. Passou no caminho
+  com framebuffer fetch e no fallback por cópias. Sem erros GL.
+
 ## Critérios restantes
 
 - Build e instalação do APK final; carregamento de todos os shaders no driver móvel.

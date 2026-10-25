@@ -1,3 +1,6 @@
+#if defined(__ANDROID__)
+#include "android_bridge.h"
+#endif
 #include "Common.h"
 #include "MPEG.h"
 #include "runtime/ee_scheduler.h"
@@ -1903,6 +1906,9 @@ namespace ps2_stubs
                 return;
             }
 
+#if defined(__ANDROID__)
+            gowAndroidMovieFrame();
+#endif
             const uint32_t width = static_cast<uint32_t>(frame.width);
             const uint32_t height = static_cast<uint32_t>(frame.height);
             const uint32_t outWidth = align16(width);
@@ -2308,6 +2314,9 @@ namespace ps2_stubs
 
     void sceMpegDelete(uint8_t *rdram, R5900Context *ctx, PS2Runtime *runtime)
     {
+#if defined(__ANDROID__)
+        gowAndroidMovieEnd();
+#endif
         (void)rdram;
 
         const uint32_t mpegAddr = getRegU32(ctx, 4);

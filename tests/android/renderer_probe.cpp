@@ -7,9 +7,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cmath>
-static bool pixel(const PresentationFrame &frame,int r,int g,int b) {
+static bool pixel(const PresentationFrame &frame,int r,int g,int b,unsigned x=16,unsigned y=16) {
     if(frame.width<32 || frame.height<32 || frame.pixels.size()<frame.width*frame.height*4u)return false;
-    size_t at=(std::max(frame.width,640u)*16u+16u)*4u;
+    size_t at=(std::max(frame.width,640u)*y+x)*4u;
     std::printf("pixel %u,%u,%u expected %d,%d,%d; %ux%u\n",frame.pixels[at],frame.pixels[at+1],frame.pixels[at+2],r,g,b,frame.width,frame.height);
     return std::abs(int(frame.pixels[at])-r)<=2 && std::abs(int(frame.pixels[at+1])-g)<=2 && std::abs(int(frame.pixels[at+2])-b)<=2;
 }
@@ -41,6 +41,13 @@ int main(){
     for(auto &v:batch.vertices){v.r=100;v.g=200;v.b=80;v.a=64;}
     backend.Submit(batch);backend.Flush();
     ok=pixel(backend.Present(request),150,150,60)&&ok;
-    std::printf("Production GLES raster + shader blending: %s (GL error %x)\n",ok?"PASS":"FAIL",glGetError());
+    GSPrimitiveBatch shuffle=batch;shuffle.state.prim.abe=false;shuffle.state.prim.tme=true;shuffle.state.prim.fst=true;
+    shuffle.state.context.frame.psm=2;shuffle.state.context.tex0.psm=2;shuffle.state.context.tex0.tbw=1;
+    shuffle.state.context.tex0.tfx=1;shuffle.state.textureWidth=64;shuffle.state.textureHeight=64;shuffle.state.texa.ta1=128;
+    shuffle.vertices[0].x=8;shuffle.vertices[0].y=0;shuffle.vertices[1].x=16;shuffle.vertices[1].y=8;
+    shuffle.vertices[0].u=0;shuffle.vertices[0].v=0;shuffle.vertices[1].u=128;shuffle.vertices[1].v=128;
+    backend.Submit(shuffle);backend.Flush();
+    ok=pixel(backend.Present(request),150,150,150,4,4)&&ok;
+    std::printf("Production GLES raster, shader blend and channel shuffle: %s (GL error %x)\n",ok?"PASS":"FAIL",glGetError());
     return ok?0:20;
 }

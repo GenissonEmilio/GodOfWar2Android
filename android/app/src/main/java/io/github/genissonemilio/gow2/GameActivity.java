@@ -10,10 +10,23 @@ public final class GameActivity extends NativeActivity {
     static native void nativeInput(int buttons,float lx,float ly,float rx,float ry);
     static native void nativePause(boolean paused);
     static native long nativeFrames();
+    static native long nativeMovieFrames();
     static native boolean nativeConsumeBack();
     private final Handler meter=new Handler(android.os.Looper.getMainLooper());
     private long lastFrames,lastTime;
-    private final Runnable sample=new Runnable(){public void run(){if(nativeConsumeBack())onBackPressed();long now=android.os.SystemClock.elapsedRealtime(),frames=nativeFrames();if(touch!=null && lastTime>0){touch.gameFps=(frames-lastFrames)*1000f/(now-lastTime);touch.invalidate();}lastTime=now;lastFrames=frames;meter.postDelayed(this,1000);}};
+    private boolean lastMovie;
+    private final Runnable sample=new Runnable(){public void run(){
+        if(nativeConsumeBack())onBackPressed();
+        long now=android.os.SystemClock.elapsedRealtime(),videoFrames=nativeMovieFrames();boolean movie=videoFrames>=0;
+        long frames=movie?videoFrames:nativeFrames();
+        if(touch!=null){
+            if(movie!=lastMovie){touch.clear();nativeInput(0,0,0,0,0);}
+            touch.movie=movie;
+            if(lastTime>0 && movie==lastMovie)touch.gameFps=(frames-lastFrames)*1000f/(now-lastTime);
+            touch.invalidate();
+        }
+        lastTime=now;lastFrames=frames;lastMovie=movie;meter.postDelayed(this,1000);
+    }};
     static native void nativeSettings(int volume,int fps,float deadzone,float sensitivity);
     private TouchOverlay touch; private boolean menu,background,childMenu;
     private int padButtons; private float lx,ly,rx,ry; private boolean controller;
