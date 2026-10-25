@@ -23,7 +23,8 @@ Os fontes gerados do jogo e seus arquivos de disco ficam locais.
 - Presets para 2, 3 ou 4 dedos; editor de posições por arraste, tamanho por botão e persistência do layout.
 - Menu de pausa sobre o jogo com opacidade, tamanho, zona morta, sensibilidade,
   volume e limite da apresentação em 30/60 FPS. A renderização assíncrona é
-  experimental e vem desativada.
+  experimental e vem desativada. O processamento paralelo também é opcional e
+  exige reabrir o jogo.
 - Resolução interna 1×, 2× ou 3× aplicada ao reiniciar o jogo.
 - Entrada de controles Android por eixos, gatilhos e botões; ocultação automática
   do touch. Contador baseado nos frames do jogo.
@@ -76,6 +77,15 @@ privadas do Android. Não limpe os dados do aplicativo para preservar os saves.
 javac -d /tmp/gow2-check android/app/src/main/java/io/github/genissonemilio/gow2/DiscImporter.java tests/android/DiscImporterTest.java
 java -cp /tmp/gow2-check io.github.genissonemilio.gow2.DiscImporterTest
 python3 -m unittest discover -s tests/linux -v
+```
+
+Os probes ARM64 usam a biblioteca de produção e dados sintéticos; exigem SDK
+local, build nativo e aparelho conectado por ADB:
+
+```sh
+tools/android/probe_frontend.sh
+tools/android/probe_queue.sh
+tools/android/probe_renderer.sh
 ```
 
 ## Créditos

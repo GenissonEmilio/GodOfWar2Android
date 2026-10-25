@@ -10,3 +10,4 @@ compiler="$ANDROID_HOME/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/
   -lEGL -lGLESv3 -llog -landroid -o artifacts/renderer-probe
 "$ANDROID_HOME/platform-tools/adb" push artifacts/renderer-probe /data/local/tmp/gow2-renderer-probe
 "$ANDROID_HOME/platform-tools/adb" shell /data/local/tmp/gow2-renderer-probe
+"$ANDROID_HOME/platform-tools/adb" shell GOW_GLES_FETCH_OFF=1 /data/local/tmp/gow2-renderer-probe

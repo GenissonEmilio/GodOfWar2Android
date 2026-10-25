@@ -28,6 +28,7 @@ public:
     void Reset() override;
 
     void Submit(const GSPrimitiveBatch &batch) override;
+    void CommandStream(const std::function<void()> &commands) override;
     void LoadClut(const GSTex0Reg &tex0, const GSTexClutReg &texclut) override;
 
     void BeginTransfer(const GSTransferCommand &command) override;
@@ -70,6 +71,7 @@ private:
     };
 
     void Enqueue(Op op, const void *payload, uint32_t size);
+    std::unique_lock<std::mutex> LockProducer() const;
     void PublishLocked();
     void Drain() const;
     void RunOnWorker(const std::function<void()> &function) const;

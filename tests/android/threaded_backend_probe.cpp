@@ -2,6 +2,8 @@
 #include <atomic>
 #include <cstdio>
 #include <cstdlib>
+#include <stdexcept>
+#include <thread>
 #include <vector>
 static std::atomic<bool> asyncMode{true};
 bool gowAndroidAsyncFinish(){return asyncMode.load();}
@@ -33,5 +35,25 @@ int main(){
     for(int i=1;i<=200;++i)if(record->operations[2*i-2]!=i || record->operations[2*i-1]!=-i)return 2;
     asyncMode.store(false);queue.Sync(GSSyncReason::Finish);
     if(record->finished.load()!=201)return 3;
-    std::puts("200 asynchronous draws/FINISH remain ordered, readback drains the queue, synchronous FINISH waits: PASS");
+    auto submit=[&](int id){GSPrimitiveBatch b{};b.vertexCount=1;b.vertices[0].x=id;b.state.context.alpha=id%7;queue.Submit(b);};
+    std::thread competing;
+    std::atomic<bool> started{false};
+    queue.CommandStream([&]{
+        competing=std::thread([&]{started.store(true);submit(9001);});
+        while(!started.load())std::this_thread::yield();
+        for(int i=1000;i<6000;++i){
+            submit(i);
+            if(i==3000)queue.CommandStream([&]{queue.Sync(GSSyncReason::Finish);});
+        }
+        // A synchronous worker call must also complete while we own the stream.
+        queue.ReadVram(0,0,0,0,0);
+    });
+    competing.join();queue.ReadVram(0,0,0,0,0);
+    size_t at=401;
+    for(int i=1000;i<6000;++i){if(record->operations[at++]!=i)return 4;if(i==3000 && record->operations[at++]!=-i)return 5;}
+    if(record->operations[at++]!=9001 || at!=record->operations.size())return 6;
+    try {queue.CommandStream([&]{throw std::runtime_error("scope test");});}catch(const std::runtime_error&){}
+    submit(9002);queue.ReadVram(0,0,0,0,0);
+    if(record->operations.back()!=9002)return 7;
+    std::puts("Draw/FINISH order, readback, chunk backpressure, nested streams, competing producer and exception cleanup: PASS");
 }

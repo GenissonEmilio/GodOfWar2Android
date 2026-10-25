@@ -75,7 +75,7 @@ void gowAndroidFrame() {
         if(key==KEY_BACK || key==KEY_ESCAPE)backRequested.store(true);
     SetExitKey(KEY_NULL);
 }
-extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivity_nativeConfigure(JNIEnv *env,jclass,jstring path,jint scale) {
+extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivity_nativeConfigure(JNIEnv *env,jclass,jstring path,jint scale,jboolean parallel) {
     input.store(0x808080800000ULL);physicalInput.store(0x808080800000ULL);
     pendingPress.store(0);physicalPress.store(0);paused.store(false);backRequested.store(false);shuttingDown.store(false);appliedLimit.store(-1);
     controllerConnected.store(false);controllerReady.store(false);movieActive.store(false);movieFrames.store(0);
@@ -85,6 +85,8 @@ extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivit
     setenv("GOW2_BOOT",boot.c_str(),1);
     setenv("GOW_MC0",(std::string(p)+"/memcards/Mcd001.ps2").c_str(),1);
     setenv("PS2X_GS_HW_SCALE",std::to_string(std::clamp(int(scale),1,3)).c_str(),1);
+    setenv("PS2X_GS_WORKER",parallel?"1":"0",1);
+    setenv("PS2X_GS_PIPELINE",parallel?"1":"0",1);
     setenv("GOW_PERF_FRAME_PC","0x14E380",1);
     const bool diagnostic=std::filesystem::exists(std::string(p)+"/perf-diagnostics");
     setenv("GOW_PERF_DIAG",diagnostic?"1":"frames",1);

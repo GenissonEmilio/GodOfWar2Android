@@ -719,7 +719,7 @@ bool PS2Runtime::syncCoreSubsystems()
     // GOW-Port: cada flujo conserva su cursor GIF, incluso cuando otro PATH lo interrumpe.
     m_gifArbiter.reset();
     // GOW-Port: with the GS worker, the GS frontend runs on its own stage thread behind VU1 (gs_stage.h).
-    static const bool gsPipeline = []
+    const bool gsPipeline = []
     {
         const char *worker = std::getenv("PS2X_GS_WORKER");
         const char *pipeline = std::getenv("PS2X_GS_PIPELINE");
@@ -733,7 +733,7 @@ bool PS2Runtime::syncCoreSubsystems()
                                 if (m_eeScheduler && (m_memory.gs().csr.load(std::memory_order_acquire) & 0x3u) != 0u)
                                     m_eeScheduler->postEvent(EeEvent{EeEventType::ExternalWake, 0xFFFFFFFFu, ~0ull});
                             });
-    m_gifArbiter.setProcessPathPacketFn([this](GifPathId path, const uint8_t *data, uint32_t size)
+    m_gifArbiter.setProcessPathPacketFn([this, gsPipeline](GifPathId path, const uint8_t *data, uint32_t size)
                                     {
                                         if (gsPipeline && m_memory.onGsWorkerThread())
                                             ps2_gs_stage::push(path, data, size);

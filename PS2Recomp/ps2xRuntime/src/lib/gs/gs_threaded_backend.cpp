@@ -28,6 +28,16 @@ namespace
     constexpr size_t kMaxPendingChunks = 256u;
     std::atomic<bool> s_enabledByDefault{false};
 
+    struct ProducerScope;
+    thread_local ProducerScope *s_producerScope = nullptr;
+    struct ProducerScope
+    {
+        const GSThreadedBackend *backend;
+        ProducerScope *previous = s_producerScope;
+        explicit ProducerScope(const GSThreadedBackend *owner) : backend(owner) { s_producerScope = this; }
+        ~ProducerScope() { s_producerScope = previous; }
+    };
+
     bool discardDraws()
     {
         static const bool discard = []
@@ -101,9 +111,26 @@ void GSThreadedBackend::SetEnabledByDefault(bool enabled)
 }
 
 
+std::unique_lock<std::mutex> GSThreadedBackend::LockProducer() const
+{
+    std::unique_lock<std::mutex> lock(m_producerMutex, std::defer_lock);
+    for (auto *scope = s_producerScope; scope; scope = scope->previous)
+        if (scope->backend == this)
+            return lock;
+    lock.lock();
+    return lock;
+}
+
+void GSThreadedBackend::CommandStream(const std::function<void()> &commands)
+{
+    auto lock = LockProducer();
+    ProducerScope scope(this);
+    commands();
+}
+
 void GSThreadedBackend::Enqueue(Op op, const void *payload, uint32_t size)
 {
-    std::lock_guard<std::mutex> lock(m_producerMutex);
+    auto lock = LockProducer();
     const uint32_t csr = _mm_getcsr();
     if (csr != m_lastMxcsr)
     {
@@ -116,12 +143,13 @@ void GSThreadedBackend::Enqueue(Op op, const void *payload, uint32_t size)
     }
     const auto append = [&](Op kind, const void *bytes, uint32_t length)
     {
-        uint8_t header[5];
-        header[0] = static_cast<uint8_t>(kind);
-        std::memcpy(header + 1u, &length, sizeof(length));
-        m_open.insert(m_open.end(), header, header + sizeof(header));
+        const size_t offset = m_open.size();
+        m_open.resize(offset + 5u + length);
+        uint8_t *record = m_open.data() + offset;
+        record[0] = static_cast<uint8_t>(kind);
+        std::memcpy(record + 1u, &length, sizeof(length));
         if (length)
-            m_open.insert(m_open.end(), static_cast<const uint8_t *>(bytes), static_cast<const uint8_t *>(bytes) + length);
+            std::memcpy(record + 5u, bytes, length);
     };
     if (op == Op::Submit && m_compactQueue)
     {
@@ -169,7 +197,7 @@ void GSThreadedBackend::Drain() const
     auto *self = const_cast<GSThreadedBackend *>(this);
     uint64_t target = 0u;
     {
-        std::lock_guard<std::mutex> lock(m_producerMutex);
+        auto lock = LockProducer();
         self->PublishLocked();
         std::lock_guard<std::mutex> queueLock(m_queueMutex);
         target = m_published;
@@ -367,7 +395,7 @@ PresentationFrame GSThreadedBackend::Present(const GSPresentationRequest &reques
     if (UsesSharedPresentation() && !request.forceReadback)
     {
         Enqueue(Op::Present, &request, sizeof(request));
-        std::lock_guard<std::mutex> lock(m_producerMutex);
+        auto lock = LockProducer();
         PublishLocked();
         return {};
     }

@@ -179,7 +179,7 @@ private:
 
     void processImageData(const uint8_t *data, uint32_t sizeBytes);
     bool tryProcessNativeImageUploadPacket(const uint8_t *data, uint32_t sizeBytes);
-    GSPrimitiveBatch buildDrawBatch(int vertexCount) const;
+    const GSPrimitiveBatch &buildDrawBatch(int vertexCount);
     void updatePreferredDisplaySourceForDraw(const GSPrimitiveBatch &batch);
     GSPresentationRequest buildPresentationRequestUnlocked() const;
 
@@ -237,6 +237,8 @@ private:
     GSVertex m_vtxQueue[kMaxVerts];
     int m_vtxCount = 0;
     int m_vtxIndex = 0;
+    GSPrimitiveBatch m_drawBatch{};
+    bool m_drawStateDirty = true;
 
     std::vector<uint8_t> m_displaySnapshot;
     std::mutex m_snapshotMutex;

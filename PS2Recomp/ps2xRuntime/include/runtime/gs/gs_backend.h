@@ -3,6 +3,7 @@
 #include "runtime/gs/gs_types.h"
 
 #include <cstdint>
+#include <functional>
 #include <vector>
 
 class GSRasterBackend
@@ -14,6 +15,9 @@ public:
     virtual void Reset() = 0;
 
     virtual void Submit(const GSPrimitiveBatch &batch) = 0;
+    // Keep one parsed GIF packet together. Synchronous operations inside the
+    // stream still wait for the worker; other producers cannot interleave it.
+    virtual void CommandStream(const std::function<void()> &commands) { commands(); }
     virtual void LoadClut(const GSTex0Reg &tex0, const GSTexClutReg &texclut) = 0;
 
     virtual void BeginTransfer(const GSTransferCommand &command) = 0;

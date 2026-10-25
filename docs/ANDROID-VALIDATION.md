@@ -146,10 +146,60 @@ Data dos testes: 24 e 25 de outubro de 2026 (America/Fortaleza).
 - A pausa agora deixa de consumir a fila de áudio, além de silenciar a saída;
   isso mantém a fila junto do relógio congelado do jogo.
 
+## Compilação ThinLTO
+
+- Foi gerado um APK separado com otimização entre unidades de tradução. O mesmo
+  teste de pixels, com três ciclos EGL e os dois caminhos de feedback, passou.
+  O teste de ordem da fila também passou com a biblioteca otimizada.
+- No menu, as janelas estáveis ficaram próximas de 25–28 FPS, sem ganho material
+  sobre a compilação normal. A opção continua desligada por padrão.
+- Na primeira sala, a versão ThinLTO mediu aproximadamente 11–13 FPS, com
+  trechos de introdução próximos de 18–20 FPS. Não resolveu o gargalo de combate.
+- A CI do commit 71eae71, que inclui as correções de ciclo de vida, passou.
+
+## Publicação por pacote e envio de vetores
+
+- A fila do GS agora mantém um pacote GIF sob o mesmo bloqueio de produção,
+  preservando a ordem das chamadas síncronas internas e impedindo a intercalação
+  de outro produtor. Os registros são escritos contiguamente no buffer da fila.
+- O estado de desenho é reconstruído somente após uma escrita de estado; mudar
+  coordenadas, cores e outros atributos de vértice continua atualizando os vértices.
+- O caminho V4-32 sem máscara/soma copia segmentos contíguos para a memória VU,
+  respeitando os saltos de STCYCL e o retorno ao início dos 16 KiB.
+- O probe ARM64 passou em 2.400 casos de V4-32 contra uma referência escalar,
+  incluindo TOPS, NUM=0, endereços que dão a volta na memória, modos e máscaras.
+  O probe do frontend verificou texturas, contexto, globais, PACKED A+D e reset.
+- O probe da fila passou com produtor concorrente, pacotes maiores que um chunk,
+  escopos aninhados, chamadas síncronas dentro do pacote e saída por exceção.
+- Os testes de pixels passaram novamente nos três ciclos EGL, com framebuffer
+  fetch e com cópias, sem erros GL. Os 24 testes Linux também passaram.
+- No POCO, sem o processamento paralelo, o menu ficou em cerca de 26–29 FPS,
+  e a primeira luta apresentou janelas de aproximadamente 12,8–13,4 FPS.
+  Houve melhora, mas o combate ainda precisa de otimização substancial.
+- A opção de processamento paralelo utiliza o worker VIF/VU e o estágio GIF da
+  base PC. É experimental, vem desligada por padrão e vale na próxima abertura.
+  A seleção do estágio passou a ser feita por sessão, permitindo alternar o modo
+  após sair e entrar no jogo dentro do mesmo processo Android.
+- O modo paralelo abriu o menu com imagem no mesmo processo de uma sessão
+  anterior sem workers. O vídeo inicial continuou em 30 FPS, e as primeiras
+  janelas de combate ficaram em cerca de 17–19 FPS; durante um ataque o contador
+  mostrou 14 FPS. Não é um resultado estável da campanha inteira.
+- Com paralelo e FINISH assíncrono juntos, as janelas ficaram aproximadamente
+  em 15–18 FPS, sem ganho adicional demonstrado. FINISH assíncrono foi desligado
+  novamente. Esses testes não usam replay determinístico e variam com a câmera
+  e a posição dos inimigos.
+- Sair do combate em modo paralelo retornou ao launcher no mesmo PID; o log
+  confirmou fechamento da janela e do áudio sem fatal. O POCO ficou com paralelo
+  ligado e FINISH assíncrono desligado nas preferências de teste. Uma nova
+  abertura paralela no mesmo PID exibiu o menu com imagem; o jogo foi pausado.
+- APK local testado: `artifacts/GodOfWar2Android-debug.apk`, SHA256
+  `2bc618b33f3e00a35c664fa4bb86405501e03fafbd82a7482cf5097d170357fb`.
+  A assinatura e o alinhamento ZIP de 16 KiB foram verificados. O aparelho usa
+  páginas de 4 KiB; isso não é um teste de boot num Android de páginas de 16 KiB.
+
 ## Critérios restantes
 
-- Build e instalação do APK final; carregamento de todos os shaders no driver móvel.
-- Logos, menu, vídeo inicial e entrada em Rhodes com imagem e áudio corretos.
+- Desempenho de combate estável e correção visual em outras áreas e shaders.
 - Combate e QTE com multitoque; reconexão de controle físico.
 - Saves/carregamento; mais ciclos de pausa/retomada.
 - Medições do FPS real, consumo de memória e aquecimento em sessões longas.

@@ -632,6 +632,24 @@ void PS2Memory::processVIF1Data(const uint8_t *data, uint32_t sizeBytes)
             if (m_vu1Data && totalBytes > 0 && pos + totalBytes <= sizeBytes)
             {
                 const uint8_t *srcBase = data + pos;
+                // V4-32 with no mask/row arithmetic is already in VU format.
+                // Copy contiguous runs, preserving STCYCL skips and 16 KiB wrap.
+                if (vn == 3u && vl == 0u && !maskEnable && vif1_regs.mode == 0u && cl >= wl)
+                {
+                    uint32_t copied = 0u;
+                    while (copied < writeVectorCount)
+                    {
+                        const uint32_t cyclePos = copied % wl;
+                        const uint32_t destVec = (vuAddr + (copied / wl) * cl + cyclePos) & 0x3FFu;
+                        uint32_t count = std::min(writeVectorCount - copied, 1024u - destVec);
+                        if (cl != wl)
+                            count = std::min(count, wl - cyclePos);
+                        std::memcpy(m_vu1Data + destVec * 16u, srcBase + copied * 16u, count * 16u);
+                        copied += count;
+                    }
+                    pos += totalBytes;
+                    continue;
+                }
                 uint32_t srcIndex = 0u;
                 for (uint32_t writeIndex = 0; writeIndex < writeVectorCount; ++writeIndex)
                 {

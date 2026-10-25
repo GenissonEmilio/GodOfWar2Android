@@ -343,6 +343,7 @@ void GS::reset()
 {
     std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
     std::memset(m_ctx, 0, sizeof(m_ctx));
+    m_drawStateDirty = true;
     m_gifInput = {}; // GOW-Port: reset tambien descarta etiquetas/registros incompletos.
     m_prim = {};
     m_primRegister = {};
@@ -920,112 +921,116 @@ void GS::processGIFPacket(const uint8_t *data, uint32_t sizeBytes, GifPathId pat
     if (!data || !sizeBytes || !m_backend || pathIndex == 0u || pathIndex >= m_gifInput.size())
         return;
 
-    auto &input = m_gifInput[pathIndex];
-    if (!input.pending() && tryProcessNativeImageUploadPacket(data, sizeBytes))
-        return;
-
-    PS2_IF_AGRESSIVE_LOGS({
-        const uint32_t packetIndex = s_debugGifPacketCount.fetch_add(1, std::memory_order_relaxed);
-        if (packetIndex < 48u && sizeBytes >= 16u)
-        {
-            const uint64_t tagLo = loadLE64(data);
-            const uint32_t nloop = static_cast<uint32_t>(tagLo & 0x7FFFu);
-            const uint8_t flg = static_cast<uint8_t>((tagLo >> 58) & 0x3u);
-            uint32_t nreg = static_cast<uint32_t>((tagLo >> 60) & 0xFu);
-            if (nreg == 0u)
-                nreg = 16u;
-            RUNTIME_LOG("[gs:gif] idx=" << packetIndex
-                                        << " size=" << sizeBytes
-                                        << " nloop=" << nloop
-                                        << " flg=" << static_cast<uint32_t>(flg)
-                                        << " nreg=" << nreg
-                                        << " ctx0fbp=" << m_ctx[0].frame.fbp
-                                        << " ctx1fbp=" << m_ctx[1].frame.fbp
-                                        << std::endl);
-        }
-    });
-
-    // GOW-Port: como maximo se retienen 15 bytes por PATH, mas el cursor de la etiqueta.
-    // No reiniciar Q/PRE ni perder el indice de registro al llegar otro fragmento.
-    uint32_t offset = 0u;
-    while (offset < sizeBytes)
+    auto commands = [&]
     {
-        if (input.imageBytes && !input.partialBytes && sizeBytes - offset >= 16u)
-        {
-            // Mantener las subidas contiguas grandes; no llamar al backend por cada quadword.
-            const uint32_t bytes = std::min(input.imageBytes, sizeBytes - offset) & ~15u;
-            processImageData(data + offset, bytes);
-            input.imageBytes -= bytes;
-            offset += bytes;
-            continue;
-        }
-        if (!input.registersLeft && input.paddingBytes)
-        {
-            const uint32_t bytes = std::min(input.paddingBytes, sizeBytes - offset);
-            input.paddingBytes -= bytes;
-            offset += bytes;
-            continue;
-        }
+        auto &input = m_gifInput[pathIndex];
+        if (!input.pending() && tryProcessNativeImageUploadPacket(data, sizeBytes))
+            return;
 
-        const bool header = !input.registersLeft && !input.imageBytes;
-        const uint32_t unitBytes = !header && input.format == GIF_FMT_REGLIST ? 8u : 16u;
-        const uint8_t *unit = nullptr;
-        if (!input.partialBytes && sizeBytes - offset >= unitBytes)
-        {
-            unit = data + offset;
-            offset += unitBytes;
-        }
-        else
-        {
-            const uint32_t bytes = std::min(unitBytes - input.partialBytes, sizeBytes - offset);
-            std::memcpy(input.partial.data() + input.partialBytes, data + offset, bytes);
-            input.partialBytes += bytes;
-            offset += bytes;
-            if (input.partialBytes < unitBytes) break;
-            unit = input.partial.data();
-            input.partialBytes = 0u;
-        }
-
-        if (header)
-        {
-            const uint64_t tagLo = loadLE64(unit), tagHi = loadLE64(unit + 8u);
-            const uint32_t nloop = static_cast<uint32_t>(tagLo & 0x7FFFu);
-            input.format = static_cast<uint8_t>((tagLo >> 58u) & 0x3u);
-            input.nreg = static_cast<uint32_t>((tagLo >> 60u) & 0xFu);
-            if (!input.nreg) input.nreg = 16u;
-            input.regIndex = 0u;
-            recordGifTagDebugEventUnlocked(sizeBytes, nloop, input.format, input.nreg);
-            if (!nloop) continue; // NLOOP=0 conserva PRIM, vertices y Q.
-            m_curQ = 1.0f;
-            m_packedStQ = 1.0f;
-            if (input.format == GIF_FMT_PACKED && ((tagLo >> 46u) & 1u))
-                writeRegisterUnlocked(GS_REG_PRIM, (tagLo >> 47u) & 0x7FFu);
-            for (uint32_t i = 0u; i < input.nreg; ++i)
-                input.regs[i] = static_cast<uint8_t>((tagHi >> (i * 4u)) & 0xFu);
-            if (input.format == GIF_FMT_PACKED || input.format == GIF_FMT_REGLIST)
+        PS2_IF_AGRESSIVE_LOGS({
+            const uint32_t packetIndex = s_debugGifPacketCount.fetch_add(1, std::memory_order_relaxed);
+            if (packetIndex < 48u && sizeBytes >= 16u)
             {
-                input.registersLeft = nloop * input.nreg;
-                input.paddingBytes = input.format == GIF_FMT_REGLIST && (input.registersLeft & 1u) ? 8u : 0u;
+                const uint64_t tagLo = loadLE64(data);
+                const uint32_t nloop = static_cast<uint32_t>(tagLo & 0x7FFFu);
+                const uint8_t flg = static_cast<uint8_t>((tagLo >> 58) & 0x3u);
+                uint32_t nreg = static_cast<uint32_t>((tagLo >> 60) & 0xFu);
+                if (nreg == 0u)
+                    nreg = 16u;
+                RUNTIME_LOG("[gs:gif] idx=" << packetIndex
+                                            << " size=" << sizeBytes
+                                            << " nloop=" << nloop
+                                            << " flg=" << static_cast<uint32_t>(flg)
+                                            << " nreg=" << nreg
+                                            << " ctx0fbp=" << m_ctx[0].frame.fbp
+                                            << " ctx1fbp=" << m_ctx[1].frame.fbp
+                                            << std::endl);
             }
-            // GOW-Port: IMAGE2 consume tambien su payload, sin aplicar PRE.
-            else if (input.format == GIF_FMT_IMAGE || input.format == GIF_FMT_IMAGE2)
-                input.imageBytes = nloop * 16u;
-        }
-        else if (input.imageBytes)
+        });
+
+        // GOW-Port: como maximo se retienen 15 bytes por PATH, mas el cursor de la etiqueta.
+        // No reiniciar Q/PRE ni perder el indice de registro al llegar otro fragmento.
+        uint32_t offset = 0u;
+        while (offset < sizeBytes)
         {
-            processImageData(unit, 16u);
-            input.imageBytes -= 16u;
-        }
-        else
-        {
-            if (input.format == GIF_FMT_PACKED)
-                writeRegisterPacked(input.regs[input.regIndex], loadLE64(unit), loadLE64(unit + 8u));
+            if (input.imageBytes && !input.partialBytes && sizeBytes - offset >= 16u)
+            {
+                // Mantener las subidas contiguas grandes; no llamar al backend por cada quadword.
+                const uint32_t bytes = std::min(input.imageBytes, sizeBytes - offset) & ~15u;
+                processImageData(data + offset, bytes);
+                input.imageBytes -= bytes;
+                offset += bytes;
+                continue;
+            }
+            if (!input.registersLeft && input.paddingBytes)
+            {
+                const uint32_t bytes = std::min(input.paddingBytes, sizeBytes - offset);
+                input.paddingBytes -= bytes;
+                offset += bytes;
+                continue;
+            }
+
+            const bool header = !input.registersLeft && !input.imageBytes;
+            const uint32_t unitBytes = !header && input.format == GIF_FMT_REGLIST ? 8u : 16u;
+            const uint8_t *unit = nullptr;
+            if (!input.partialBytes && sizeBytes - offset >= unitBytes)
+            {
+                unit = data + offset;
+                offset += unitBytes;
+            }
             else
-                writeRegisterUnlocked(input.regs[input.regIndex], loadLE64(unit));
-            if (++input.regIndex == input.nreg) input.regIndex = 0u;
-            --input.registersLeft;
+            {
+                const uint32_t bytes = std::min(unitBytes - input.partialBytes, sizeBytes - offset);
+                std::memcpy(input.partial.data() + input.partialBytes, data + offset, bytes);
+                input.partialBytes += bytes;
+                offset += bytes;
+                if (input.partialBytes < unitBytes) break;
+                unit = input.partial.data();
+                input.partialBytes = 0u;
+            }
+
+            if (header)
+            {
+                const uint64_t tagLo = loadLE64(unit), tagHi = loadLE64(unit + 8u);
+                const uint32_t nloop = static_cast<uint32_t>(tagLo & 0x7FFFu);
+                input.format = static_cast<uint8_t>((tagLo >> 58u) & 0x3u);
+                input.nreg = static_cast<uint32_t>((tagLo >> 60u) & 0xFu);
+                if (!input.nreg) input.nreg = 16u;
+                input.regIndex = 0u;
+                recordGifTagDebugEventUnlocked(sizeBytes, nloop, input.format, input.nreg);
+                if (!nloop) continue; // NLOOP=0 conserva PRIM, vertices y Q.
+                m_curQ = 1.0f;
+                m_packedStQ = 1.0f;
+                if (input.format == GIF_FMT_PACKED && ((tagLo >> 46u) & 1u))
+                    writeRegisterUnlocked(GS_REG_PRIM, (tagLo >> 47u) & 0x7FFu);
+                for (uint32_t i = 0u; i < input.nreg; ++i)
+                    input.regs[i] = static_cast<uint8_t>((tagHi >> (i * 4u)) & 0xFu);
+                if (input.format == GIF_FMT_PACKED || input.format == GIF_FMT_REGLIST)
+                {
+                    input.registersLeft = nloop * input.nreg;
+                    input.paddingBytes = input.format == GIF_FMT_REGLIST && (input.registersLeft & 1u) ? 8u : 0u;
+                }
+                // GOW-Port: IMAGE2 consume tambien su payload, sin aplicar PRE.
+                else if (input.format == GIF_FMT_IMAGE || input.format == GIF_FMT_IMAGE2)
+                    input.imageBytes = nloop * 16u;
+            }
+            else if (input.imageBytes)
+            {
+                processImageData(unit, 16u);
+                input.imageBytes -= 16u;
+            }
+            else
+            {
+                if (input.format == GIF_FMT_PACKED)
+                    writeRegisterPacked(input.regs[input.regIndex], loadLE64(unit), loadLE64(unit + 8u));
+                else
+                    writeRegisterUnlocked(input.regs[input.regIndex], loadLE64(unit));
+                if (++input.regIndex == input.nreg) input.regIndex = 0u;
+                --input.registersLeft;
+            }
         }
-    }
+    };
+    m_backend->CommandStream(std::ref(commands));
 }
 
 bool GS::processNativePackedGIFPacket(const uint8_t *data, uint32_t sizeBytes, GifPathId path)
@@ -1037,33 +1042,38 @@ bool GS::processNativePackedGIFPacket(const uint8_t *data, uint32_t sizeBytes, G
     if (!validatePackedGifPacket(data, sizeBytes))
         return false;
 
-    const bool processed = visitPackedGifPacket(data, sizeBytes, [&](const PackedGifPacketTag &tag)
-                                                {
-        recordGifTagDebugEventUnlocked(sizeBytes, tag.nloop, GIF_FMT_PACKED, tag.nreg);
+    bool processed = false;
+    auto commands = [&]
+    {
+        processed = visitPackedGifPacket(data, sizeBytes, [&](const PackedGifPacketTag &tag)
+                                                    {
+            recordGifTagDebugEventUnlocked(sizeBytes, tag.nloop, GIF_FMT_PACKED, tag.nreg);
 
-        // GOW-Port: aplicar la misma regla NLOOP=0 en la ruta nativa validada.
-        if (tag.nloop == 0u)
-            return true;
-        m_curQ = 1.0f;
-        m_packedStQ = 1.0f;
+            // GOW-Port: aplicar la misma regla NLOOP=0 en la ruta nativa validada.
+            if (tag.nloop == 0u)
+                return true;
+            m_curQ = 1.0f;
+            m_packedStQ = 1.0f;
 
-        const bool pre = ((tag.lo >> 46u) & 1u) != 0u;
-        if (pre)
-            writeRegisterUnlocked(GS_REG_PRIM, (tag.lo >> 47u) & 0x7FFu);
+            const bool pre = ((tag.lo >> 46u) & 1u) != 0u;
+            if (pre)
+                writeRegisterUnlocked(GS_REG_PRIM, (tag.lo >> 47u) & 0x7FFu);
 
-        uint32_t offset = tag.payloadOffset;
-        for (uint32_t loop = 0u; loop < tag.nloop; ++loop)
-        {
-            for (uint32_t r = 0u; r < tag.nreg; ++r)
+            uint32_t offset = tag.payloadOffset;
+            for (uint32_t loop = 0u; loop < tag.nloop; ++loop)
             {
-                const uint64_t lo = loadLE64(data + offset);
-                const uint64_t hi = loadLE64(data + offset + 8u);
-                offset += 16u;
-                writeRegisterPacked(tag.regs[r], lo, hi);
+                for (uint32_t r = 0u; r < tag.nreg; ++r)
+                {
+                    const uint64_t lo = loadLE64(data + offset);
+                    const uint64_t hi = loadLE64(data + offset + 8u);
+                    offset += 16u;
+                    writeRegisterPacked(tag.regs[r], lo, hi);
+                }
             }
-        }
 
-        return true; });
+            return true; });
+    };
+    m_backend->CommandStream(std::ref(commands));
 
     if (!processed)
         return false;
@@ -1384,6 +1394,16 @@ void GS::writeRegister(uint8_t regAddr, uint64_t value)
 
 void GS::writeRegisterUnlocked(uint8_t regAddr, uint64_t value)
 {
+    switch (regAddr)
+    {
+    case GS_REG_RGBAQ: case GS_REG_ST: case GS_REG_UV:
+    case GS_REG_XYZ2: case GS_REG_XYZ3: case GS_REG_XYZF2: case GS_REG_XYZF3:
+    case GS_REG_FOG:
+        break;
+    default:
+        m_drawStateDirty = true;
+        break;
+    }
     const bool interestingReg =
         regAddr == GS_REG_PRIM ||
         regAddr == GS_REG_RGBAQ ||
@@ -1921,7 +1941,7 @@ void GS::vertexKick(bool drawing)
 
     if (drawing && m_backend)
     {
-        GSPrimitiveBatch batch = buildDrawBatch(needed);
+        const GSPrimitiveBatch &batch = buildDrawBatch(needed);
         updatePreferredDisplaySourceForDraw(batch);
         gowFogDiagDraw(batch); // GOW-Port: PS2X_GS_FOG_DIAG.
         m_backend->Submit(batch);
@@ -2037,32 +2057,36 @@ void GS::WriteVram(uint32_t psm, uint32_t base, uint32_t bw, uint32_t x, uint32_
         m_backend->WriteVram(psm, base, bw, x, y, value);
 }
 
-GSPrimitiveBatch GS::buildDrawBatch(int vertexCount) const
+const GSPrimitiveBatch &GS::buildDrawBatch(int vertexCount)
 {
-    GSPrimitiveBatch batch{};
+    auto &batch = m_drawBatch;
     batch.vertexCount = static_cast<uint8_t>(std::min(vertexCount, 3));
     for (int i = 0; i < batch.vertexCount; ++i)
         batch.vertices[static_cast<size_t>(i)] = m_vtxQueue[i];
-    batch.state.context = m_ctx[m_prim.ctxt ? 1 : 0];
-    batch.state.prim = m_prim;
-    if (gowFogOff())
-        batch.state.prim.fge = false; // GOW-Port: PS2X_GS_FOG_OFF.
-    batch.state.texa = m_texa;
-    batch.state.texclut = m_texclut;
-    batch.state.pabe = m_pabe;
-    batch.state.scanmsk = m_scanmsk;
-    batch.state.dimx = m_dimx;
-    batch.state.dthe = m_dthe;
-    batch.state.colclamp = m_colclamp;
-    batch.state.fogR = m_fogR;
-    batch.state.fogG = m_fogG;
-    batch.state.fogB = m_fogB;
-    batch.state.textureWidth = static_cast<uint16_t>(1u << std::min<uint32_t>(batch.state.context.tex0.tw, 10u));
-    batch.state.textureHeight = static_cast<uint16_t>(1u << std::min<uint32_t>(batch.state.context.tex0.th, 10u));
-    const uint64_t tex1 = batch.state.context.tex1;
-    const uint8_t mmag = static_cast<uint8_t>((tex1 >> 5u) & 0x1u);
-    const uint8_t mmin = static_cast<uint8_t>((tex1 >> 6u) & 0x7u);
-    batch.state.linearFilter = mmag != 0u || mmin == 1u || (mmin & 0x4u) != 0u;
+    if (m_drawStateDirty)
+    {
+        m_drawStateDirty = false;
+        batch.state.context = m_ctx[m_prim.ctxt ? 1 : 0];
+        batch.state.prim = m_prim;
+        if (gowFogOff())
+            batch.state.prim.fge = false; // GOW-Port: PS2X_GS_FOG_OFF.
+        batch.state.texa = m_texa;
+        batch.state.texclut = m_texclut;
+        batch.state.pabe = m_pabe;
+        batch.state.scanmsk = m_scanmsk;
+        batch.state.dimx = m_dimx;
+        batch.state.dthe = m_dthe;
+        batch.state.colclamp = m_colclamp;
+        batch.state.fogR = m_fogR;
+        batch.state.fogG = m_fogG;
+        batch.state.fogB = m_fogB;
+        batch.state.textureWidth = static_cast<uint16_t>(1u << std::min<uint32_t>(batch.state.context.tex0.tw, 10u));
+        batch.state.textureHeight = static_cast<uint16_t>(1u << std::min<uint32_t>(batch.state.context.tex0.th, 10u));
+        const uint64_t tex1 = batch.state.context.tex1;
+        const uint8_t mmag = static_cast<uint8_t>((tex1 >> 5u) & 0x1u);
+        const uint8_t mmin = static_cast<uint8_t>((tex1 >> 6u) & 0x7u);
+        batch.state.linearFilter = mmag != 0u || mmin == 1u || (mmin & 0x4u) != 0u;
+    }
     return batch;
 }
 
