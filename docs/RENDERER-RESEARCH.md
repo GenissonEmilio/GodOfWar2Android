@@ -49,3 +49,12 @@ TFX/TCC, alpha de vértice/texel, imagem direta/paleta e fator As/FIX, incluindo
 129 e 255. Ele é repetido com o recurso ligado/desligado e com framebuffer fetch
 ou cópia. Além desse teste, é necessária a medição no combate e a inspeção visual.
 Os resultados efetivos ficam em [ANDROID-VALIDATION.md](ANDROID-VALIDATION.md).
+
+## Segunda mudança e limite observado
+
+O `opt32` implementou o anel persistente, com quatro regiões e fences antes da
+reutilização. A mediana observada passou de 17,730 a 18,760 FPS na mesma sequência
+de entrada, em execuções separadas. O perfil posterior coloca VUWorker à frente
+do GS nos ciclos de CPU. Isso limita o benefício esperado de continuar alterando
+somente o renderer; a próxima investigação deve medir VIF e a execução dos
+blocos vetoriais nativos. Dados e ressalvas estão na validação.

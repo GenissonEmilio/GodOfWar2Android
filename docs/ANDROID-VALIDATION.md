@@ -488,3 +488,33 @@ confirma a mudança do trabalho executado, mas **não cumpre os 30 FPS**. Os p95
 das janelas de combate ficaram entre 59,457 e 69,757 ms. As capturas mostram a
 luta, texturas e HUD; as sombras duras ainda precisam de comparação com uma
 referência no mesmo ponto. Não há validação de toda a campanha.
+
+### Envio de vértices por buffer persistente (opt32)
+
+A segunda experiência da pesquisa usa `GL_EXT_buffer_storage` no Adreno. Um anel
+com quatro regiões de cerca de 8 MiB recebe os vértices por mapeamento coerente.
+Fences protegem a reutilização; batches maiores que uma região usam o VBO/VAO
+anterior. As passagens de falha de alpha e as misturas por triângulo usam o mesmo
+offset do desenho principal. A ausência da extensão, falha de alocação ou
+`perf-stream-off` mantém `BufferData`. Buffer, mapa e fences são liberados antes
+do contexto EGL.
+
+Os testes passaram em seis ciclos EGL normais e seis com regiões reduzidas a
+53.248 bytes, divididos entre fetch e cópia. O teste submete 2.048 batches antes
+da leitura, verifica os últimos pixels de 64 células após voltas do anel e
+exercita o fallback para batches grandes. Três ciclos com o envio antigo também
+passaram. Os 640 casos de mistura e testes anteriores permanecem sem erro GL.
+Depois da inclusão da liberação explícita, os seis ciclos normais passaram de
+novo. As 24 verificações Python/Java passaram.
+
+Combate: **19,519; 19,604; 18,890; 18,629; 18,229; 17,998 FPS**, mediana **18,760**,
+p95 de 52,687 a 61,432 ms. As duas primeiras janelas de transição (29,000/23,663)
+foram excluídas. O indicador global de GPU teve mediana 63,9% em 29 amostras nos
+últimos 30 s. A diferença entre as rodadas `opt29` e `opt32` é aproximadamente
+17%; entre `opt31` e `opt32`, 6%. São observações de execuções distintas, com
+variação do combate e da temperatura. Não demonstram 30 FPS sustentados.
+
+O perfil subsequente de 16 s coletou 20.811 amostras sem perda. A participação
+nos ciclos de CPU de usuário foi VUWorker 35,66%, GameThread 25,58%, GSThread
+22,90% e GSFrontend 11,60%. Isso orienta a próxima investigação para VIF/VU,
+sem interpretar essas participações como tempo de parede ou ganho possível.

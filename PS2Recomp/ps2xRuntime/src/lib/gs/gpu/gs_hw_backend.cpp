@@ -7,6 +7,7 @@
 #include "runtime/gs/gs_triangle_cull.h"
 #if defined(__ANDROID__)
 #include <GLES3/gl32.h>
+#include <EGL/egl.h>
 #endif
 #include "../gs_gpu_helpers.h"
 #include "runtime/gs/gs_shared_present.h"
@@ -581,6 +582,11 @@ struct GSHwBackend::Impl : DrawUniforms
 
     float scale = 2.0f;
     GLuint program = 0, vao = 0, vbo = 0;
+    // Four independently fenced regions keep CPU writes away from GPU reads.
+    GLuint streamVao=0,streamVbo=0;
+    uint8_t *streamMap=nullptr;
+    std::array<GSGL::GLsync,4> streamFences{};
+    size_t streamVertices=0,streamUsed=0,streamRegion=0;
     GLuint simpleProgram = 0;
     std::array<GLint,4> simpleLoc{-1,-1,-1,-1};
     GLuint directProgram = 0;
@@ -683,6 +689,16 @@ struct GSHwBackend::Impl : DrawUniforms
     const bool triangleCulling = std::getenv("GOW_GS_TRIANGLE_CULL_ON")!=nullptr;
     const bool integerFast = std::getenv("GOW_GLES_INTEGER_FAST_OFF")==nullptr;
     bool statsEnabled = std::getenv("GOW_GS_HW_STATS") != nullptr;
+
+    ~Impl()
+    {
+        if(!streamVbo)return;
+        const Api &g=gl();
+        for(auto fence:streamFences)if(fence)g.DeleteSync(fence);
+        g.BindBuffer(kArrayBuffer,streamVbo);
+        if(streamMap)g.UnmapBuffer(kArrayBuffer);
+        g.DeleteBuffers(1,&streamVbo);g.DeleteVertexArrays(1,&streamVao);
+    }
 
     const Api &gl() const { return context.gl(); }
 
@@ -872,17 +888,46 @@ struct GSHwBackend::Impl : DrawUniforms
         g.BindVertexArray(vao);
         g.GenBuffers(1, &vbo);
         g.BindBuffer(kArrayBuffer, vbo);
-        const GLsizei stride = sizeof(HwVertex);
-        g.VertexAttribPointer(0, 2, kFloat, kFalse, stride, reinterpret_cast<const void *>(offsetof(HwVertex, x)));
-        g.VertexAttribPointer(1, 1, kFloat, kFalse, stride, reinterpret_cast<const void *>(offsetof(HwVertex, z)));
-        // Unnormalized bytes convert to the exact original 0..255 float values
-        // in the shader, without four CPU conversions or 12 extra upload bytes.
-        g.VertexAttribPointer(2, 4, kUnsignedByte, kFalse, stride, reinterpret_cast<const void *>(offsetof(HwVertex, r)));
-        g.VertexAttribPointer(3, 3, kFloat, kFalse, stride, reinterpret_cast<const void *>(offsetof(HwVertex, s)));
-        g.VertexAttribPointer(4, 2, kFloat, kFalse, stride, reinterpret_cast<const void *>(offsetof(HwVertex, u)));
-        g.VertexAttribPointer(5, 4, kFloat, kFalse, stride, reinterpret_cast<const void *>(offsetof(HwVertex, cu0)));
-        for (GLuint i = 0; i < 6; ++i)
-            g.EnableVertexAttribArray(i);
+        const auto attributes=[&]{
+            const GLsizei stride = sizeof(HwVertex);
+            g.VertexAttribPointer(0, 2, kFloat, kFalse, stride, reinterpret_cast<const void *>(offsetof(HwVertex, x)));
+            g.VertexAttribPointer(1, 1, kFloat, kFalse, stride, reinterpret_cast<const void *>(offsetof(HwVertex, z)));
+            // Unnormalized bytes convert to the exact original 0..255 float values
+            // in the shader, without four CPU conversions or 12 extra upload bytes.
+            g.VertexAttribPointer(2, 4, kUnsignedByte, kFalse, stride, reinterpret_cast<const void *>(offsetof(HwVertex, r)));
+            g.VertexAttribPointer(3, 3, kFloat, kFalse, stride, reinterpret_cast<const void *>(offsetof(HwVertex, s)));
+            g.VertexAttribPointer(4, 2, kFloat, kFalse, stride, reinterpret_cast<const void *>(offsetof(HwVertex, u)));
+            g.VertexAttribPointer(5, 4, kFloat, kFalse, stride, reinterpret_cast<const void *>(offsetof(HwVertex, cu0)));
+            for (GLuint i = 0; i < 6; ++i)
+                g.EnableVertexAttribArray(i);
+        };
+        attributes();
+#if defined(__ANDROID__)
+        if(!std::getenv("GOW_GLES_STREAM_OFF") && extensions &&
+           (std::string(" ")+extensions+" ").find(" GL_EXT_buffer_storage ")!=std::string::npos){
+            using BufferStorageExt=void (*)(GLenum,GLsizeiptr,const void *,GLbitfield);
+            const auto storage=reinterpret_cast<BufferStorageExt>(eglGetProcAddress("glBufferStorageEXT"));
+            if(storage){
+                streamVertices=(8u*1024u*1024u)/sizeof(HwVertex);
+                if(const char *size=std::getenv("GOW_GLES_STREAM_VERTICES"))streamVertices=std::clamp(std::strtoull(size,nullptr,10),1024ull,streamVertices*1ull);
+                g.GenVertexArrays(1,&streamVao);g.GenBuffers(1,&streamVbo);
+                g.BindVertexArray(streamVao);g.BindBuffer(kArrayBuffer,streamVbo);
+                const auto bytes=GLsizeiptr(streamVertices*streamFences.size()*sizeof(HwVertex));
+                const auto flags=kMapWriteBit|kMapPersistentBit|kMapCoherentBit;
+                storage(kArrayBuffer,bytes,nullptr,flags);
+                streamMap=static_cast<uint8_t *>(g.MapBufferRange(kArrayBuffer,0,bytes,flags));
+                const GLenum error=g.GetError();
+                if(streamMap && error==0)attributes();
+                else{
+                    std::fprintf(stderr,"[gs-stream] persistent map unavailable (GL %x), keeping BufferData\n",error);
+                    if(streamMap)g.UnmapBuffer(kArrayBuffer);
+                    streamMap=nullptr;g.DeleteBuffers(1,&streamVbo);g.DeleteVertexArrays(1,&streamVao);streamVbo=streamVao=0;
+                }
+                std::fprintf(stderr,"[gs-stream] persistent vertex upload: %s (%zu bytes per region)\n",streamMap?"active":"fallback",streamVertices*sizeof(HwVertex));
+                g.BindVertexArray(vao);g.BindBuffer(kArrayBuffer,vbo);
+            }
+        }
+#endif
         buildTables();
 #if defined(__ANDROID__)
         // GLES validates all sampler types even when a uniform branch does not sample them.
@@ -2107,6 +2152,35 @@ struct GSHwBackend::Impl : DrawUniforms
         pending.clear();
     }
 
+    GLint uploadVertices(const std::vector<HwVertex> &vertices)
+    {
+        const Api &g=gl();
+        if(streamMap && vertices.size()<=streamVertices){
+            if(streamUsed+vertices.size()>streamVertices){
+                streamFences[streamRegion]=g.FenceSync(kSyncGpuCommandsComplete,0);
+                if(!streamFences[streamRegion])g.Finish();
+                streamRegion=(streamRegion+1)%streamFences.size();streamUsed=0;
+                auto &fence=streamFences[streamRegion];
+                if(fence){
+                    GLenum result;
+                    do{result=g.ClientWaitSync(fence,kSyncFlushCommandsBit,1000000u);}while(result==kTimeoutExpired);
+                    // A failed wait cannot authorize overwriting in-flight data.
+                    if(result!=kAlreadySignaled && result!=kConditionSatisfied)g.Finish();
+                    g.DeleteSync(fence);fence=nullptr;
+                }
+            }
+            const size_t first=streamRegion*streamVertices+streamUsed;
+            std::memcpy(streamMap+first*sizeof(HwVertex),vertices.data(),vertices.size()*sizeof(HwVertex));
+            streamUsed+=vertices.size();
+            g.BindVertexArray(streamVao);g.BindBuffer(kArrayBuffer,streamVbo);
+            return static_cast<GLint>(first);
+        }
+        // Large batches retain their normal allocation and their own VAO.
+        g.BindVertexArray(vao);g.BindBuffer(kArrayBuffer,vbo);
+        g.BufferData(kArrayBuffer,static_cast<GLsizeiptr>(vertices.size()*sizeof(HwVertex)),vertices.data(),kStreamDraw);
+        return 0;
+    }
+
     void blendState(const GSDrawState &s, bool sourceAlphaFits, bool &enabled, GLenum &sf, GLenum &df, float &fixScale, float &constant, GLenum &equation, bool &soft)
     {
         enabled = false;
@@ -2501,9 +2575,7 @@ struct GSHwBackend::Impl : DrawUniforms
                 g.Uniform2f(locTexSize, static_cast<float>(tex.width), static_cast<float>(tex.height));
         }
         }
-        g.BindVertexArray(vao);
-        g.BindBuffer(kArrayBuffer, vbo);
-        g.BufferData(kArrayBuffer, static_cast<GLsizeiptr>(dverts.size() * sizeof(HwVertex)), dverts.data(), kStreamDraw);
+        const GLint firstVertex=uploadVertices(dverts);
 
         if(!simple){
         g.Uniform1i(locAte, ate ? 1 : 0);
@@ -2576,11 +2648,11 @@ struct GSHwBackend::Impl : DrawUniforms
             {
                 if (i != 0)
                     feedbackBarrier(rt);
-                g.DrawArrays(kTriangles, static_cast<GLint>(i), 3);
+                g.DrawArrays(kTriangles, firstVertex+static_cast<GLint>(i), 3);
             }
         }
         else
-            g.DrawArrays(kTriangles, 0, static_cast<GLsizei>(verts.size()));
+            g.DrawArrays(kTriangles, firstVertex, static_cast<GLsizei>(verts.size()));
         if (volBox[1] >= volBox[0] && volBox[3] >= volBox[2])
         {
             const int w = volBox[1] - volBox[0] + 1, h = volBox[3] - volBox[2] + 1;
@@ -2602,7 +2674,7 @@ struct GSHwBackend::Impl : DrawUniforms
             if (afail == 1u) { g.DepthMask(kFalse); }
             else if (afail == 2u) { g.ColorMask(kFalse, kFalse, kFalse, kFalse); }
             else { g.DepthMask(kFalse); g.ColorMask(mr, mg, mb, kFalse); }
-            g.DrawArrays(kTriangles, 0, static_cast<GLsizei>(verts.size()));
+            g.DrawArrays(kTriangles, firstVertex, static_cast<GLsizei>(verts.size()));
         }
         ++stats.batches;
         g.Disable(kScissorTest);

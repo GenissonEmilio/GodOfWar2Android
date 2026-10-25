@@ -371,6 +371,25 @@ static int runEpoch(int epoch){
     alias.state.context.zbuf.zmask=false;
     for(auto &v:alias.vertices)v.z=0x700000;
     backend.Submit(alias);backend.Flush();ok=pixel(backend.Present(request),0,0,112)&&ok;
+    // Reuse each ring region while earlier draws are still queued. Read back
+    // once after all wraps; every cell must retain its last submitted colour.
+    auto streamed=batch;streamed.state.context.frame.fbp=60;
+    streamed.state.context.frame.fbmsk=0;streamed.state.context.test=0;
+    streamed.state.prim.tme=false;streamed.state.prim.abe=false;
+    for(unsigned i=0;i<2048;++i){
+        const unsigned cell=i%64,x=cell%8,y=cell/8;
+        streamed.vertices[0].x=x*8;streamed.vertices[0].y=y*8;
+        streamed.vertices[1].x=x*8+8;streamed.vertices[1].y=y*8+8;
+        for(auto &v:streamed.vertices){v.r=i%251;v.g=(i*7)%253;v.b=(i*13)%255;v.a=128;}
+        backend.Submit(streamed);backend.Flush();
+    }
+    std::vector<uint8_t> streamPixels(64*64*4);glReadPixels(0,0,64,64,GL_RGBA,GL_UNSIGNED_BYTE,streamPixels.data());
+    for(unsigned cell=0;cell<64;++cell){
+        const unsigned i=1984+cell,x=(cell%8)*8+4,y=(cell/8)*8+4;
+        const unsigned expected[]{i%251,(i*7)%253,(i*13)%255,128};
+        for(unsigned ch=0;ch<4;++ch)if(std::abs(int(streamPixels[(y*64+x)*4+ch])-int(expected[ch]))>1)ok=false;
+    }
+    std::printf("2048 queued upload batches across ring wraps: %s\n",ok?"PASS":"FAIL");
     request.dispfb1=16|(1ULL<<9);
     GSPrimitiveBatch triangles=batch;triangles.vertexCount=3;
     triangles.state.prim.type=GS_PRIM_TRIANGLE;triangles.state.prim.tme=false;

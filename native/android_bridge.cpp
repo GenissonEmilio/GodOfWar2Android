@@ -134,6 +134,7 @@ extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivit
     if(std::filesystem::exists(std::string(p)+"/perf-gl-state-off"))setenv("GOW_GLES_STATE_CACHE_OFF","1",1);else unsetenv("GOW_GLES_STATE_CACHE_OFF");
     if(std::filesystem::exists(std::string(p)+"/perf-culling"))setenv("GOW_GS_TRIANGLE_CULL_ON","1",1);else unsetenv("GOW_GS_TRIANGLE_CULL_ON");
     if(std::filesystem::exists(std::string(p)+"/perf-integer-off"))setenv("GOW_GLES_INTEGER_FAST_OFF","1",1);else unsetenv("GOW_GLES_INTEGER_FAST_OFF");
+    if(std::filesystem::exists(std::string(p)+"/perf-stream-off"))setenv("GOW_GLES_STREAM_OFF","1",1);else unsetenv("GOW_GLES_STREAM_OFF");
     if(std::filesystem::exists(std::string(p)+"/perf-dual-off"))setenv("GOW_GLES_DUAL_OFF","1",1);else unsetenv("GOW_GLES_DUAL_OFF");
     if(std::filesystem::exists(std::string(p)+"/perf-direct-off"))setenv("GOW_GLES_DIRECT_OFF","1",1);else unsetenv("GOW_GLES_DIRECT_OFF");
     if(std::filesystem::exists(std::string(p)+"/perf-simple-off"))setenv("GOW_GLES_SIMPLE_OFF","1",1);else unsetenv("GOW_GLES_SIMPLE_OFF");
