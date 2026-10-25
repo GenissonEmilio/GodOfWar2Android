@@ -22,7 +22,8 @@ Os fontes gerados do jogo e seus arquivos de disco ficam locais.
 - Dois analógicos touch, botões PS2, D-pad e controles simultâneos por multitoque.
 - Presets para 2, 3 ou 4 dedos; editor de posições por arraste, tamanho por botão e persistência do layout.
 - Menu de pausa sobre o jogo com opacidade, tamanho, zona morta, sensibilidade,
-  volume e limite da apresentação em 30/60 FPS.
+  volume e limite da apresentação em 30/60 FPS. A renderização assíncrona é
+  experimental e vem desativada.
 - Resolução interna 1×, 2× ou 3× aplicada ao reiniciar o jogo.
 - Entrada de controles Android por eixos, gatilhos e botões; ocultação automática
   do touch. Contador baseado nos frames do jogo.
@@ -56,6 +57,9 @@ Não há download de dados do jogo. Não são publicados APKs com código deriva
    CMake/Ninja, Java, AAPT e D8 do SDK. O APK fica em
    `artifacts/GodOfWar2Android-debug.apk`. `GOW_BUILD_JOBS` controla o paralelismo;
    `GOW_RAYLIB_SOURCE` pode apontar para um checkout local do raylib 5.5.
+   A compilação experimental com otimização entre unidades pode ser feita com
+   `GOW_BUILD_DIR=artifacts/build/arm64-lto tools/android/build-local.sh -DGOW_ANDROID_THINLTO=ON`;
+   ela não é ativada por padrão.
    A alternativa Gradle é `tools/android/build.sh`, que produz
    `android/app/build/outputs/apk/debug/app-debug.apk`.
 4. Instale o APK de desenvolvimento no aparelho.

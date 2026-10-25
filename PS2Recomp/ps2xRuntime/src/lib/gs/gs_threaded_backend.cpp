@@ -6,6 +6,9 @@
 #include "gs_inventory.h"
 #include "runtime/gs/gs_state_compare.h"
 #include "ThreadPriority.h"
+#if defined(__ANDROID__)
+#include "android_bridge.h"
+#endif
 #include "ThreadNaming.h"
 
 #include <atomic>
@@ -336,8 +339,12 @@ void GSThreadedBackend::TextureFlush()
 // por su cuenta (RunOnWorker) y el hilo del GS conserva el orden de los comandos.
 static bool gowFinishAsync()
 {
+#if defined(__ANDROID__)
+    return gowAndroidAsyncFinish();
+#else
     static const bool on = [] { const char *v = std::getenv("GOW_GS_FINISH_ASINCRONO"); return v && v[0] == '1'; }();
     return on;
+#endif
 }
 
 void GSThreadedBackend::Sync(GSSyncReason reason)

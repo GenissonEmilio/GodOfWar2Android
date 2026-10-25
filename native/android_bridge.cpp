@@ -13,7 +13,7 @@ namespace {
 std::atomic<uint64_t> input{0x808080800000ULL};
 std::atomic<uint16_t> pendingPress{0}, physicalPress{0};
 std::atomic<uint64_t> physicalInput{0x808080800000ULL};
-std::atomic<bool> paused{false},backRequested{false};
+std::atomic<bool> paused{false},backRequested{false},asyncFinish{false};
 std::atomic<bool> controllerConnected{false},controllerReady{false};
 std::atomic<bool> movieActive{false};
 std::atomic<uint64_t> movieFrames{0};
@@ -28,6 +28,7 @@ uint8_t axis(float v) {
 }
 }
 bool gowAndroidPaused() { return paused.load(); }
+bool gowAndroidAsyncFinish() { return asyncFinish.load(); }
 void gowAndroidReadPad(uint8_t *data) {
     uint64_t state=input.load()|pendingPress.exchange(0);
     if(controllerConnected.load()) {
@@ -98,8 +99,8 @@ extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivit
     pendingPress.fetch_or(static_cast<uint16_t>(state & ~previous));
 }
 extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivity_nativePause(JNIEnv *,jclass,jboolean value) { paused.store(value); input.store(0x808080800000ULL); pendingPress.store(0); physicalPress.store(0); if (IsAudioDeviceReady()) SetMasterVolume(value?0.0f:volume.load()/100.0f); }
-extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivity_nativeSettings(JNIEnv *,jclass,jint vol,jint fps,jfloat dz,jfloat gain) {
-    volume.store(std::clamp(int(vol),0,100)); frameLimit.store(fps==30?30:60);
+extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivity_nativeSettings(JNIEnv *,jclass,jint vol,jint fps,jfloat dz,jfloat gain,jboolean graphicsAsync) {
+    volume.store(std::clamp(int(vol),0,100)); frameLimit.store(fps==30?30:60);asyncFinish.store(graphicsAsync);
     deadzone.store(std::clamp(dz,0.0f,0.5f)); sensitivity.store(std::clamp(gain,0.1f,3.0f));
 }
 

@@ -34,7 +34,8 @@ Data dos testes: 24 de outubro de 2026 (America/Fortaleza).
 - O importador Java processou o ZIP de 6,7 GiB fornecido pelo usuário e extraiu
   os 16 arquivos de ambas as camadas. O executável, GODOFWAR.TOC, .disc_layout
   e .disc_meta foram comparados byte a byte com a extração PC e são idênticos.
-  Os dois PAKs têm os tamanhos esperados. Não foi comparado o hash integral dos PAKs.
+  Os dois PAKs têm os tamanhos esperados. Os hashes integrais dos PAKs da cópia
+  local de referência foram depois comparados com os do aparelho: coincidiram.
 - [CI sem dados do jogo](https://github.com/GenissonEmilio/GodOfWar2Android/actions/runs/40150496466): passou.
 
 - O renderizador de produção `GSHwBackend` foi executado no aparelho em um
@@ -66,7 +67,8 @@ Data dos testes: 24 de outubro de 2026 (America/Fortaleza).
   o APK; o diálogo pausou a execução. O botão Voltar do Android abriu a pausa.
   No editor, L1 foi arrastado de (0,09; 0,18) para aproximadamente (0,12; 0,218),
   e a nova posição apareceu nas preferências persistidas. Restaurar layout removeu
-  essa personalização. O preset de quatro dedos foi selecionado e apareceu no jogo.
+  essa personalização. O aumento individual de L1 também persistiu (raio 1,1×).
+  O preset de quatro dedos foi selecionado e apareceu no jogo.
 - Ir para a tela inicial e retornar pelo launcher preservou o mesmo processo e o
   menu renderizado. Não foi observado reinício do runtime nesse teste.
 - O teste sintético foi ampliado com uma cópia CT16 entre canais do mesmo alvo:
@@ -102,12 +104,33 @@ Data dos testes: 24 de outubro de 2026 (America/Fortaleza).
   posteriores não capturados continuam tendo o intérprete como fallback; isso
   precisa ser medido e ampliado ao percorrer a campanha.
 
+- O usuário confirmou que o áudio do vídeo de abertura estava normal e
+  sincronizado no POCO. Isso não valida todas as faixas de áudio da campanha.
+- O caminho de compilação `tools/android/build-local.sh` foi executado com o SDK
+  local: recompilou, empacotou, alinhou e assinou o APK sem usar Gradle.
+- A CI do commit aa5bdf3 passou, incluindo o novo teste de preenchimento de estado
+  gráfico em C++ no Linux.
+- Um probe ARM64 da fila de produção verificou 200 sequências de desenho/FINISH,
+  a ordem preservada no modo assíncrono, a drenagem antes de leitura e a espera do
+  modo síncrono. O ajuste assíncrono permanece experimental e desligado por padrão.
+  No menu sem os diagnósticos, o modo normal mediu cerca de 25 FPS, e o assíncrono
+  aproximadamente 24–26 FPS: não foi demonstrado ganho material nesse cenário.
+
+- Os PAKs no aparelho coincidiram com a referência local por SHA256 completo:
+  PART1 `6e7ec60e56939c5f9bf6d0d5954b416e7dd82064d062dc560917943c6be8770c`;
+  PART2 `58f79aef9bfc55190f64f3e66cc20049587fa7d4661cee671a224ecec8f0b3e0`.
+- Com diagnósticos desligados, a primeira luta continuou com aproximadamente
+  10–11 FPS. A opção assíncrona não demonstrou ganho suficiente nesse trecho;
+  foi desativada novamente. No vídeo, o contador manteve 30 FPS.
+- Em um snapshot durante o vídeo, dumpsys registrou aproximadamente 309 MiB PSS,
+  372 MiB RSS e 71 MiB de swap. Não são medidas de pico nem de uma sessão longa.
+
 ## Critérios restantes
 
 - Build e instalação do APK final; carregamento de todos os shaders no driver móvel.
 - Logos, menu, vídeo inicial e entrada em Rhodes com imagem e áudio corretos.
 - Combate e QTE com multitoque; reconexão de controle físico.
-- Saves/carregamento; redimensionamento por botão; mais ciclos de pausa/retomada.
+- Saves/carregamento; mais ciclos de pausa/retomada.
 - Medições do FPS real, consumo de memória e aquecimento em sessões longas.
 - Validação da campanha inteira, incluindo bosses, vídeos e as duas camadas do DVD.
 - Integração dos ajustes aos menus originais do jogo, além do overlay móvel.

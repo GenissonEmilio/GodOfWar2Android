@@ -6,7 +6,7 @@ cd "$(dirname "$0")/../.."
 compiler="$ANDROID_HOME/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android29-clang++"
 "$compiler" tests/android/renderer_probe.cpp -std=c++20 -O2 -static-libstdc++ \
   -I PS2Recomp/ps2xRuntime/include \
-  artifacts/build/arm64/PS2Recomp/ps2xRuntime/libps2_runtime.a \
+  "${GOW_BUILD_DIR:-artifacts/build/arm64}/PS2Recomp/ps2xRuntime/libps2_runtime.a" \
   -lEGL -lGLESv3 -llog -landroid -o artifacts/renderer-probe
 "$ANDROID_HOME/platform-tools/adb" push artifacts/renderer-probe /data/local/tmp/gow2-renderer-probe
 "$ANDROID_HOME/platform-tools/adb" shell /data/local/tmp/gow2-renderer-probe

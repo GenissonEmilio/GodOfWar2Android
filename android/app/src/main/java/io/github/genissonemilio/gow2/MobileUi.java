@@ -33,6 +33,7 @@ final class MobileUi {
         body.addView(text(a,"Resolução interna: 1×, 2× ou 3×. A mudança vale na próxima abertura do jogo.",14));
         slider(body,p,"scale","Resolução interna",1,3,1,changed);
         Switch fps=new Switch(a);fps.setText("Limitar apresentação a 30 FPS (o jogo mantém seu relógio)");fps.setTextColor(TEXT);fps.setChecked(p.getInt("fps",60)==30);fps.setOnCheckedChangeListener((v,b)->{p.edit().putInt("fps",b?30:60).apply();changed.run();});body.addView(fps);
+        Switch pipeline=new Switch(a);pipeline.setText("Renderização assíncrona (experimental)");pipeline.setTextColor(TEXT);pipeline.setChecked(p.getBoolean("graphicsAsync",false));pipeline.setOnCheckedChangeListener((v,b)->{p.edit().putBoolean("graphicsAsync",b).apply();changed.run();});body.addView(pipeline);
         slider(body,p,"volume","Volume (%)",0,100,80,changed);
         body.addView(text(a,"Os saves ficam no aparelho. Evite limpar os dados do aplicativo.",14));
         ScrollView scroll=new ScrollView(a);scroll.addView(body);
