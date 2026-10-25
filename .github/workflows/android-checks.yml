@@ -28,6 +28,10 @@ jobs:
         run: |
           c++ -std=c++20 -O3 -msse4.1 -ffp-contract=off -I PS2Recomp/ps2xRuntime/include tests/android/vu_mac_probe.cpp -o /tmp/gow2-vu-mac
           /tmp/gow2-vu-mac
+      - name: VU normalization and CLIP against bit/scalar oracles (SSE fallback)
+        run: |
+          c++ -std=c++20 -O3 -msse4.1 -ffp-contract=off -I PS2Recomp/ps2xRuntime/include tests/android/vu_vector_probe.cpp -o /tmp/gow2-vu-vector
+          /tmp/gow2-vu-vector
       - name: Conservative triangle culling against polygon clipping
         run: |
           c++ -std=c++20 -O2 -I PS2Recomp/ps2xRuntime/include tests/android/triangle_cull_probe.cpp -o /tmp/gow2-triangle-cull
@@ -44,6 +48,8 @@ jobs:
           /tmp/gow2-gs-memory
       - name: GIF arbitration and buffer lifetime
         run: |
+          c++ -std=c++20 -O2 -I PS2Recomp/ps2xRuntime/include tests/android/packet_pool_probe.cpp -o /tmp/gow2-packet-pool
+          /tmp/gow2-packet-pool
           c++ -std=c++20 -O2 -I PS2Recomp/ps2xRuntime/include tests/android/gif_arbiter_probe.cpp PS2Recomp/ps2xRuntime/src/lib/gs/ps2_gif_arbiter.cpp -o /tmp/gow2-gif-arbiter
           /tmp/gow2-gif-arbiter
       - name: CLUT load and comparison banks

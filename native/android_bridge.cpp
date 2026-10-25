@@ -1,6 +1,7 @@
 #include "android_bridge.h"
 #include "game_frame_clock.h"
 #include "android_performance_hint.h"
+#include "android_worker_affinity.h"
 #include "raylib.h"
 #include "runtime/ps2_perf.h"
 #include <jni.h>
@@ -39,6 +40,7 @@ void paceGameFrame() {
     using Clock=std::chrono::steady_clock;
     thread_local GameFrameClock pacing;
     thread_local AndroidPerformanceHint hints;
+    thread_local AndroidWorkerAffinity affinity;
     thread_local uint64_t seenEpoch=~0ull,last=0;
     thread_local std::array<double,512> intervals{};
     thread_local size_t count=0;
@@ -59,6 +61,9 @@ void paceGameFrame() {
         size_t late=0;for(size_t i=0;i<count;++i)late+=intervals[i]>35.3334;
         std::fprintf(stderr,"[gow-frames] target=%d game_hz=%.3f n=%zu p50_ms=%.3f p95_ms=%.3f p99_ms=%.3f max_ms=%.3f over_35ms=%zu\n",frameLimit.load(),1000.0*count/elapsed,count,sorted[count/2],sorted[(count-1)*95/100],sorted[(count-1)*99/100],sorted[count-1],late);
         count=0;elapsed=0;
+        const int affinityMode=std::filesystem::exists("perf-affinity-pin")?1:
+            std::filesystem::exists("perf-affinity-pool")?2:0;
+        if(affinity.setMode(affinityMode))pacingEpoch.fetch_add(1);
         std::error_code error;
         const bool wanted=!std::filesystem::exists("perf-adpf-off",error);
         if(!error && performanceHints.exchange(wanted)!=wanted){pacingEpoch.fetch_add(1);std::fprintf(stderr,"[gow-adpf] enabled=%d\n",wanted);}

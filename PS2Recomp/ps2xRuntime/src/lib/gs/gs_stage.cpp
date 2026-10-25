@@ -1,4 +1,5 @@
 #include "runtime/gs/gs_stage.h"
+#include "runtime/gs/gs_packet_pool.h"
 #include "ThreadNaming.h"
 #include "runtime/ps2_worker_ids.h"
 
@@ -28,7 +29,7 @@ namespace
         std::condition_variable space;  // producer waits for room
         std::condition_variable idle;   // waitIdle
         std::deque<Packet> queue;
-        std::vector<std::vector<uint8_t>> spare; // recycled buffers (avoid an allocation per packet)
+        GSPacketPool spare;
         size_t queuedBytes = 0;
         bool busy = false;
         bool stop = false;
@@ -56,8 +57,7 @@ namespace
                 std::unique_lock<std::mutex> lock(s.mutex);
                 for (Packet &p : batch)
                 {
-                    p.data.clear();
-                    s.spare.push_back(std::move(p.data));
+                    s.spare.recycle(std::move(p.data));
                 }
                 batch.clear();
                 s.busy = false;
@@ -126,11 +126,7 @@ namespace ps2_gs_stage
         s.space.wait(lock, [&s, size] { return s.queuedBytes == 0 || s.queuedBytes + size <= kMaxQueuedBytes; });
         Packet p;
         p.path = path;
-        if (!s.spare.empty())
-        {
-            p.data = std::move(s.spare.back());
-            s.spare.pop_back();
-        }
+        p.data = s.spare.take(size);
         p.data.assign(data, data + size);
         s.queuedBytes += size;
         const bool wasEmpty = s.queue.empty();

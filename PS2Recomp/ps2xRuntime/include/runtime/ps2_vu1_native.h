@@ -340,11 +340,21 @@ namespace vu1n
     // itself keeps its raw bits (integer data travels through VF registers).
     VU1N_INLINE __m128 nrm(__m128 v)
     {
+#if defined(USE_SSE2NEON) && defined(__aarch64__)
+        // Float encodings are ordered by unsigned magnitude. Clamp exponent-255
+        // encodings without floating-point comparisons or byte-wise SSE blends;
+        // retain the original sign, subnormal encodings and signed zeros.
+        const uint32x4_t bits = vreinterpretq_u32_f32(v);
+        const uint32x4_t magnitude = vminq_u32(vandq_u32(bits, vdupq_n_u32(0x7FFFFFFFu)),
+                                              vdupq_n_u32(0x7F7FFFFFu));
+        return vreinterpretq_f32_u32(vorrq_u32(magnitude, vandq_u32(bits, vdupq_n_u32(0x80000000u))));
+#else
         const __m128i b = _mm_castps_si128(v);
         const __m128i expMask = _mm_set1_epi32(0x7F800000);
         const __m128i bad = _mm_cmpeq_epi32(_mm_and_si128(b, expMask), expMask);
         const __m128i fixed = _mm_or_si128(_mm_and_si128(b, _mm_set1_epi32(static_cast<int>(0x80000000u))), _mm_set1_epi32(0x7F7FFFFF));
         return _mm_castsi128_ps(_mm_blendv_epi8(b, fixed, bad));
+#endif
     }
     VU1N_INLINE __m128 ldn(const VU1State &s, int r) { return nrm(_mm_loadu_ps(s.vf[r])); }
     VU1N_INLINE __m128 ldAcc(const VU1State &s) { return _mm_loadu_ps(s.acc); }
@@ -452,11 +462,19 @@ namespace vu1n
         return static_cast<uint32_t>(kRev4[z] | (kRev4[sg] << 4) | (kRev4[o] << 12));
 #endif
     }
-    VU1N_INLINE uint32_t clipVal(const VU1State &s, int fs, int ft, uint32_t prev)
+    VU1N_INLINE uint32_t clipValv(__m128 vn, __m128 tn, uint32_t prev)
     {
+#if defined(USE_SSE2NEON) && defined(__aarch64__)
+        const float32x4_t w = vabsq_f32(vdupq_laneq_f32(tn, 3));
+        const uint32_t weights[4] = {1u, 4u, 16u, 0u};
+        const uint32x4_t positive = vld1q_u32(weights);
+        const uint32x4_t flags = vorrq_u32(vandq_u32(vcgtq_f32(vn, w), positive),
+                                          vandq_u32(vcltq_f32(vn, vnegq_f32(w)), vshlq_n_u32(positive, 1)));
+        return ((prev << 6) | vaddvq_u32(flags)) & 0xFFFFFFu;
+#else
         alignas(16) float v[4], t[4];
-        _mm_store_ps(v, ldn(s, fs));
-        _mm_store_ps(t, ldn(s, ft));
+        _mm_store_ps(v, vn);
+        _mm_store_ps(t, tn);
         const float w = std::fabs(t[3]);
         uint32_t f = 0;
         if (v[0] > w) f |= 0x01u;
@@ -466,6 +484,11 @@ namespace vu1n
         if (v[2] > w) f |= 0x10u;
         if (v[2] < -w) f |= 0x20u;
         return ((prev << 6) | f) & 0xFFFFFFu;
+#endif
+    }
+    VU1N_INLINE uint32_t clipVal(const VU1State &s, int fs, int ft, uint32_t prev)
+    {
+        return clipValv(ldn(s, fs), ldn(s, ft), prev);
     }
     VU1N_INLINE float qOperand(const VU1State &s) { return s.q; }
 
@@ -637,21 +660,6 @@ namespace vu1n
         return _mm_blendv_ps(_mm_castsi128_ps(i), _mm_castsi128_ps(_mm_set1_epi32(0x7FFFFFFF)), big);
     }
     inline __m128 absv(__m128 normalized) { return _mm_and_ps(normalized, _mm_castsi128_ps(_mm_set1_epi32(0x7FFFFFFF))); }
-    inline uint32_t clipValv(__m128 vn, __m128 tn, uint32_t prev)
-    {
-        alignas(16) float v[4], t[4];
-        _mm_store_ps(v, vn);
-        _mm_store_ps(t, tn);
-        const float w = std::fabs(t[3]);
-        uint32_t f = 0;
-        if (v[0] > w) f |= 0x01u;
-        if (v[0] < -w) f |= 0x02u;
-        if (v[1] > w) f |= 0x04u;
-        if (v[1] < -w) f |= 0x08u;
-        if (v[2] > w) f |= 0x10u;
-        if (v[2] < -w) f |= 0x20u;
-        return ((prev << 6) | f) & 0xFFFFFFu;
-    }
     inline float divv(float fsRaw, float ftRaw)
     {
         const float num = qnorm(fsRaw), den = qnorm(ftRaw);
