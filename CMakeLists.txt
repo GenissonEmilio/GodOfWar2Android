@@ -48,5 +48,27 @@ set_source_files_properties(${GOW_NATIVE_SOURCES} overrides/gow2_overrides.cpp n
 set_source_files_properties(${GOW_NATIVE_SOURCES} TARGET_DIRECTORY ps2EntryRunner
     PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
 
+# Optional local profile, trained with tools/android/train_vu_profile.py. Only
+# the VU units participate in ThinLTO; the EE/IOP translation stays unchanged.
+set(GOW_ANDROID_VU_PROFILE "" CACHE FILEPATH "Local Clang profile for native VU execution")
+if(GOW_ANDROID_VU_PROFILE)
+    if(NOT ANDROID_ABI STREQUAL "arm64-v8a")
+        message(FATAL_ERROR "The local VU profile workflow targets Android ARM64")
+    endif()
+    if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR NOT EXISTS "${GOW_ANDROID_VU_PROFILE}")
+        message(FATAL_ERROR "GOW_ANDROID_VU_PROFILE requires Clang and an existing local .profdata file")
+    endif()
+    set(GOW_VU_PROFILE_OPTIONS "-flto=thin" "-fprofile-use=${GOW_ANDROID_VU_PROFILE}" "-Wno-profile-instr-unprofiled")
+    foreach(source IN LISTS GOW_NATIVE_SOURCES)
+        if(source MATCHES "/vu1n_part[0-9]+\\.cpp$")
+            set_property(SOURCE "${source}" TARGET_DIRECTORY ps2EntryRunner APPEND PROPERTY COMPILE_OPTIONS ${GOW_VU_PROFILE_OPTIONS})
+        endif()
+    endforeach()
+    set_property(SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/PS2Recomp/ps2xRuntime/src/lib/vu/ps2_vu1_core.cpp"
+        TARGET_DIRECTORY ps2_runtime APPEND PROPERTY COMPILE_OPTIONS ${GOW_VU_PROFILE_OPTIONS})
+    target_link_options(ps2EntryRunner PRIVATE ${GOW_VU_PROFILE_OPTIONS}
+        "-Wl,--thinlto-jobs=2" "-Wl,--thinlto-cache-dir=${CMAKE_BINARY_DIR}/vu-thinlto-cache")
+endif()
+
 # All game/runtime calls resolve inside this self-contained native library.
 target_link_options(ps2EntryRunner PRIVATE "-Wl,-Bsymbolic-functions" "-Wl,--wrap=ALooper_pollOnce")

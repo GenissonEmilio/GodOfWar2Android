@@ -66,3 +66,6 @@ local.properties
 *.keystore
 android/app/build/
 android/app/.cxx/
+*.profraw
+*.profdata
+*.profdata.json

@@ -7,7 +7,7 @@
 #include <sched.h>
 #include <vector>
 
-// Diagnostic A/B only. Android's scheduler and ADPF remain the default. Never
+// Opt-in worker placement. Android's scheduler and ADPF remain the default. Never
 // expand a worker's allowed CPU set, change CPU frequencies or touch other apps.
 class AndroidWorkerAffinity
 {

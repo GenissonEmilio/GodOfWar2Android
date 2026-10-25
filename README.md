@@ -17,6 +17,10 @@ O executável PS2 é traduzido antecipadamente para C++ pelo PS2Recomp, compilad
 pelo NDK para ARM64. O runtime atende as APIs PS2, GS, IOP e VU; não depende de BIOS.
 Os fontes gerados do jogo e seus arquivos de disco ficam locais.
 
+O build local pode usar um perfil do combate para otimizar somente a execução
+VU nativa com IR-PGO e ThinLTO. O perfil e a captura permanecem locais; as etapas
+estão em [docs/VU-PROFILE.md](docs/VU-PROFILE.md).
+
 ## Experiência móvel em implementação
 
 - Interface em português com tema escuro, vermelho e dourado.
@@ -29,6 +33,8 @@ Os fontes gerados do jogo e seus arquivos de disco ficam locais.
   33,3 ms. A renderização assíncrona é
   experimental e vem desativada. O processamento paralelo também é opcional e
   exige reabrir o jogo.
+- Opção experimental para priorizar quatro núcleos de desempenho quando disponíveis,
+  com restauração da afinidade anterior ao desativá-la. Vem desativada.
 - Resolução interna 1×, 2× ou 3× aplicada ao reiniciar o jogo.
 - Entrada de controles Android por eixos, gatilhos e botões; ocultação automática
   do touch. Contador baseado nos frames do jogo.

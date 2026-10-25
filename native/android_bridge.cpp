@@ -28,6 +28,7 @@ std::atomic<uint64_t> movieFrames{0};
 std::atomic<int> volume{80}, frameLimit{30}, appliedLimit{-1};
 std::atomic<uint64_t> pacingEpoch{0};
 std::atomic<bool> performanceHints{true};
+std::atomic<bool> preferPerformanceCores{false};
 std::atomic<int> screenMode{0};
 std::atomic<float> deadzone{0.14f}, sensitivity{1.0f};
 uint8_t axis(float v) {
@@ -62,7 +63,7 @@ void paceGameFrame() {
         std::fprintf(stderr,"[gow-frames] target=%d game_hz=%.3f n=%zu p50_ms=%.3f p95_ms=%.3f p99_ms=%.3f max_ms=%.3f over_35ms=%zu\n",frameLimit.load(),1000.0*count/elapsed,count,sorted[count/2],sorted[(count-1)*95/100],sorted[(count-1)*99/100],sorted[count-1],late);
         count=0;elapsed=0;
         const int affinityMode=std::filesystem::exists("perf-affinity-pin")?1:
-            std::filesystem::exists("perf-affinity-pool")?2:0;
+            (preferPerformanceCores.load() || std::filesystem::exists("perf-affinity-pool"))?2:0;
         if(affinity.setMode(affinityMode))pacingEpoch.fetch_add(1);
         std::error_code error;
         const bool wanted=!std::filesystem::exists("perf-adpf-off",error);
@@ -176,9 +177,10 @@ extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivit
     pendingPress.fetch_or(static_cast<uint16_t>(state & ~previous));
 }
 extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivity_nativePause(JNIEnv *,jclass,jboolean value) { if(paused.exchange(value)!=bool(value))pacingEpoch.fetch_add(1); input.store(0x808080800000ULL); pendingPress.store(0); physicalPress.store(0); if (IsAudioDeviceReady()) SetMasterVolume(gowAndroidPaused()?0.0f:volume.load()/100.0f); }
-extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivity_nativeSettings(JNIEnv *,jclass,jint vol,jint fps,jfloat dz,jfloat gain,jboolean graphicsAsync) {
+extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivity_nativeSettings(JNIEnv *,jclass,jint vol,jint fps,jfloat dz,jfloat gain,jboolean graphicsAsync,jboolean performanceCores) {
     volume.store(std::clamp(int(vol),0,100));if(frameLimit.exchange(fps==30?30:60)!=(fps==30?30:60))pacingEpoch.fetch_add(1);asyncFinish.store(graphicsAsync);
     deadzone.store(std::clamp(dz,0.0f,0.5f)); sensitivity.store(std::clamp(gain,0.1f,3.0f));
+    preferPerformanceCores.store(performanceCores);
 }
 
 extern "C" JNIEXPORT jlong JNICALL Java_io_github_genissonemilio_gow2_GameActivity_nativeFrames(JNIEnv *,jclass) { return static_cast<jlong>(ps2_perf::guestFlips.load(std::memory_order_relaxed)); }

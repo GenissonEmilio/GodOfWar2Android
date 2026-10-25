@@ -668,3 +668,77 @@ Assinatura e alinhamento ZIP passaram; os segmentos ELF têm alinhamento de 16 K
 SHA256: `229f161dd8a0969dc329d2c230db2d8f6b46f9c177c7694b8930fb92ce4ac4b7`.
 Os marcadores e as cópias de captura no aparelho foram removidos; os arquivos
 locais permanecem ignorados pelo Git. O CI de `f5e994a` passou nos dois branches.
+
+
+### Normalização ARM e retenção de buffers GIF (opt38/opt39)
+
+O novo perfil do opt37 coletou 23.066 amostras sem perda em 16 s. A divisão
+foi VUWorker 33,11%, GameThread 24,14%, GSThread 23,99% e GSFrontend 15,10%.
+`processVIF1Data` caiu a 0,86% das amostras; os blocos nativos somam 19,00%.
+A rodada longa anterior, com 22 janelas de combate de 5 s, teve mediana
+23,005 FPS e faixa 16,920–24,886: os picos próximos da meta não se sustentaram.
+
+A normalização de operandos da VU agora limita a magnitude inteira da
+codificação IEEE a FLT_MAX e repõe o sinal. Isso conserva os bits de zeros e
+subnormais e o tratamento anterior de Inf/NaN. CLIP usa seis comparações NEON
+com pesos por componente e conserva o histórico de 24 bits. O caminho SSE
+permanece disponível. O probe independente validou 1.048.576 componentes e
+8.388.608 casos CLIP, incluindo bits aleatórios, extremos e os dois controles FP.
+
+Em três pares no mesmo núcleo, 8.388.608 normalizações levaram medianas de
+35,388/18,991 ms (referência/nova); CLIP, 34,364/26,770 ms. Na captura real de
+2.000 execuções, os 2.000 hashes coincidiram. As medianas para 8.000 replays
+com cache aquecido foram 90,977/83,353 ms, redução de 8,38% nesse teste da VU.
+Isso não equivale a 8,38% de ganho no jogo. Acrescentar restrições de aliasing
+ou uma nova redução MAC dinâmica teve margem pequena no replay e ficou fora
+do APK.
+
+A experiência de agendamento usou somente as quatro threads registradas pelo
+próprio app. O perfil mostrou o núcleo 7 quase ocioso, enquanto VU/EE/GS/
+frontend disputavam os demais. Foram testados núcleos dedicados e um conjunto
+com os quatro núcleos de desempenho. As rodadas aquecidas continuaram perto
+de 18–20 FPS, sem comprovação da meta. O padrão continua com o scheduler e
+ADPF do Android; os marcadores `perf-affinity-pin` e `perf-affinity-pool` são
+somente diagnósticos. Sem os marcadores e com a opção de núcleos de desempenho desativada (padrão),
+a afinidade não é alterada. O teste
+verifica seleção por capacidade, limites permitidos e restauração das máscaras.
+A [documentação Android](https://developer.android.com/android-performance-analyzer/analyze/thread-sched)
+recomenda ADPF como mecanismo normal de orientação do scheduler.
+
+O rastreamento nativo com [heapprofd/Perfetto](https://perfetto.dev/docs/data-sources/native-heap-profiler)
+localizou retenção em `ps2_gs_stage::push`, na cópia de pacotes para o frontend.
+Na captura válida de 20 s, sem perda, a pilha acumulou aproximadamente 21,14 MB
+líquidos em 83 alocações amostradas. As capturas de inicialização incompletas
+ou com estouro do buffer do profiler foram descartadas dessa conclusão.
+
+A fila limitava o **payload** pendente a 4 MiB, mas o pool de vetores não tinha
+limite. Ao reaproveitar um vetor grande para um pacote pequeno, `assign` mantinha
+a capacidade anterior. Bursts de pacotes pequenos podiam assim reter centenas
+de MiB embora a soma dos payloads respeitasse o limite. No opt38 foram observados
+840.282 KiB alocados no heap nativo e 555.159 KiB de swap PSS no combate;
+o mapa tinha 5.473 regiões Scudo secundárias, muitas de 64/256 KiB.
+
+O opt39 usa classes de potência de dois, de 16 bytes a 1 MiB, até oito buffers
+por classe, 64 no total e 8 MiB de armazenamento ocioso. O pool reaproveita somente
+a classe solicitada e abre espaço entre classes quando necessário. Transferências
+maiores continuam suportadas, sem retenção no cache. Cada pacote ainda possui
+sua cópia imutável; ordem de PATHs, backpressure, barreiras e espera de conclusão
+não foram alterados.
+
+O probe cobre um IMAGE de 256 KiB seguido de 4.096 pacotes de 16 bytes, valida
+os bytes de todos os pacotes ativos e testa reutilização, transferência maior
+que 1 MiB, limites de bytes/quantidade, espaço entre classes e 320 ciclos de
+tamanhos variados. Os probes VIF/GIF/frontend/worker e os testes de pixels GLES
+passaram; o CI do commit `b479ef6` passou nos dois branches. No aparelho, o heap
+nativo mediu 98.243 KiB no menu e 111.137 KiB durante o vídeo no opt39, contra
+mais de 500 MiB anteriormente no menu. Após a rodada de cinco minutos, o heap nativo continuou em 100.169 KiB; o
+swap PSS total foi 49.844 KiB, contra 555.159 KiB no opt38. As janelas de FPS
+caíram com o aquecimento. A captura final mostra a animação de morte; a coleta
+seguinte estava na tela de morte e foi descartada da comparação de combate.
+
+Um ensaio posterior retomou o checkpoint e manteve L1 pressionado pelo caminho
+real de gamepad por 90 s. Kratos aparece vivo, defendendo, nas capturas. Com o
+pool de quatro núcleos habilitado, 18 janelas após a transição marcaram
+20,640–25,242 FPS, mediana 22,219. Os valores finais de 20–22 FPS ainda não
+comprovam a meta sustentada. O aparelho reportou `false` para o recurso Android
+`config_sustainedPerformanceModeSupported`; não foi forçado um modo não suportado.
