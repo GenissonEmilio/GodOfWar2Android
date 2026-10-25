@@ -12,16 +12,19 @@ final class TouchOverlay extends View {
     private final Map<Integer,Control> owners=new HashMap<>();
     private final Map<Integer,PointF> points=new HashMap<>();
     float gameFps;
-    boolean editing;private boolean controller;private Control selected;
+    boolean editing;private boolean controller;private Control selected; private int presetApplied=-1;
     TouchOverlay(GameActivity activity){super(activity);game=activity;setContentDescription("Controle touch de God of War II");setFocusable(true);resetLayout();}
+    void settingsChanged(){if(presetApplied!=game.prefs().getInt("preset",0))resetLayout();invalidate();}
     void setController(boolean c){controller=c;invalidate();}
     void clear(){owners.clear();points.clear();invalidate();}
-    void resetLayout(){controls.clear();
+    void resetLayout(){clear();controls.clear();presetApplied=game.prefs().getInt("preset",0);
         controls.add(new Control("MOVER",0,.14f,.73f));controls.add(new Control("ESQUIVA",0,.72f,.76f));
         controls.add(new Control("□",0x8000,.84f,.67f));controls.add(new Control("△",0x1000,.90f,.51f));controls.add(new Control("○",0x2000,.96f,.67f));controls.add(new Control("✕",0x4000,.90f,.83f));
         controls.add(new Control("L1",0x400,.09f,.18f));controls.add(new Control("L2",0x100,.20f,.18f));controls.add(new Control("R1",0x800,.80f,.18f));controls.add(new Control("R2",0x200,.91f,.18f));
         controls.add(new Control("↑",16,.35f,.68f));controls.add(new Control("←",128,.31f,.79f));controls.add(new Control("→",32,.39f,.79f));controls.add(new Control("↓",64,.35f,.90f));
         controls.add(new Control("START",8,.56f,.90f));controls.add(new Control("SELECT",1,.46f,.90f));controls.add(new Control("L3",2,.08f,.46f));controls.add(new Control("R3",4,.69f,.46f));
+        if(presetApplied>=1){controls.get(2).x=.07f;controls.get(2).y=.37f;controls.get(8).x=.78f;controls.get(8).y=.12f;}
+        if(presetApplied==2){controls.get(3).x=.93f;controls.get(3).y=.36f;controls.get(6).x=.07f;controls.get(6).y=.12f;controls.get(7).x=.19f;controls.get(7).y=.12f;}
         try{JSONArray saved=new JSONArray(game.prefs().getString("layout","[]"));for(int i=0;i<Math.min(saved.length(),controls.size());i++){JSONArray a=saved.getJSONArray(i);Control c=controls.get(i);c.x=clamp((float)a.getDouble(0),.03f,.97f);c.y=clamp((float)a.getDouble(1),.05f,.95f);c.r=clamp((float)a.getDouble(2),.5f,2f);}}catch(JSONException ignored){}invalidate();
     }
     void saveLayout(){JSONArray a=new JSONArray();for(Control c:controls){JSONArray row=new JSONArray();try{row.put(c.x);row.put(c.y);row.put(c.r);}catch(JSONException ignored){}a.put(row);}game.prefs().edit().putString("layout",a.toString()).apply();}

@@ -19,6 +19,11 @@ final class MobileUi {
         android.content.SharedPreferences p=a.getSharedPreferences("mobile",0);
         LinearLayout body=column(a);body.addView(text(a,"AJUSTES DO OLIMPO",24));
         body.addView(text(a,"TOUCH E CONTROLE",18));
+        TextView presetLabel=text(a,"Layout base",16);body.addView(presetLabel);
+        Spinner preset=new Spinner(a);
+        String[] presets={"Padrão — 2 dedos","Combate — 3 dedos","Combate — 4 dedos"};
+        ArrayAdapter<String> adapter=new ArrayAdapter<>(a,android.R.layout.simple_spinner_dropdown_item,presets);preset.setAdapter(adapter);preset.setSelection(p.getInt("preset",0));
+        preset.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener(){public void onNothingSelected(android.widget.AdapterView<?> v){}public void onItemSelected(android.widget.AdapterView<?> v,View row,int pos,long id){if(pos!=p.getInt("preset",0)){p.edit().putInt("preset",pos).remove("layout").apply();changed.run();}}});body.addView(preset);
         slider(body,p,"opacity","Opacidade (%)",15,100,65,changed);
         slider(body,p,"size","Tamanho dos controles (%)",60,160,100,changed);
         slider(body,p,"deadzone","Zona morta (%)",0,50,14,changed);

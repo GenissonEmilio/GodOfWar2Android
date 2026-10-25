@@ -766,6 +766,21 @@ struct GSHwBackend::Impl
         for (GLuint i = 0; i < 6; ++i)
             g.EnableVertexAttribArray(i);
         buildTables();
+#if defined(__ANDROID__)
+        // GLES validates all sampler types even when a uniform branch does not sample them.
+        g.UseProgram(program);
+        g.Uniform1i(locTex,0); g.Uniform1i(locRtColor,1); g.Uniform1i(locTables,2);
+        g.Uniform1i(locPalette,3); g.Uniform1i(locDest,4); g.Uniform1i(locIdxPalette,5);
+        GLuint neutral = 0; const uint8_t white[]{255,255,255,255};
+        g.GenTextures(1,&neutral); g.BindTexture(kTexture2D,neutral);
+        g.TexImage2D(kTexture2D,0,kRgba8,1,1,0,kRgba,kUnsignedByte,white);
+        g.TexParameteri(kTexture2D,kTextureMinFilter,kNearest);
+        g.TexParameteri(kTexture2D,kTextureMagFilter,kNearest);
+        for (GLuint unit=0;unit<6;++unit) {
+            g.ActiveTexture(kTexture0+unit); g.BindTexture(kTexture2D,unit==2?tableTex:neutral);
+        }
+        g.ActiveTexture(kTexture0);
+#endif
         {
             const GLuint sv = compile(GSGL::kVertexShader, kShuffleVs), sfs = compile(GSGL::kFragmentShader, kShuffleFs);
             if (sv && sfs)
