@@ -58,3 +58,7 @@ disco. A referência está sob MIT; nosso runtime continua sob suas licenças GP
 Os resultados dos testes de pixels, ordenação e combate ficam em
 [ANDROID-VALIDATION.md](ANDROID-VALIDATION.md). A meta só será cumprida quando
 o jogo produzir quadros reais em até 33,3 ms de forma sustentada no aparelho.
+
+A pesquisa foi ampliada para PCSX2, Play! e Black Android. Técnicas verificadas,
+recursos confirmados no Adreno e decisões ficam em
+[RENDERER-RESEARCH.md](RENDERER-RESEARCH.md).

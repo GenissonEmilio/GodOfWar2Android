@@ -521,6 +521,7 @@ void main()
         uint32_t width = 0, height = 0;
         uint32_t blockLo = 0, blockHi = 0;
         bool valid = false;
+        uint8_t alphaMax = 255; // Conservative bound for decoded RGBA textures.
         uint64_t lastUse = 0;
     };
 
@@ -574,7 +575,7 @@ struct GSHwBackend::Impl : DrawUniforms
     GSTextureStore store; // uploaded texture bytes + CLUT (no rasteriser, no framebuffer)
     GSGL::Context context;
     bool initialized = false, failed = false;
-    bool mobileFetch = false;
+    bool mobileFetch = false, mobileDualBlend = false;
     uint8_t *vram = nullptr;
     uint32_t vramSize = 0;
 
@@ -677,6 +678,8 @@ struct GSHwBackend::Impl : DrawUniforms
         uint64_t draws = 0, batches = 0, skippedPsm = 0, unsupportedBlend = 0, texDecodes = 0, texHits = 0, skippedPrim = 0;
         std::chrono::steady_clock::time_point last = std::chrono::steady_clock::now();
     } stats;
+    struct BlendWork { uint64_t batches=0, vertices=0; };
+    std::unordered_map<uint64_t,BlendWork> blendWork;
     const bool triangleCulling = std::getenv("GOW_GS_TRIANGLE_CULL_ON")!=nullptr;
     const bool integerFast = std::getenv("GOW_GLES_INTEGER_FAST_OFF")==nullptr;
     bool statsEnabled = std::getenv("GOW_GS_HW_STATS") != nullptr;
@@ -738,16 +741,19 @@ struct GSHwBackend::Impl : DrawUniforms
 #if defined(__ANDROID__)
             std::string header="#version 320 es\n";
             if (mobileFetch && !directDraw && type==kFragmentShader) header+="#extension GL_EXT_shader_framebuffer_fetch : require\n#define GOW_FRAMEBUFFER_FETCH 1\n";
+            if (mobileDualBlend && directDraw && type==kFragmentShader) header+="#extension GL_EXT_blend_func_extended : require\n";
             header+="precision highp float;\nprecision highp int;\nprecision highp usampler2D;";
             if (directDraw) header+="\n#define GOW_DIRECT_DRAW 1\n";
             replaceAll("#version 430 core", header);
             if (mobileFetch && !directDraw && type==kFragmentShader)
                 replaceAll("texelFetch(uDest, ivec2(gl_FragCoord.xy), 0)","oColor");
             replaceAll("noperspective ", "");
-            replaceAll("layout(location = 0, index = 0)", "layout(location = 0)");
+            if(!mobileDualBlend || !directDraw)
+                replaceAll("layout(location = 0, index = 0)", "layout(location = 0)");
             if (mobileFetch && !directDraw && type==kFragmentShader)
                 replaceAll("layout(location = 0) out vec4 oColor;", "layout(location = 0) inout vec4 oColor;");
-            replaceAll("layout(location = 0, index = 1) out vec4 oBlend;", "vec4 oBlend;");
+            if(!mobileDualBlend || !directDraw)
+                replaceAll("layout(location = 0, index = 1) out vec4 oBlend;", "vec4 oBlend;");
 #else
             if (directDraw) replaceAll("#version 430 core", "#version 430 core\n#define GOW_DIRECT_DRAW 1\n");
 #endif
@@ -786,7 +792,8 @@ struct GSHwBackend::Impl : DrawUniforms
 #if defined(__ANDROID__)
         const char *extensions=reinterpret_cast<const char *>(glGetString(GL_EXTENSIONS));
         mobileFetch=extensions && (std::string(" ")+extensions+" ").find(" GL_EXT_shader_framebuffer_fetch ")!=std::string::npos && !std::getenv("GOW_GLES_FETCH_OFF");
-        std::fprintf(stderr,"[gs-gles] coherent framebuffer fetch: %s\n",mobileFetch?"enabled":"copy fallback");
+        mobileDualBlend=extensions && (std::string(" ")+extensions+" ").find(" GL_EXT_blend_func_extended ")!=std::string::npos && !std::getenv("GOW_GLES_DUAL_OFF");
+        std::fprintf(stderr,"[gs-gles] coherent framebuffer fetch: %s; dual source: %s\n",mobileFetch?"enabled":"copy fallback",mobileDualBlend?"available":"software fallback");
 #endif
         const GLuint v = compile(GSGL::kVertexShader, kVsSource);
         const GLuint f = compile(GSGL::kFragmentShader, {kFsSource, kReinterpretSource, kFsTail});
@@ -1090,6 +1097,8 @@ struct GSHwBackend::Impl : DrawUniforms
         const Api &g = gl();
         std::vector<uint32_t> pixels;
         decodeDirect(s, pixels);
+        tex.alphaMax=0;
+        for(const uint32_t pixel:pixels)tex.alphaMax=std::max(tex.alphaMax,uint8_t(pixel>>24));
         static const int texDumpLimit = std::getenv("GOW_GS_HW_TEXDUMP") ? std::atoi(std::getenv("GOW_GS_HW_TEXDUMP")) : 0;
         static int texDumped = 0;
         if (texDumped < texDumpLimit && s.textureWidth > 16)
@@ -1240,8 +1249,9 @@ struct GSHwBackend::Impl : DrawUniforms
     }
 
     // 256x1 RGBA palette of the current CLUT as the draw reads it (format, offset, TEXA alpha)
-    std::unordered_map<uint64_t, GLuint> palettes;
-    GLuint paletteFor(const GSDrawState &s)
+    struct Palette { GLuint id=0; uint8_t alphaMax=255; };
+    std::unordered_map<uint64_t, Palette> palettes;
+    GLuint paletteFor(const GSDrawState &s, uint8_t *alphaMax=nullptr)
     {
         const GSTex0Reg &t = s.context.tex0;
         uint64_t key = clutHash;
@@ -1262,13 +1272,15 @@ struct GSHwBackend::Impl : DrawUniforms
             std::fprintf(stderr, "\n");
         }
         const auto it = palettes.find(key);
-        if (it != palettes.end())
-            return it->second;
+        if (it != palettes.end()){
+            if(alphaMax)*alphaMax=it->second.alphaMax;
+            return it->second.id;
+        }
         const Api &g = gl();
         if (palettes.size() > 4096u)
         {
             for (auto &kv : palettes)
-                g.DeleteTextures(1, &kv.second);
+                g.DeleteTextures(1, &kv.second.id);
             palettes.clear();
         }
         uint32_t colors[256];
@@ -1280,7 +1292,9 @@ struct GSHwBackend::Impl : DrawUniforms
         g.TexImage2D(kTexture2D, 0, static_cast<GLint>(kRgba8), 256, 1, 0, kRgba, kUnsignedByte, colors);
         g.TexParameteri(kTexture2D, kTextureMinFilter, kNearest);
         g.TexParameteri(kTexture2D, kTextureMagFilter, kNearest);
-        palettes[key] = id;
+        uint8_t maxAlpha=0;for(uint32_t color:colors)maxAlpha=std::max(maxAlpha,uint8_t(color>>24));
+        palettes[key] = {id,maxAlpha};
+        if(alphaMax)*alphaMax=maxAlpha;
         return id;
     }
 
@@ -2093,7 +2107,7 @@ struct GSHwBackend::Impl : DrawUniforms
         pending.clear();
     }
 
-    void blendState(const GSDrawState &s, bool &enabled, GLenum &sf, GLenum &df, float &fixScale, float &constant, GLenum &equation, bool &soft)
+    void blendState(const GSDrawState &s, bool sourceAlphaFits, bool &enabled, GLenum &sf, GLenum &df, float &fixScale, float &constant, GLenum &equation, bool &soft)
     {
         enabled = false;
         soft = false;
@@ -2131,8 +2145,9 @@ struct GSHwBackend::Impl : DrawUniforms
         else if (a == 2 && b == 0 && d == 1) { sf = cs; df = kOne; equation = kFuncReverseSubtract; } // Cd - Cs*C
         else { soft = true; sf = cs; df = cd; }
 #if defined(__ANDROID__)
-        if (sf == kSrc1Alpha || sf == kOneMinusSrc1Alpha || df == kSrc1Alpha || df == kOneMinusSrc1Alpha) soft = true;
+        if ((sf == kSrc1Alpha || sf == kOneMinusSrc1Alpha || df == kSrc1Alpha || df == kOneMinusSrc1Alpha) && !sourceAlphaFits) soft = true;
 #endif
+        if(c==2u && fix>128u)soft=true;
         if (soft)
             ++stats.unsupportedBlend;
     }
@@ -2270,10 +2285,58 @@ struct GSHwBackend::Impl : DrawUniforms
         const GLboolean mr = (fbmsk & 0xFF) == 0xFF ? kFalse : kTrue, mg = (fbmsk & 0xFF00) == 0xFF00 ? kFalse : kTrue,
                         mb = (fbmsk & 0xFF0000) == 0xFF0000 ? kFalse : kTrue, ma = (fbmsk & 0xFF000000u) == 0xFF000000u ? kFalse : kTrue;
 
+        // Resolve the source once before choosing a blend program. Bounds come
+        // from the decoded image/palette, never from an assumed opaque texture.
+        RenderTarget *src=nullptr,*zsrc=nullptr,*rsrc=nullptr;
+        Texture dummy,*drawTexture=&dummy;bool indexed=false;
+        GLuint drawPalette=0;uint8_t textureAlphaMax=255;
+        if(s.prim.tme){
+            g.ActiveTexture(kTexture0);
+            // a texture that lives in a render target of the same format is sampled straight from it
+            const auto family = [](uint8_t psm) { return (psm == GS_PSM_CT16 || psm == GS_PSM_CT16S) ? 16 : (psm == GS_PSM_CT32 || psm == GS_PSM_CT24) ? 32 : 0; };
+            if (family(c.tex0.psm) != 0 && (c.tex0.tbp0 % 32u) == 0u)
+                if (RenderTarget *candidate = findTarget(c.tex0.tbp0 / 32u))
+                    if (family(candidate->psm) == family(c.tex0.psm) && !uploadedSinceDraw(*candidate, c.tex0.tbp0) &&
+                        !overwrittenByDepth(*candidate))
+                        src = candidate;
+            if (src == &rt)
+                feedbackBarrier(rt);
+            const bool zFormat = c.tex0.psm == 0x30 || c.tex0.psm == 0x31 || c.tex0.psm == 0x32 || c.tex0.psm == 0x3A;
+            if (zFormat && (c.tex0.tbp0 % 32u) == 0u)
+                for (RenderTarget &t : targets)
+                    if (t.depth && t.zbp == c.tex0.tbp0 / 32u && t.fbp != t.zbp)
+                        zsrc = &t;
+            if (zsrc)
+                src = nullptr;
+            if (!src && !zsrc)
+                rsrc = findReinterpretSource(c.tex0.tbp0, c.tex0.psm);
+            if (rsrc == &rt)
+                feedbackBarrier(rt);
+            indexed = !(src || rsrc || zsrc) && isIndexed(c.tex0.psm) && vram != nullptr;
+            drawTexture=(src || rsrc || zsrc)?&dummy:indexed?&indexTextureFor(s):&textureFor(s);
+            if(indexed)drawPalette=paletteFor(s,&textureAlphaMax);
+            else if(!(src || rsrc || zsrc))textureAlphaMax=drawTexture->alphaMax;
+            else if(zsrc)textureAlphaMax=128;
+            else if(c.tex0.psm==GS_PSM_CT24)textureAlphaMax=s.texa.ta0;
+            else if(c.tex0.psm==GS_PSM_CT16 || c.tex0.psm==GS_PSM_CT16S)textureAlphaMax=std::max(s.texa.ta0,s.texa.ta1);
+        }
+        const bool date = ((c.test >> 14) & 1u) != 0u && c.frame.psm != GS_PSM_CT24;
+        bool sourceAlphaFits=false;
+#if defined(__ANDROID__)
+        if(mobileDualBlend && directProgram && !date && !zAlias && s.prim.abe && (s.colclamp&1u)){
+            unsigned maxAlpha=0;for(const auto &v:verts)maxAlpha=std::max(maxAlpha,unsigned(v.a));
+            if(s.prim.tme && c.tex0.tcc){
+                if(c.tex0.tfx==0)maxAlpha=std::min(255u,unsigned(textureAlphaMax)*maxAlpha/128u);
+                else if(c.tex0.tfx==2)maxAlpha=std::min(255u,unsigned(textureAlphaMax)+maxAlpha);
+                else maxAlpha=textureAlphaMax;
+            }
+            sourceAlphaFits=maxAlpha<=128u;
+        }
+#endif
         bool blend = false, softBlend = false;
         GLenum sf, df, equation;
         float fixScale, constant;
-        blendState(s, blend, sf, df, fixScale, constant, equation, softBlend);
+        blendState(s, sourceAlphaFits, blend, sf, df, fixScale, constant, equation, softBlend);
         // COLCLAMP=0 with Cs*FIX + Cd and one flat untextured colour (the shadow-volume counting passes: G += 255, then
         // G += 1, modulo 256): every fragment adds the same constant modulo 256, and additions commute, so the fixed-function
         // blend does it in one draw: adding v < 128 is an add, adding v >= 128 is subtracting 256 - v. Exact while the
@@ -2314,6 +2377,14 @@ struct GSHwBackend::Impl : DrawUniforms
                 }
             }
         }
+        if(statsEnabled && softBlend){
+            bool flatAlpha=!verts.empty();const uint8_t alpha=flatAlpha?verts[0].a:0;
+            for(const auto &v:verts)if(v.a!=alpha){flatAlpha=false;break;}
+            const uint64_t key=(c.alpha&255u)|(((c.alpha>>32)&255u)<<8)|((s.colclamp&1u)<<16)|
+                (uint64_t(s.prim.tme)<<17)|(uint64_t(c.tex0.tcc)<<18)|(uint64_t(c.tex0.tfx)<<19)|
+                (uint64_t(((c.test>>14)&1u)!=0u)<<21)|(uint64_t(alpha)<<22)|(uint64_t(!flatAlpha)<<30);
+            auto &work=blendWork[key];++work.batches;work.vertices+=verts.size();
+        }
         if (softBlend || zAliasWrite) // the shader produces the final colour (a Z write replaces the colour word)
             blend = false;
         if (blend)
@@ -2329,7 +2400,6 @@ struct GSHwBackend::Impl : DrawUniforms
         else
             g.Disable(kBlend);
 
-        const bool date = ((c.test >> 14) & 1u) != 0u && c.frame.psm != GS_PSM_CT24;
         const bool ate = (c.test & 1u) != 0u;
         const uint32_t atst = static_cast<uint32_t>((c.test >> 1) & 7u), aref = static_cast<uint32_t>((c.test >> 4) & 0xFFu);
         const uint32_t afail = static_cast<uint32_t>((c.test >> 12) & 3u);
@@ -2378,38 +2448,14 @@ struct GSHwBackend::Impl : DrawUniforms
         g.Uniform1f(locBlendScale, 1.0f / 128.0f);
         if (s.prim.tme)
         {
-            // a texture that lives in a render target of the same format is sampled straight from it
-            RenderTarget *src = nullptr;
+            Texture &tex=*drawTexture;
             const auto family = [](uint8_t psm) { return (psm == GS_PSM_CT16 || psm == GS_PSM_CT16S) ? 16 : (psm == GS_PSM_CT32 || psm == GS_PSM_CT24) ? 32 : 0; };
-            if (family(c.tex0.psm) != 0 && (c.tex0.tbp0 % 32u) == 0u)
-                if (RenderTarget *candidate = findTarget(c.tex0.tbp0 / 32u))
-                    if (family(candidate->psm) == family(c.tex0.psm) && !uploadedSinceDraw(*candidate, c.tex0.tbp0) &&
-                        !overwrittenByDepth(*candidate))
-                        src = candidate;
-            if (src == &rt)
-                feedbackBarrier(rt);
-            Texture dummy;
-            RenderTarget *zsrc = nullptr;
-            const bool zFormat = c.tex0.psm == 0x30 || c.tex0.psm == 0x31 || c.tex0.psm == 0x32 || c.tex0.psm == 0x3A;
-            if (zFormat && (c.tex0.tbp0 % 32u) == 0u)
-                for (RenderTarget &t : targets)
-                    if (t.depth && t.zbp == c.tex0.tbp0 / 32u && t.fbp != t.zbp)
-                        zsrc = &t;
-            if (zsrc)
-                src = nullptr;
-            RenderTarget *rsrc = nullptr;
-            if (!src && !zsrc)
-                rsrc = findReinterpretSource(c.tex0.tbp0, c.tex0.psm);
-            if (rsrc == &rt)
-                feedbackBarrier(rt);
-            const bool indexed = !(src || rsrc || zsrc) && isIndexed(c.tex0.psm) && vram != nullptr;
-            Texture &tex = (src || rsrc || zsrc) ? dummy : indexed ? indexTextureFor(s) : textureFor(s);
             g.Uniform1i(locIndexed, indexed ? 1 : 0);
             g.Uniform1i(locLinear, s.linearFilter ? 1 : 0);
             if (indexed)
             {
                 g.ActiveTexture(kTexture0 + 5);
-                g.BindTexture(kTexture2D, paletteFor(s));
+                g.BindTexture(kTexture2D, drawPalette);
                 g.Uniform1i(locIdxPalette, 5);
                 const unsigned width=std::max<unsigned>(s.textureWidth,1),height=std::max<unsigned>(s.textureHeight,1);
                 g.Uniform4i(locWrap, (c.clamp & 3u) == 0u ? 0 : 1, ((c.clamp >> 2) & 3u) == 0u ? 0 : 1,
@@ -2675,6 +2721,19 @@ struct GSHwBackend::Impl : DrawUniforms
                      (unsigned long long)stats.texHits, (unsigned long long)stats.skippedPsm, (unsigned long long)stats.skippedPrim,
                      (unsigned long long)stats.unsupportedBlend, textures.size(),(unsigned long long)stats.presents,(unsigned long long)stats.reusedPresents,
                      (unsigned long long)stats.triangles,(unsigned long long)stats.outsideTriangles,(unsigned long long)stats.degenerateTriangles,(unsigned long long)stats.simpleBatches, (unsigned long long)stats.directBatches);
+        if(!blendWork.empty()){
+            std::vector<std::pair<uint64_t,BlendWork>> work(blendWork.begin(),blendWork.end());
+            std::sort(work.begin(),work.end(),[](const auto &a,const auto &b){return a.second.vertices>b.second.vertices;});
+            for(size_t i=0;i<std::min<size_t>(8,work.size());++i){
+                const auto key=work[i].first;const auto &item=work[i].second;
+                std::fprintf(stderr,"[gs-blend-work] alpha=%02llx fix=%llu clamp=%llu tme=%llu tcc=%llu tfx=%llu date=%llu vertexA=%llu varying=%llu batches=%llu vertices=%llu\n",
+                    (unsigned long long)(key&255u),(unsigned long long)((key>>8)&255u),(unsigned long long)((key>>16)&1u),
+                    (unsigned long long)((key>>17)&1u),(unsigned long long)((key>>18)&1u),(unsigned long long)((key>>19)&3u),
+                    (unsigned long long)((key>>21)&1u),(unsigned long long)((key>>22)&255u),(unsigned long long)((key>>30)&1u),
+                    (unsigned long long)item.batches,(unsigned long long)item.vertices);
+            }
+            blendWork.clear();
+        }
         stats.simpleBatches=stats.directBatches=0;
         stats.triangles=stats.outsideTriangles=stats.degenerateTriangles=0;
         stats.presents=stats.reusedPresents=0;

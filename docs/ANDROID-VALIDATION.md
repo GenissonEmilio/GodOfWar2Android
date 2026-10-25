@@ -456,3 +456,35 @@ repetição negativa e bilinear também passaram. Foram 12 ciclos EGL: variante
 nova e geral, cada uma com framebuffer fetch e cópia de fallback, repetidos três
 vezes. A medição de combate do `opt29` ainda está em andamento; estes testes de
 pixels não comprovam 30 FPS nem validam toda a campanha.
+
+### Mistura com duas saídas e limites de alpha (opt31)
+
+A [pesquisa em outros renderizadores](RENDERER-RESEARCH.md) levou à consulta das
+extensões do aparelho. O Adreno 810 anuncia `GL_EXT_blend_func_extended`, mas o
+adaptador removia a segunda saída do fragment shader em todo Android. Agora a
+variante sem leitura do destino pode manter essa saída e usar os fatores SRC1.
+O caminho só é usado quando os limites calculados de vértices, texel/CLUT e TFX
+provam alpha <=128. DATE, alias de Z, operações não representáveis, limites
+incertos e alpha/FIX acima de 128 conservam a equação no shader. As mudanças de
+imagem/CLUT recalculam os limites. A opção `perf-dual-off` força a comparação.
+
+O teste independente da equação do GS passou em 640 casos por ciclo: imagem
+RGBA e paletizada, quatro TFX, TCC ligado/desligado, fatores As/FIX e alpha
+0/64/128/129/255. Foram seis ciclos EGL com duas saídas e seis com a opção
+inativa, divididos igualmente entre framebuffer fetch e cópia de fallback.
+Nenhum erro GL ou divergência superior à tolerância de dois níveis de RGBA.
+As 24 verificações Python/Java também passaram.
+
+Na primeira luta, com estatísticas e leitura de `gpubusy`, as seis janelas após a
+transição registraram **17,370; 18,218; 18,399; 17,381; 18,078; 17,250 FPS**:
+mediana **17,730**, contra 15,977 na rodada `opt29`. A diferença entre essas
+execuções é de aproximadamente 11%; ainda não é uma estimativa controlada do
+ganho. O indicador global de GPU teve mediana 65,7% em 29 amostras nos últimos
+30 s. A bateria registrou 38,4 °C durante o teste.
+
+O uso do shader de mistura caiu de cerca de 12–13 mil batches por janela para
+1,3–1,4 mil; a variante comum passou a atender cerca de 12–13 mil batches. Isso
+confirma a mudança do trabalho executado, mas **não cumpre os 30 FPS**. Os p95
+das janelas de combate ficaram entre 59,457 e 69,757 ms. As capturas mostram a
+luta, texturas e HUD; as sombras duras ainda precisam de comparação com uma
+referência no mesmo ponto. Não há validação de toda a campanha.

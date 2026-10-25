@@ -322,6 +322,44 @@ static int runEpoch(int epoch){
     backend.Submit(composite);backend.Flush();ok=pixel(backend.Present(request),60,100,130)&&ok;
     composite.state.prim.abe=false;
     backend.Submit(composite);backend.Flush();ok=pixel(backend.Present(request),100,160,200)&&ok;
+    // Independent GS equation oracle across the 128 boundary. Changing the
+    // texel/CLUT alpha must invalidate its bound, including every TFX/TCC mode.
+    auto dual=composite;dual.state.context.frame.fbp=56;dual.state.context.test=0;
+    dual.state.prim.abe=true;dual.state.context.alpha=0x44;
+    const int background[]{32,80,120},textureRgb[]{200,100,40},vertexRgb[]{96,128,160};
+    unsigned blendCases=0;
+    const auto uploadPixel=[&](unsigned psm,unsigned base,uint32_t value){
+        GSTransferCommand transfer{};transfer.direction=0;transfer.bitbltbuf.dpsm=psm;
+        transfer.bitbltbuf.dbp=base;transfer.bitbltbuf.dbw=1;transfer.trxreg.rrw=transfer.trxreg.rrh=1;
+        backend.BeginTransfer(transfer);backend.UploadImage(reinterpret_cast<const uint8_t *>(&value),psm==GS_PSM_T8?1:4);
+    };
+    for(bool fixed:{false,true})for(bool paletted:{false,true})for(unsigned tfx=0;tfx<4;++tfx)for(unsigned tcc=0;tcc<2;++tcc)
+    for(unsigned ta:{0u,64u,128u,129u,255u})for(unsigned va:{0u,64u,128u,255u}){
+        dual.state.context.alpha=fixed?((uint64_t(ta)<<32)|0x64):0x44;
+        auto &t=dual.state.context.tex0;t={};t.tbp0=0x3600;t.tbw=1;t.tfx=tfx;t.tcc=tcc;
+        const uint32_t texel=(ta<<24)|0x2864c8;
+        if(paletted){
+            t.psm=GS_PSM_T8;t.cbp=0x3700;t.cpsm=GS_PSM_CT32;t.cld=1;
+            uploadPixel(GS_PSM_T8,t.tbp0,0);
+            uploadPixel(GS_PSM_CT32,t.cbp,texel);backend.LoadClut(t,{});
+        }else{t.psm=GS_PSM_CT32;uploadPixel(GS_PSM_CT32,t.tbp0,texel);}
+        for(auto &v:dual.vertices){v.r=96;v.g=128;v.b=160;v.a=va;}
+        const unsigned a=!tcc?va:tfx==0?std::min(255u,ta*va/128u):tfx==2?std::min(255u,ta+va):ta;
+        backend.ClearFramebuffer(dual.state.context,0x5a785020);backend.Submit(dual);backend.Flush();
+        uint8_t actual[4]{};glReadPixels(16,16,1,1,GL_RGBA,GL_UNSIGNED_BYTE,actual);
+        for(unsigned ch=0;ch<4;++ch){
+            int expected=a;
+            if(ch<3){
+                int source=tfx==1?textureRgb[ch]:std::min(255,textureRgb[ch]*vertexRgb[ch]/128+int(tfx>=2?va:0));
+                expected=std::clamp(int(std::floor(double(source-background[ch])*(fixed?ta:a)/128.0))+background[ch],0,255);
+            }
+            if(std::abs(int(actual[ch])-expected)>2){
+                std::fprintf(stderr,"Blend mismatch fixed=%d pal=%d TFX=%u TCC=%u ta=%u va=%u ch=%u: %u expected %d\n",fixed,paletted,tfx,tcc,ta,va,ch,actual[ch],expected);ok=false;
+            }
+        }
+        ++blendCases;
+    }
+    std::printf("GS source-alpha equation oracle: %u cases\n",blendCases);
     auto alias=composite;alias.state.prim.tme=false;alias.state.context.frame.fbp=48;
     alias.state.context.zbuf.zbp=48;alias.state.context.zbuf.psm=GS_PSM_Z24;alias.state.context.zbuf.zmask=true;
     alias.state.context.test=(1ULL<<16)|(2ULL<<17);
