@@ -12,7 +12,11 @@
 #include <cstdlib>
 #include <cstring>
 #include <cstdio>
-#include <xmmintrin.h>
+#if defined(USE_SSE2NEON)
+#include <sse2neon.h>
+#else
+#include <immintrin.h>
+#endif
 
 namespace
 {

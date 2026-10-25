@@ -24,7 +24,9 @@ void gow2DesktopInitialize() {
         if (line.rfind("fullscreen=",0)==0) fullscreen = line.substr(11)=="1";
         if (line.rfind("screen=",0)==0) mode = std::clamp(std::atoi(line.c_str()+7),0,2);
     }
+    #if !defined(__ANDROID__)
     if (!std::getenv("PS2X_HIDDEN_WINDOW")) desktop_video::setFullscreen(fullscreen);
+#endif
     std::string error;
     const bool ok = desktop_video::loadShader(std::getenv("GOW2_SHADER"),error);
     if (const char *status = std::getenv("GOW2_SHADER_STATUS")) std::ofstream(status) << (ok ? "ok" : error) << '\n';

@@ -1,4 +1,7 @@
 #include "runtime/ps2_pad.h"
+#if defined(__ANDROID__)
+#include "android_bridge.h"
+#endif
 #include "ps2_host_backend.h"
 #include <cstdio>
 #include <cstring>
@@ -42,6 +45,10 @@ bool PSPadBackend::readState(int /*port*/, int /*slot*/, uint8_t *data, size_t s
     data[3] = 0xFF;
     data[4] = data[5] = data[6] = data[7] = kPadStickCenter;
 
+#if defined(__ANDROID__)
+    gowAndroidReadPad(data);
+    return true;
+#endif
     uint16_t btns = 0xFFFFu;
     // GOW-Port: GLFW can list racing gear (handbrake, pedals) as gamepads before the real pad. The pad whose
     // button was pressed last becomes the active one (press edges, so idle devices never take over);

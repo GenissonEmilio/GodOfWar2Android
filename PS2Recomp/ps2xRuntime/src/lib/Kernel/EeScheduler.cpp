@@ -1,3 +1,7 @@
+#if defined(__ANDROID__)
+#include "android_bridge.h"
+#include <thread>
+#endif
 #include "runtime/ee_scheduler.h"
 
 #include "ps2_log.h"
@@ -166,6 +170,9 @@ void EeScheduler::run()
 
     while (!m_stopRequested.load(std::memory_order_acquire))
     {
+#if defined(__ANDROID__)
+        if (gowAndroidPaused()) { std::this_thread::sleep_for(std::chrono::milliseconds(8)); continue; }
+#endif
         processPendingEvents();
         if (m_stopRequested.load(std::memory_order_acquire))
         {

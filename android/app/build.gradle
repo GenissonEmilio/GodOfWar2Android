@@ -1,0 +1,24 @@
+plugins { id 'com.android.application' }
+android {
+    namespace 'io.github.genissonemilio.gow2'
+    compileSdk 35
+    ndkVersion '28.2.13676358'
+    defaultConfig {
+        applicationId 'io.github.genissonemilio.gow2'
+        minSdk 29
+        targetSdk 35
+        versionCode 1
+        versionName '0.1.0-dev'
+        ndk { abiFilters((project.findProperty('gowAbi') ?: 'arm64-v8a').toString()) }
+        externalNativeBuild { cmake {
+            arguments '-DANDROID_STL=c++_static', '-DCMAKE_BUILD_TYPE=Release'
+            targets 'ps2EntryRunner'
+        } }
+    }
+    externalNativeBuild { cmake { path '../../CMakeLists.txt'; version '3.31.6' } }
+    buildTypes {
+        debug { debuggable true }
+        release { minifyEnabled false }
+    }
+    lint { abortOnError true }
+}

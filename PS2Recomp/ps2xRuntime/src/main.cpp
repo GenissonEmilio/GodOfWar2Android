@@ -179,6 +179,9 @@ int main(int argc, char *argv[])
     try
     {
         std::filesystem::path pathObj = getExecutablePath(argc, argv);
+#if defined(__ANDROID__)
+        if (const char *boot = std::getenv("GOW2_BOOT")) pathObj = boot;
+#endif
 
         std::string filePathStr = pathObj.string();
         std::string elfName = pathObj.filename().string();

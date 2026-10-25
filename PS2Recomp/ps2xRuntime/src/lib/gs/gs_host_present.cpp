@@ -1,3 +1,6 @@
+#if defined(__ANDROID__)
+#include "android_bridge.h"
+#endif
 #include "runtime/desktop_video.h"
 void gow2DesktopKeys();
 void gow2DesktopSnapshot();
@@ -425,6 +428,9 @@ GSHostPresentation::View GSHostPresentation::renderFrame(GS &gs, uint64_t vsyncT
         selected = prepare(gs, vsyncTick);
     }
     g_perfOverlay.update(vsyncTick, gs.privilegedRegisters());
+    #if defined(__ANDROID__)
+    gowAndroidFrame();
+    #endif
     BeginDrawing();
     ClearBackground(BLACK);
     const float sourceWidth = static_cast<float>(std::max<uint32_t>(1u, selected.width));

@@ -4,6 +4,9 @@
 #include "gs_gl.h"
 #include "runtime/gs/gs_shared_present.h"
 
+#if defined(__ANDROID__)
+#include <EGL/egl.h>
+#endif
 #include <array>
 #include <atomic>
 #include <clocale>
@@ -95,20 +98,30 @@ namespace
         load(a.BindBuffer, "glBindBuffer", missing);
         load(a.BufferData, "glBufferData", missing);
         load(a.BufferSubData, "glBufferSubData", missing);
+#if !defined(__ANDROID__)
         load(a.GetBufferSubData, "glGetBufferSubData", missing);
+#endif
         load(a.BindBufferBase, "glBindBufferBase", missing);
         load(a.BindBufferRange, "glBindBufferRange", missing);
+#if !defined(__ANDROID__)
         load(a.ClearBufferData, "glClearBufferData", missing);
+#endif
         load(a.CopyBufferSubData, "glCopyBufferSubData", missing);
+#if !defined(__ANDROID__)
         load(a.BufferStorage, "glBufferStorage", missing);
+#endif
         load(a.MapBufferRange, "glMapBufferRange", missing);
         load(a.UnmapBuffer, "glUnmapBuffer", missing);
         load(a.GenQueries, "glGenQueries", missing);
         load(a.DeleteQueries, "glDeleteQueries", missing);
         load(a.BeginQuery, "glBeginQuery", missing);
         load(a.EndQuery, "glEndQuery", missing);
+#if !defined(__ANDROID__)
         load(a.GetQueryObjectui64v, "glGetQueryObjectui64v", missing);
+#endif
+#if !defined(__ANDROID__)
         load(a.QueryCounter, "glQueryCounter", missing);
+#endif
         load(a.CreateShader, "glCreateShader", missing);
         load(a.ShaderSource, "glShaderSource", missing);
         load(a.CompileShader, "glCompileShader", missing);
@@ -168,7 +181,11 @@ namespace
         load(a.DepthMask, "glDepthMask", hwMissing);
         load(a.DepthFunc, "glDepthFunc", hwMissing);
         load(a.ClearColor, "glClearColor", hwMissing);
+#if defined(__ANDROID__)
+        a.ClearDepth = [](double depth) { auto fn = reinterpret_cast<void (*)(float)>(eglGetProcAddress("glClearDepthf")); fn(static_cast<float>(depth)); };
+#else
         load(a.ClearDepth, "glClearDepth", hwMissing);
+#endif
         load(a.Clear, "glClear", hwMissing);
         load(a.Scissor, "glScissor", hwMissing);
         load(a.Uniform1i, "glUniform1i", hwMissing);
@@ -183,7 +200,11 @@ namespace
         load(a.ReadPixels, "glReadPixels", hwMissing);
         load(a.BlitFramebuffer, "glBlitFramebuffer", hwMissing);
         load(a.PixelStorei, "glPixelStorei", hwMissing);
+#if defined(__ANDROID__)
+        a.TextureBarrier = [] {}; // feedback is copied explicitly by the GLES raster path
+#else
         load(a.TextureBarrier, "glTextureBarrier", hwMissing);
+#endif
         std::string copyMissing;
         load(a.CopyImageSubData, "glCopyImageSubData", copyMissing);
         a.hwRaster = graphicsMissing.empty() && hwMissing.empty();
@@ -418,6 +439,8 @@ namespace GSGL
         m_shared = false;
     }
 }
+#elif defined(__ANDROID__)
+#include "android_egl.inl"
 #else
 // GOW-Port (Linux): contextos de GLFW (la misma biblioteca que usa raylib para la ventana). El contexto del GS es una
 // ventana oculta que comparte objetos con la del juego; los contextos de los hilos auxiliares comparten con el del GS.

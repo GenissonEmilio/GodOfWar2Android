@@ -22,7 +22,11 @@ static bool gowUsePcsx2Vu1(); // GOW_VU1_PCSX2=1, defined before PS2Runtime::ini
 #include "ps2_iop_host.h"
 #include "ps2x/iop/iop_subsystem.h"
 
-#include <xmmintrin.h>
+#if defined(USE_SSE2NEON)
+#include <sse2neon.h>
+#else
+#include <immintrin.h>
+#endif
 #include <iostream>
 #include <stdexcept>
 #include <fstream>

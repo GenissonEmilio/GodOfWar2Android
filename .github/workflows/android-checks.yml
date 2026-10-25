@@ -1,0 +1,22 @@
+name: Android source checks
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Transactional importer checks (synthetic data)
+        run: |
+          mkdir -p /tmp/gow2-java
+          javac -d /tmp/gow2-java android/app/src/main/java/io/github/genissonemilio/gow2/DiscImporter.java tests/android/DiscImporterTest.java
+          java -cp /tmp/gow2-java io.github.genissonemilio.gow2.DiscImporterTest
+      - name: Disc import regression checks (no game data)
+        run: python3 -m unittest discover -s tests/linux -v
+      - name: Python syntax
+        run: python3 -m compileall -q tools/android

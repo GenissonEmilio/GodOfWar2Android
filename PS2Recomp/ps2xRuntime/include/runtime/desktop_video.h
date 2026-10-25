@@ -1,6 +1,6 @@
 #pragma once
 
-#if defined(__linux__) && !defined(__ANDROID__)
+#if defined(__linux__)
 #include "raylib.h"
 #include <string>
 

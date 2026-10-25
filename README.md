@@ -1,84 +1,77 @@
-# God of War II PC — Linux
+# God of War II para Android
 
-Projeto de recompilação estática da versão de PS2 **USA SCUS-97481 v1.01**, com
-interface em português, importação local do DVD e compilador Linux incluído.
-Derivado de [cxldsakeb/GoW2-nativo-PS2](https://github.com/cxldsakeb/GoW2-nativo-PS2),
-com a experiência de instalação do [ShadowOfTheColossusPC](https://github.com/GenissonEmilio/ShadowOfTheColossusPC).
+Adaptação **experimental, em desenvolvimento** da versão PS2 USA SCUS-97481
+v1.01 para Android ARM64. Derivada de
+[GodOfWar2PC](https://github.com/GenissonEmilio/GodOfWar2PC) e
+[cxldsakeb/GoW2-nativo-PS2](https://github.com/cxldsakeb/GoW2-nativo-PS2).
+A experiência móvel do [Black Android](https://github.com/RanggaCasper/Black-Android)
+é referência de interface e controles; o Black usa Xbox e seu motor não executa GoW II.
 
-**Em desenvolvimento:** a base upstream foi testada no início de Rhodes e tem
-limitações gráficas e de desempenho. Não há validação da campanha inteira. Os
-resultados desta adaptação Linux estão em [docs/LINUX-VALIDATION.md](docs/LINUX-VALIDATION.md).
+**Este projeto ainda não é um port concluído.** Compilar, iniciar e jogar o primeiro
+cenário não comprovam a compatibilidade da campanha inteira. Resultados reais e
+pendências ficam em [docs/ANDROID-VALIDATION.md](docs/ANDROID-VALIDATION.md).
 
-## Usar
+O executável PS2 é traduzido antecipadamente para C++ pelo PS2Recomp, compilado
+pelo NDK para ARM64. O runtime atende as APIs PS2, GS, IOP e VU; não depende de BIOS.
+Os fontes gerados do jogo e seus arquivos de disco ficam locais.
 
-1. Baixe o pacote Linux em [Releases](https://github.com/GenissonEmilio/GodOfWar2PC/releases).
-2. Extraia e abra `GodOfWar2PC`.
-3. Escolha sua cópia em ISO, ZIP, RAR ou 7Z. O importador verifica o executável e
-   as duas camadas do DVD. Outras regiões ou executáveis modificados são rejeitados.
-4. Aguarde a compilação e a otimização automática inicial. São usadas até duas
-   tarefas de compilação. Pode levar bastante tempo na primeira preparação.
-5. Clique em **Iniciar jogo**. As próximas aberturas reutilizam o cache validado.
+## Experiência móvel em implementação
 
-O pacote inclui GTK, GCC 13, PS2Recomp, fontes e bibliotecas necessárias. Não exige
-Python, Docker, BIOS de PS2 ou SDK instalado para usar o pacote. Requisitos:
-Linux x86_64 com SSE4.1, glibc 2.39 ou superior, OpenGL 4.6, 8 GB de RAM e 25 GB livres
-para importar um arquivo compactado e compilar. Ubuntu 24.04+ e Fedora 40+ são as bases.
+- Interface em português com tema escuro, vermelho e dourado.
+- Importação local de ISO/ZIP DVD9 com verificação do executável e das duas camadas.
+- Dois analógicos touch, botões PS2, D-pad e controles simultâneos por multitoque.
+- Editor de posições por arraste, tamanho por botão e persistência do layout.
+- Menu de pausa sobre o jogo com opacidade, tamanho, zona morta, sensibilidade,
+  volume e limite da apresentação em 30/60 FPS.
+- Resolução interna 1×, 2× ou 3× aplicada ao reiniciar o jogo.
+- Entrada de controles Android por eixos, gatilhos e botões; ocultação automática
+  do touch. Contador baseado nos frames do jogo.
+- Saves em cartão virtual dentro da pasta do app e pausa ao ir para segundo plano.
+- Renderização OpenGL ES 3.2 com contextos EGL compartilhados. A leitura do
+  framebuffer usa cópias explícitas, sem exigir barreiras de textura de desktop.
 
-**Dados e saves:** `~/.local/share/GodOfWar2PC` (respeita `XDG_DATA_HOME`). Após a
-preparação, o ZIP/ISO original é dispensável; preserve os dados importados e saves.
-A ROM não é alterada nem enviada para a internet. Nenhum arquivo do jogo ou código
-recompilado é distribuído no repositório ou nos releases.
+A lista descreve o código implementado; a validação funcional é registrada
+separadamente. Os ajustes móveis são uma interface sobreposta ao jogo. Ainda não
+há integração dessas páginas às opções originais renderizadas pelo executável PS2.
 
-## Imagem e controles
+## Compilar localmente
 
-A aba **Gráficos** oferece janela/tela cheia na resolução do monitor, proporção
-16:9 ou esticar, e fragment shaders GLSL 330 importados e validados no driver local.
-Há um filtro de nitidez pronto. Shaders são pós-processamento, não texturas HD.
-O jogo usa a câmera panorâmica Hor+ da base upstream.
+Requer Linux, Python 3, JDK 17/21, SDK 35, NDK `28.2.13676358` e CMake `3.31.6`.
+Não há download de dados do jogo. Não são publicados APKs com código derivado do DVD.
 
-Em **Gráficos → Desempenho**, a GPU automática prefere uma NVIDIA secundária com
-driver proprietário ativo. Um teste de OpenGL em janela oculta verifica a abertura;
-em caso de falha, o jogo usa a GPU do sistema. A opção **GPU padrão do sistema**
-desativa essa escolha automática. Opções PRIME definidas pelo usuário são respeitadas.
-A configuração vale apenas para este jogo.
+1. Construa o `ps2_recomp` da base PS2Recomp para seu computador ou use seu kit
+   local GodOfWar2PC. O processo está no [README da base PC](docs/PC-README.md).
+2. Gere os fontes a partir de seu disco:
 
-A resolução interna pode ser **1×**, **2×** ou **3×**. Automático usa 2× com offload
-NVIDIA e 1× nas demais configurações. Reduzir para 1× diminui o trabalho da GPU;
-a tela cheia continua na resolução do monitor. O contador de FPS pode iniciar
-ativado. Essas preferências preservam saves e reutilizam o jogo já compilado.
-Diagnóstico da seleção: `last-performance.json` e `last-gpu-probe.log` na pasta de dados;
-o renderizador efetivamente usado aparece em `last-game.log`.
-Medições locais e limites da melhoria: [docs/PERFORMANCE.md](docs/PERFORMANCE.md).
+   ```sh
+   python3 tools/android/prepare.py --disc '/caminho/God of War II (USA).zip' \
+     --recompiler /caminho/ps2_recomp
+   ```
 
-| Ação | Tecla |
-|---|---|
-| Mover | WASD |
-| Esquiva / analógico direito | IJKL |
-| □ / ✕ / ○ / △ | Z / X / C / V |
-| L1 / R1 | Q / E |
-| L2 / R2 | 1 / 3 ou Shift esquerdo / direito |
-| Start / Select | Enter / Tab |
-| Tela cheia | F11 ou F12 |
-| FPS | F10 |
+   Opcional: `--native-cache /caminho/native` reutiliza os fontes VU1/IOP gerados
+   pelo seu próprio cache GodOfWar2PC. Sem esse cache, as rotinas correspondentes
+   usam os caminhos de interpretação existentes na base, com custo de desempenho.
+3. Defina `ANDROID_HOME` e execute `tools/android/build.sh`.
+4. Instale `android/app/build/outputs/apk/debug/app-debug.apk` no aparelho.
+5. Abra God of War II e importe o mesmo ISO/ZIP no app. A importação precisa
+   de aproximadamente 18 GiB livres temporários; depois permanecem ~8 GiB.
 
-Controles USB/Bluetooth usam o suporte nativo da raylib/GLFW. Conecte antes de jogar.
-Os botões do controle mantêm o esquema original de PS2.
+Os arquivos ficam em `Android/data/io.github.genissonemilio.gow2/files`:
+`game/`, `memcards/` e configurações. O layout e os ajustes usam as preferências
+privadas do Android. Não limpe os dados do aplicativo para preservar os saves.
 
-## Desenvolver
+## Testes sem jogo
 
-`tools/linux/build.sh` usa Docker para construir o runtime, o compilador portátil,
-o launcher congelado e o pacote sem ROM. A integração contínua testa importação,
-cache, compilação de dados sintéticos e apresentação OpenGL em monitores virtuais.
-Testes: `python3 -m unittest discover -s tests/linux -v`.
-A validação com uma cópia local usa `tools/linux/validate_local.py`; arquivos
-recompilados ficam apenas na pasta de dados do usuário.
+```sh
+javac -d /tmp/gow2-check android/app/src/main/java/io/github/genissonemilio/gow2/DiscImporter.java tests/android/DiscImporterTest.java
+java -cp /tmp/gow2-check io.github.genissonemilio.gow2.DiscImporterTest
+python3 -m unittest discover -s tests/linux -v
+```
 
-## Créditos e licença
+## Créditos
 
-GPL-3.0. Base GoW II: cxldsakeb, DaniSBR1 e Alejrr2; PS2Recomp: ran-j e colaboradores;
-runtime: Waffle565; contexto OpenGL Linux: YYOzcan/Tobiichi-Port; referência de
-hardware: PCSX2. A interface e o kit portátil derivam dos projetos de GenissonEmilio
-ShadowOfTheColossusPC, ForbiddenMemoriesPC e CrashBandicootPC. Procedência em
-[docs/NOTES.md](docs/NOTES.md). O código correspondente e as licenças acompanham o pacote.
-
-God of War II pertence à Sony / Santa Monica Studio. Projeto independente.
+GPL-3.0, incluindo as licenças da base e suas dependências. PS2Recomp: ran-j e
+colaboradores; GoW II: cxldsakeb, DaniSBR1 e Alejrr2; runtime: Waffle565;
+renderizador: Taylor N. Albarnaz/LightVelox; referência de hardware: PCSX2;
+raylib e sse2neon: seus respectivos autores. Histórico em [docs/NOTES.md](docs/NOTES.md).
+God of War II pertence à Sony/Santa Monica Studio. Projeto independente.

@@ -1,5 +1,5 @@
 #include "runtime/desktop_video.h"
-#if defined(__linux__) && !defined(__ANDROID__)
+#if defined(__linux__)
 #include "rlgl.h"
 #include <algorithm>
 #include <cmath>

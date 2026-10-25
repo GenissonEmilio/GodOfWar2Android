@@ -3,6 +3,9 @@
 #include "gs_texture_store.h"
 #include "runtime/gs/gs_swizzle.h"
 #include "gs_gl.h"
+#if defined(__ANDROID__)
+#include <GLES3/gl32.h>
+#endif
 #include "../gs_gpu_helpers.h"
 #include "runtime/gs/gs_shared_present.h"
 
@@ -626,12 +629,67 @@ struct GSHwBackend::Impl
 
     const Api &gl() const { return context.gl(); }
 
+#if defined(__ANDROID__)
+    struct Snapshot { GLuint tex = 0, fbo = 0; uint32_t w = 0, h = 0; };
+    std::unordered_map<GLuint, Snapshot> snapshots;
+    GLuint sampleColor(RenderTarget &target) {
+        auto &copy = snapshots[target.color];
+        GLint oldRead = 0, oldDraw = 0, oldTexture = 0;
+        glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &oldRead);
+        glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &oldDraw);
+        glGetIntegerv(GL_TEXTURE_BINDING_2D, &oldTexture);
+        const bool scissor = glIsEnabled(GL_SCISSOR_TEST);
+        if (!copy.tex) { glGenTextures(1,&copy.tex); glGenFramebuffers(1,&copy.fbo); }
+        glBindTexture(GL_TEXTURE_2D, copy.tex);
+        if (copy.w != target.glW || copy.h != target.glH) {
+            copy.w = target.glW; copy.h = target.glH;
+            glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,copy.w,copy.h,0,GL_RGBA,GL_UNSIGNED_BYTE,nullptr);
+            glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
+        }
+        glBindFramebuffer(GL_READ_FRAMEBUFFER,target.fbo);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER,copy.fbo);
+        glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,copy.tex,0);
+        glDisable(GL_SCISSOR_TEST);
+        glBlitFramebuffer(0,0,copy.w,copy.h,0,0,copy.w,copy.h,GL_COLOR_BUFFER_BIT,GL_NEAREST);
+        if (scissor) glEnable(GL_SCISSOR_TEST);
+        glBindFramebuffer(GL_READ_FRAMEBUFFER,oldRead);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER,oldDraw);
+        glBindTexture(GL_TEXTURE_2D,oldTexture);
+        return copy.tex;
+    }
+    void feedbackBarrier(RenderTarget &target) { sampleColor(target); }
+#else
+    GLuint sampleColor(RenderTarget &target) { return target.color; }
+    void feedbackBarrier(RenderTarget &) { gl().TextureBarrier(); }
+#endif
+
     GLuint compile(GLenum type, const char *src) { return compile(type, {src}); }
     GLuint compile(GLenum type, std::initializer_list<const char *> parts)
     {
         const Api &g = gl();
         const GLuint sh = g.CreateShader(type);
+#if defined(__ANDROID__)
+        std::vector<std::string> translated;
+        std::vector<const char *> sources;
+        for (auto part : parts) {
+            std::string source(part);
+            auto replaceAll = [&](const std::string &a, const std::string &b) {
+                size_t at = 0; while ((at = source.find(a, at)) != std::string::npos) { source.replace(at,a.size(),b); at += b.size(); }
+            };
+            replaceAll("#version 430 core", "#version 320 es\nprecision highp float;\nprecision highp int;\nprecision highp usampler2D;");
+            replaceAll("noperspective ", "");
+            replaceAll("layout(location = 0, index = 0)", "layout(location = 0)");
+            replaceAll("layout(location = 0, index = 1) out vec4 oBlend;", "vec4 oBlend;");
+            translated.push_back(std::move(source));
+        }
+        for (auto &source : translated) sources.push_back(source.c_str());
+        g.ShaderSource(sh, static_cast<GLsizei>(sources.size()), sources.data(), nullptr);
+#else
         g.ShaderSource(sh, static_cast<GLsizei>(parts.size()), parts.begin(), nullptr);
+#endif
         g.CompileShader(sh);
         GLint ok = 0;
         g.GetShaderiv(sh, kCompileStatus, &ok);
@@ -1183,7 +1241,7 @@ struct GSHwBackend::Impl
             g.TexSubImage2D(kTexture2D, 0, 0, 0, 256, 1, kRgba, kUnsignedByte, palette);
         }
         g.ActiveTexture(kTexture0 + 1);
-        g.BindTexture(kTexture2D, rt.color);
+        g.BindTexture(kTexture2D, sampleColor(rt));
         g.TexParameteri(kTexture2D, kTextureMinFilter, kNearest);
         g.TexParameteri(kTexture2D, kTextureMagFilter, kNearest);
         g.ActiveTexture(kTexture0 + 2);
@@ -1266,7 +1324,7 @@ struct GSHwBackend::Impl
         const int texelBits = tf.kind == GSSwizzle::Kind::Bits32 ? 32 : tf.kind == GSSwizzle::Kind::Bits24 ? 24 : 16;
         g.UseProgram(clutProgram);
         g.ActiveTexture(kTexture0 + 1);
-        g.BindTexture(kTexture2D, rt->color);
+        g.BindTexture(kTexture2D, sampleColor(*rt));
         g.TexParameteri(kTexture2D, kTextureMinFilter, kNearest);
         g.TexParameteri(kTexture2D, kTextureMagFilter, kNearest);
         g.ActiveTexture(kTexture0 + 2);
@@ -1547,7 +1605,7 @@ struct GSHwBackend::Impl
         g.DepthMask(kFalse);
         g.UseProgram(shuffleProgram);
         g.ActiveTexture(kTexture0);
-        g.BindTexture(kTexture2D, shuffleSrcZ ? src.depth : src.color);
+        g.BindTexture(kTexture2D, shuffleSrcZ ? src.depth : sampleColor(src));
         g.Uniform1i(locShSrc, 0);
         g.Uniform1i(locShSrcZ, shuffleSrcZ ? 1 : 0);
         g.Uniform1f(locShZMax, zMaxFor(c.zbuf.psm));
@@ -1555,7 +1613,7 @@ struct GSHwBackend::Impl
         g.Uniform4i(locShTexa, shuffleState.texa.ta0 >> 7, shuffleState.texa.ta1 >> 7, shuffleState.texa.aem ? 1 : 0, 0);
         g.Uniform2f(locShInvSize, 1.0f / dst.pxW, 1.0f / dst.pxH);
         if (&src == &dst)
-            g.TextureBarrier();
+            feedbackBarrier(dst);
         g.BindVertexArray(shuffleVao);
         g.BindBuffer(kArrayBuffer, shuffleVbo);
         for (uint32_t i = 0; i < 4; ++i)
@@ -1899,6 +1957,9 @@ struct GSHwBackend::Impl
         else if (a == 2 && b == 0 && d == 2) { sf = kZero; df = kZero; } // 0
         else if (a == 2 && b == 0 && d == 1) { sf = cs; df = kOne; equation = kFuncReverseSubtract; } // Cd - Cs*C
         else { soft = true; sf = cs; df = cd; }
+#if defined(__ANDROID__)
+        if (sf == kSrc1Alpha || sf == kOneMinusSrc1Alpha || df == kSrc1Alpha || df == kOneMinusSrc1Alpha) soft = true;
+#endif
         if (soft)
             ++stats.unsupportedBlend;
     }
@@ -2116,10 +2177,10 @@ struct GSHwBackend::Impl
             if (date || softBlend || zAlias)
             {
                 g.ActiveTexture(kTexture0 + 4);
-                g.BindTexture(kTexture2D, rt.color);
+                g.BindTexture(kTexture2D, sampleColor(rt));
                 g.Uniform1i(locDest, 4);
                 g.ActiveTexture(kTexture0);
-                g.TextureBarrier();
+                feedbackBarrier(rt);
             }
         }
         g.Uniform2f(locInvSize, 1.0f / rt.pxW, 1.0f / rt.pxH);
@@ -2140,7 +2201,7 @@ struct GSHwBackend::Impl
                         !overwrittenByDepth(*candidate))
                         src = candidate;
             if (src == &rt)
-                g.TextureBarrier();
+                feedbackBarrier(rt);
             Texture dummy;
             RenderTarget *zsrc = nullptr;
             const bool zFormat = c.tex0.psm == 0x30 || c.tex0.psm == 0x31 || c.tex0.psm == 0x32 || c.tex0.psm == 0x3A;
@@ -2154,7 +2215,7 @@ struct GSHwBackend::Impl
             if (!src && !zsrc)
                 rsrc = findReinterpretSource(c.tex0.tbp0, c.tex0.psm);
             if (rsrc == &rt)
-                g.TextureBarrier();
+                feedbackBarrier(rt);
             const bool indexed = !(src || rsrc || zsrc) && isIndexed(c.tex0.psm) && vram != nullptr;
             Texture &tex = (src || rsrc || zsrc) ? dummy : indexed ? indexTextureFor(s) : textureFor(s);
             g.Uniform1i(locIndexed, indexed ? 1 : 0);
@@ -2167,7 +2228,7 @@ struct GSHwBackend::Impl
                 g.Uniform4i(locWrap, (c.clamp & 3u) == 0u ? 0 : 1, ((c.clamp >> 2) & 3u) == 0u ? 0 : 1, 0, 0);
             }
             g.ActiveTexture(kTexture0);
-            g.BindTexture(kTexture2D, zsrc ? zsrc->depth : src ? src->color : rsrc ? rsrc->color : tex.id);
+            g.BindTexture(kTexture2D, zsrc ? zsrc->depth : src ? sampleColor(*src) : rsrc ? sampleColor(*rsrc) : tex.id);
             g.Uniform1i(locZTex, !zsrc ? 0 : c.tex0.psm == 0x32 || c.tex0.psm == 0x3A ? 16 : c.tex0.psm == 0x31 ? 24 : 32);
             g.Uniform1f(locZMax, zsrc ? zMaxFor(static_cast<uint8_t>(c.tex0.psm)) : 1.0f);
             g.Uniform1i(locRtTex24, !(src || rsrc) ? 0 : c.tex0.psm == GS_PSM_CT24 ? 1 : family16(c.tex0.psm) ? 2 : 0);
@@ -2264,7 +2325,11 @@ struct GSHwBackend::Impl
         }
         g.ColorMask(mr, mg, mb, ma);
         g.DepthMask(zwrite ? kTrue : kFalse);
-        if (softBlend && !zAliasWrite && (s.colclamp & 1u) == 0u)
+        if (softBlend && !zAliasWrite
+#if !defined(__ANDROID__)
+            && (s.colclamp & 1u) == 0u
+#endif
+        )
         {
             // wrapping blend (COLCLAMP=0, only the shadow-volume passes): the shader reads the destination, so draw one
             // triangle at a time with a barrier in between; overlapping triangles of one draw then see each other's results
@@ -2272,7 +2337,7 @@ struct GSHwBackend::Impl
             for (size_t i = 0; i + 3 <= verts.size(); i += 3)
             {
                 if (i != 0)
-                    g.TextureBarrier();
+                    feedbackBarrier(rt);
                 g.DrawArrays(kTriangles, static_cast<GLint>(i), 3);
             }
         }
@@ -2779,7 +2844,7 @@ PresentationFrame GSHwBackend::Present(const GSPresentationRequest &request)
         RenderTarget *rt = d.findTarget(cfbp);
         if (!rt)
             return;
-        g.BindTexture(kTexture2D, rt->color);
+        g.BindTexture(kTexture2D, d.sampleColor(*rt));
         g.TexParameteri(kTexture2D, kTextureMinFilter, kNearest);
         g.TexParameteri(kTexture2D, kTextureMagFilter, kNearest);
         g.Uniform4i(d.locPresentOffset, static_cast<GLint>(cdbx * d.scale), static_cast<GLint>(cdby * d.scale),

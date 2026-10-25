@@ -3,10 +3,10 @@
   "game": "God of War II",
   "system": "PS2",
   "type": "recomp",
-  "project": "God of War II PC — Linux",
+  "project": "God of War II Android",
   "status": "in-progress",
   "targets": [
-    "Linux"
+    "Android ARM64"
   ],
   "toolchain": "PS2Recomp",
   "original": {
@@ -22,9 +22,9 @@
     }
   ],
   "help": [
-    "Probar en otros PC y GPU",
-    "Fallos de imagen del backend del GS",
-    "Velocidad en combate (EE y VU1 en serie)"
+    "Validação da campanha inteira em Android",
+    "Correção e otimização do renderizador GLES",
+    "Integração dos ajustes às opções originais"
   ],
-  "notes": "Linux adaptation of cxldsakeb/GoW2-nativo-PS2; full-campaign compatibility has not been established."
+  "notes": "Experimental native PS2-to-Android adaptation; full-campaign compatibility and Black Android feature parity have not been established."
 }

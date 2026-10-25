@@ -55,3 +55,14 @@ __pycache__/
 *.pyc
 *.ps2
 *.mcd
+
+# Android local SDK, builds, generated game code and signing material
+.gradle/
+.cxx/
+local.properties
+*.apk
+*.aab
+*.jks
+*.keystore
+android/app/build/
+android/app/.cxx/
