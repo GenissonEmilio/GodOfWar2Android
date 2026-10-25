@@ -197,6 +197,87 @@ static int runEpoch(int epoch){
     for(auto &v:batch.vertices)v.z=0xffffffff;
     backend.Submit(batch);backend.Flush();ok=pixel(backend.Present(request),200,200,0)&&ok;
     batch.state.context.test=0;
+    GSPrimitiveBatch visible=batch;visible.vertexCount=3;visible.state.prim.type=GS_PRIM_TRIANGLE;
+    visible.vertices[0].x=0;visible.vertices[0].y=0;
+    visible.vertices[1].x=64;visible.vertices[1].y=0;
+    visible.vertices[2].x=0;visible.vertices[2].y=64;
+    for(auto &v:visible.vertices){v.r=200;v.g=0;v.b=0;}
+    backend.Submit(visible);backend.Flush();
+    auto visibleFrame=backend.Present(request);
+    ok=pixel(visibleFrame,200,0,0,16,16)&&pixel(visibleFrame,200,200,0,48,48)&&ok;
+    auto outside=visible;for(auto &v:outside.vertices){v.x+=80;v.r=v.g=v.b=255;}
+    backend.Submit(outside);backend.Flush();ok=pixel(backend.Present(request),200,0,0)&&ok;
+    auto degenerate=visible;degenerate.vertices[1]=degenerate.vertices[0];
+    for(auto &v:degenerate.vertices)v.r=v.g=v.b=255;
+    backend.Submit(degenerate);backend.Flush();ok=pixel(backend.Present(request),200,0,0)&&ok;
+    visible.state.context.scissor={16,31,16,31};visible.state.prim.tme=true;visible.state.prim.fst=true;
+    visible.state.context.tex0={};visible.state.context.tex0.tbp0=0x3100;visible.state.context.tex0.tbw=1;
+    visible.state.context.tex0.psm=GS_PSM_CT32;visible.state.context.tex0.tfx=1;visible.state.context.tex0.tcc=1;
+    visible.state.textureWidth=visible.state.textureHeight=1;
+    backend.WriteVram(GS_PSM_CT32,0x3100,1,0,0,0x80825a28);
+    visible.vertices[0].x=15.5;visible.vertices[0].y=15.5;
+    visible.vertices[1].x=32.5;visible.vertices[1].y=15.5;
+    visible.vertices[2].x=15.5;visible.vertices[2].y=32.5;
+    for(auto &v:visible.vertices)v.u=v.v=0;
+    backend.Submit(visible);backend.Flush();auto edge=backend.Present(request);
+    ok=pixel(edge,40,90,130,16,16)&&pixel(edge,200,0,0,30,30)&&ok;
+    // New colour/depth targets must be initialized even if the previous pass
+    // leaves a channel mask, a narrow scissor and disabled depth writes.
+    auto maskedSeed=batch;maskedSeed.state.context.frame.fbmsk=0xffff00ff;
+    maskedSeed.state.context.scissor={16,31,16,31};
+    backend.Submit(maskedSeed);backend.Flush();
+    GLboolean writeMask[4]{};glGetBooleanv(GL_COLOR_WRITEMASK,writeMask);
+    if(writeMask[0] || !writeMask[1] || writeMask[2] || writeMask[3])ok=false;
+    auto fresh=maskedSeed;fresh.state.context.frame.fbp=24;fresh.state.context.frame.fbmsk=0;
+    fresh.state.context.test=(1ULL<<16)|(2ULL<<17);
+    for(auto &v:fresh.vertices){v.r=40;v.g=90;v.b=130;v.z=0x7fffffff;}
+    backend.Submit(fresh);backend.Flush();request.dispfb1=24|(1ULL<<9);
+    auto initialized=backend.Present(request);
+    ok=pixel(initialized,40,90,130,16,16)&&pixel(initialized,0,0,0,48,48)&&ok;
+    request.dispfb1=16|(1ULL<<9);
+    // Negative repeating UVs must retain floor-modulo semantics, including all
+    // four neighbours used by bilinear filtering across a palette seam.
+    auto repeat=batch;repeat.state.prim.tme=true;repeat.state.prim.fst=false;
+    repeat.state.context.tex0={};auto &repeatTex=repeat.state.context.tex0;
+    repeatTex.tbp0=0x3200;repeatTex.tbw=1;repeatTex.psm=GS_PSM_T8;repeatTex.tw=repeatTex.th=1;
+    repeatTex.tcc=1;repeatTex.tfx=1;repeatTex.cbp=0x3300;repeatTex.cpsm=GS_PSM_CT32;repeatTex.cld=1;
+    repeat.state.textureWidth=repeat.state.textureHeight=2;repeat.state.context.clamp=0;
+    const uint32_t repeatColors[]{0x800000c8,0x8000c800,0x80c80000,0x8000c8c8};
+    for(unsigned i=0;i<4;++i){
+        backend.WriteVram(GS_PSM_CT32,0x3300,1,i,0,repeatColors[i]);
+        backend.WriteVram(GS_PSM_T8,0x3200,1,i%2,i/2,i);
+    }
+    backend.LoadClut(repeatTex,{});
+    repeat.vertices[0].s=-8.125;repeat.vertices[0].t=-6.125;
+    repeat.vertices[1].s=23.875;repeat.vertices[1].t=25.875;
+    for(auto &v:repeat.vertices)v.q=1;
+    repeat.state.linearFilter=false;backend.Submit(repeat);backend.Flush();
+    std::vector<uint8_t> rawRepeat(64*64*4);
+    glReadPixels(0,0,64,64,GL_RGBA,GL_UNSIGNED_BYTE,rawRepeat.data());
+    auto repeatFrame=backend.Present(request);
+    ok=pixel(repeatFrame,200,200,0,16,16)&&ok;
+    repeat.state.linearFilter=true;backend.Submit(repeat);backend.Flush();
+    std::vector<uint8_t> rawFiltered(64*64*4);
+    glReadPixels(0,0,64,64,GL_RGBA,GL_UNSIGNED_BYTE,rawFiltered.data());
+    auto filtered=backend.Present(request);
+    ok=pixel(filtered,125,150,38,16,16)&&pixel(filtered,75,50,113,17,16)&&ok;
+    // Validate the raw target; presentation deliberately repeats its overscan
+    // border and therefore cannot serve as an oracle for these edge texels.
+    const auto checkRepeated=[&](const std::vector<uint8_t> &pixels,bool linear){
+        for(unsigned y=0;y<64;++y)for(unsigned x=0;x<64;++x){
+            const double u=-16.25+x-(linear?.5:0),v=-12.25+y-(linear?.5:0);
+            const int ix=int(std::floor(u)),iy=int(std::floor(v));
+            const double wx=linear?u-ix:0,wy=linear?v-iy:0;
+            auto at=[&](int dx,int dy,unsigned ch){return (repeatColors[((iy+dy)%2+2)%2*2+((ix+dx)%2+2)%2]>>(8*ch))&255;};
+            for(unsigned ch=0;ch<3;++ch){
+                const double expected=(at(0,0,ch)*(1-wx)+at(1,0,ch)*wx)*(1-wy)+(at(0,1,ch)*(1-wx)+at(1,1,ch)*wx)*wy;
+                const auto actual=pixels[(y*64+x)*4+ch];
+                if(std::abs(double(actual)-expected)>2){std::fprintf(stderr,"Repeating palette mismatch %u,%u channel %u: %u expected %.3f\n",x,y,ch,actual,expected);return false;}
+            }
+        }
+        return true;
+    };
+    ok=checkRepeated(rawRepeat,false)&&checkRepeated(rawFiltered,true)&&ok;
     GSPrimitiveBatch triangles=batch;triangles.vertexCount=3;
     triangles.state.prim.type=GS_PRIM_TRIANGLE;triangles.state.prim.tme=false;
     for(unsigned i=0;i<3;++i){triangles.vertices[i].x=-128.0f+(i==1?16.0f:0.0f);triangles.vertices[i].y=-128.0f+(i==2?16.0f:0.0f);triangles.vertices[i].z=123456;}

@@ -382,6 +382,29 @@ e reutilizadas. Reabra o processo ao alterá-lo e remova-o ao terminar os testes
   alinhados a 16 KiB. Os marcadores de diagnóstico e de blocos de 32 KiB foram
   removidos do aparelho. A compilação normal permanece instalada.
 
+## Recorte, inicialização e aritmética dos shaders
+
+- O descarte conservador passou em 200 mil triângulos contra recorte de
+  polígonos e nos testes GLES de borda, textura e degeneração. Na primeira
+  luta, encontrou aproximadamente 10–19% de triângulos fora da área visível,
+  mas as seis janelas com contadores mediram 15,84–17,24 FPS. O experimento
+  permanece desligado por padrão (`perf-culling` o ativa ao reabrir).
+- A leitura de `gpubusy`, sem mudar clocks nem governadores, mostrou cerca de
+  80% de ocupação mediana da GPU em 27 amostras de combate. Esse número inclui
+  o restante do trabalho gráfico do sistema e não é tempo exclusivo do jogo.
+- A criação de alvos de cor e profundidade agora define máscaras e desativa
+  o scissor antes da limpeza inicial. O teste deixa uma máscara parcial e
+  escrita de profundidade desativada antes de criar outro alvo; verificou a
+  área desenhada e os pixels que devem permanecer pretos.
+- A repetição de texturas com dimensões em potências de dois usa máscaras;
+  endereços de alvos de 16/32 bits usam shifts. Dimensões não compatíveis
+  mantêm divisão e módulo. `perf-integer-off` seleciona o caminho genérico.
+- Os dois caminhos produziram os mesmos resultados esperados em 4.096 pixels
+  de uma textura repetida com UVs negativos, tanto por ponto quanto bilinear.
+  O teste usa o alvo bruto, antes da repetição intencional da borda de overscan
+  na apresentação. Os três ciclos EGL passaram com fetch e com cópias, nos
+  modos rápido, genérico e com descarte: 18 execuções, sem erros GL.
+
 ## Critérios restantes
 
 - Desempenho de combate estável e correção visual em outras áreas e shaders.

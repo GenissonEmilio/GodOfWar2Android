@@ -24,6 +24,10 @@ jobs:
           /tmp/gow2-state-probe
       - name: Python syntax
         run: python3 -m compileall -q tools/android
+      - name: Conservative triangle culling against polygon clipping
+        run: |
+          c++ -std=c++20 -O2 -I PS2Recomp/ps2xRuntime/include tests/android/triangle_cull_probe.cpp -o /tmp/gow2-triangle-cull
+          /tmp/gow2-triangle-cull
       - name: IOP cycle grants and game frame pacing
         run: |
           c++ -std=c++20 -O2 -I PS2Recomp/ps2xIOP/include tests/android/iop_clock_probe.cpp -o /tmp/gow2-iop-clock

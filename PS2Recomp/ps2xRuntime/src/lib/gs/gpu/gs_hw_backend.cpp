@@ -4,6 +4,7 @@
 #include "runtime/gs/gs_swizzle.h"
 #include "gs_gl.h"
 #include "runtime/gs/gs_state_compare.h"
+#include "runtime/gs/gs_triangle_cull.h"
 #if defined(__ANDROID__)
 #include <GLES3/gl32.h>
 #endif
@@ -118,7 +119,7 @@ uniform sampler2D uPalette;
 uniform ivec4 uTexFmt;   // pageShiftX, pageShiftY, pixelsPerPageShift, unpackedShift
 uniform ivec4 uTexFmt2;  // bitOffset, texelBits, tableOffset, kind (0 CT32, 1 CT24, 2 CT16, 3 indexed)
 uniform ivec4 uRtFmt;    // pageShiftX, pageShiftY, pixelsPerPageShift, bits per pixel
-uniform ivec4 uRtFmt2;   // inverseTableOffset, fbp (pages), fbw (64 px), 0
+uniform ivec4 uRtFmt2;   // inverseTableOffset, fbp (pages), fbw (64 px), genericIntegerMath
 uniform ivec4 uTex0;     // tbp, tbw, width, height
 uniform vec2 uRtPx;      // render target size in PS2 pixels
 
@@ -137,8 +138,9 @@ vec4 reinterpretTexel(ivec2 p, vec2 sub)
     uint pixelIndex = (page << uint(uTexFmt.z)) + tab(uint(uTexFmt2.z) + entry);
     uint bitpos = (pixelIndex << uint(uTexFmt.w)) + uint(uTexFmt2.x);
     uint B = uint(uRtFmt.w);
-    uint rtIdx = bitpos / B;
-    uint within = bitpos % B;
+    bool bitAddress = uRtFmt2.w == 0 && (B == 16u || B == 32u);
+    uint rtIdx = bitAddress ? bitpos >> (B == 32u ? 5u : 4u) : bitpos / B;
+    uint within = bitAddress ? bitpos & (B - 1u) : bitpos % B;
     uint rtBase = uint(uRtFmt2.y) << uint(uRtFmt.z);
     if (rtIdx < rtBase) return vec4(1.0, 0.0, 1.0, 1.0);
     uint rel = rtIdx - rtBase;
@@ -147,8 +149,11 @@ vec4 reinterpretTexel(ivec2 p, vec2 sub)
     uint e = tab(uint(uRtFmt2.x) + inpage);
     uint rpsx = uint(uRtFmt.x), rpsy = uint(uRtFmt.y);
     uint fbw = uint(uRtFmt2.z);
-    uint px = (rpage % fbw) * (1u << rpsx) + (e & ((1u << rpsx) - 1u));
-    uint py = (rpage / fbw) * (1u << rpsy) + (e >> rpsx);
+    bool bitWidth = uRtFmt2.w == 0 && fbw != 0u && (fbw & (fbw - 1u)) == 0u;
+    uint pageX = bitWidth ? rpage & (fbw - 1u) : rpage % fbw;
+    uint pageY = bitWidth ? rpage >> uint(findLSB(fbw)) : rpage / fbw;
+    uint px = pageX * (1u << rpsx) + (e & ((1u << rpsx) - 1u));
+    uint py = pageY * (1u << rpsy) + (e >> rpsx);
     vec2 hs = vec2(textureSize(uRtColor, 0)) / uRtPx; // host texels per PS2 pixel
     vec2 own = vec2(float(px), float(py));
     ivec2 lo = ivec2(floor(own * hs + 0.001)), hi = max(lo, ivec2(ceil((own + 1.0) * hs - 0.001)) - 1);
@@ -178,13 +183,13 @@ vec4 reinterpretTexel(ivec2 p, vec2 sub)
 // Paletted textures (T8/T4 and their H variants): uTex holds the indices (R8, cached per VRAM upload), the colour comes
 // from uIdxPalette (256x1, cached per CLUT); filtering is done on the looked-up colours like the GS.
 uniform int uIndexed, uLinear;
-uniform ivec4 uWrap; // per axis (x, y): 0 repeat, 1 clamp
+uniform ivec4 uWrap; // x/y: 0 repeat, 1 clamp; z/w: power-of-two mask, -1 for generic modulo
 uniform sampler2D uIdxPalette;
 vec4 indexedTexel(ivec2 p)
 {
     ivec2 size = max(ivec2(uTexDim), ivec2(1));
-    p.x = (uWrap.x == 0) ? ((p.x % size.x) + size.x) % size.x : clamp(p.x, 0, size.x - 1);
-    p.y = (uWrap.y == 0) ? ((p.y % size.y) + size.y) % size.y : clamp(p.y, 0, size.y - 1);
+    p.x = (uWrap.x == 0) ? (uWrap.z >= 0 ? p.x & uWrap.z : ((p.x % size.x) + size.x) % size.x) : clamp(p.x, 0, size.x - 1);
+    p.y = (uWrap.y == 0) ? (uWrap.w >= 0 ? p.y & uWrap.w : ((p.y % size.y) + size.y) % size.y) : clamp(p.y, 0, size.y - 1);
     int idx = int(texelFetch(uTex, p, 0).r * 255.0 + 0.5);
     return texelFetch(uIdxPalette, ivec2(idx, 0), 0);
 }
@@ -635,11 +640,14 @@ struct GSHwBackend::Impl
 
     struct Stats
     {
+        uint64_t triangles = 0, outsideTriangles = 0, degenerateTriangles = 0;
         uint64_t shuffles = 0;
         uint64_t presents = 0, reusedPresents = 0;
         uint64_t draws = 0, batches = 0, skippedPsm = 0, unsupportedBlend = 0, texDecodes = 0, texHits = 0, skippedPrim = 0;
         std::chrono::steady_clock::time_point last = std::chrono::steady_clock::now();
     } stats;
+    const bool triangleCulling = std::getenv("GOW_GS_TRIANGLE_CULL_ON")!=nullptr;
+    const bool integerFast = std::getenv("GOW_GLES_INTEGER_FAST_OFF")==nullptr;
     bool statsEnabled = std::getenv("GOW_GS_HW_STATS") != nullptr;
 
     const Api &gl() const { return context.gl(); }
@@ -949,6 +957,10 @@ struct GSHwBackend::Impl
         g.GenFramebuffers(1, &t.fbo);
         g.BindFramebuffer(kFramebuffer, t.fbo);
         g.FramebufferTexture2D(kFramebuffer, kColorAttachment0, kTexture2D, t.color, 0);
+        // A previous pass may have written only one channel or a small scissor.
+        // Every pixel/channel of newly allocated storage must start defined.
+        g.Disable(kScissorTest);
+        g.ColorMask(kTrue, kTrue, kTrue, kTrue);
         g.ClearColor(0.f, 0.f, 0.f, 0.f);
         g.Clear(kColorBufferBit);
         std::fprintf(stderr, "[gs-hw] render target fbp=%u fbw=%u -> %ux%u\n", fbp, t.fbw, t.glW, t.glH);
@@ -966,6 +978,8 @@ struct GSHwBackend::Impl
             g.TexParameteri(kTexture2D, kTextureMagFilter, kNearest);
             g.BindFramebuffer(kFramebuffer, t.fbo);
             g.FramebufferTexture2D(kFramebuffer, kDepthAttachment, kTexture2D, t.depth, 0);
+            g.Disable(kScissorTest);
+            g.DepthMask(kTrue);
             g.ClearDepth(0.0);
             g.Clear(kDepthBufferBit);
         }
@@ -1302,7 +1316,7 @@ struct GSHwBackend::Impl
         g.Uniform4i(locTexFmt2, tf.bitOffset, texelBits, static_cast<GLint>(offsetOf(tf.table)), kind);
         const auto inv = inverseOffset.find(rt.psm);
         g.Uniform4i(locRtFmt, rf.pageShiftX, rf.pageShiftY, rf.pixelsPerPageShift, 1 << rf.unpackedShift);
-        g.Uniform4i(locRtFmt2, inv == inverseOffset.end() ? 0 : static_cast<GLint>(inv->second), static_cast<GLint>(rt.fbp), static_cast<GLint>(rt.fbw), 0);
+        g.Uniform4i(locRtFmt2, inv == inverseOffset.end() ? 0 : static_cast<GLint>(inv->second), static_cast<GLint>(rt.fbp), static_cast<GLint>(rt.fbw), integerFast?0:1);
         g.Uniform4i(locTex0, static_cast<GLint>(c.tex0.tbp0), c.tex0.tbw, s.textureWidth, s.textureHeight);
         g.Uniform2f(locRtPx, static_cast<float>(rt.pxW), static_cast<float>(rt.pxH));
     }
@@ -1389,7 +1403,7 @@ struct GSHwBackend::Impl
         g.Uniform4i(locClTexFmt, tf.pageShiftX, tf.pageShiftY, tf.pixelsPerPageShift, tf.unpackedShift);
         g.Uniform4i(locClTexFmt2, tf.bitOffset, texelBits, static_cast<GLint>(table->second), 0);
         g.Uniform4i(locClRtFmt, rf.pageShiftX, rf.pageShiftY, rf.pixelsPerPageShift, 1 << rf.unpackedShift);
-        g.Uniform4i(locClRtFmt2, static_cast<GLint>(inv->second), static_cast<GLint>(rt->fbp), static_cast<GLint>(rt->fbw), 0);
+        g.Uniform4i(locClRtFmt2, static_cast<GLint>(inv->second), static_cast<GLint>(rt->fbp), static_cast<GLint>(rt->fbw), integerFast?0:1);
         g.Uniform4i(locClTex0, static_cast<GLint>(tex0.cbp), static_cast<GLint>(width), 256, 256);
         g.Uniform2f(locClRtPx, static_cast<float>(rt->pxW), static_cast<float>(rt->pxH));
         g.BindFramebuffer(kFramebuffer, clutFbo);
@@ -1823,6 +1837,13 @@ struct GSHwBackend::Impl
         const bool tri = type == GS_PRIM_TRIANGLE || type == GS_PRIM_TRISTRIP || type == GS_PRIM_TRIFAN;
         const bool sprite = type == GS_PRIM_SPRITE;
         const bool line = type == GS_PRIM_LINE || type == GS_PRIM_LINESTRIP;
+        if(tri && b.vertexCount==3 && (triangleCulling || statsEnabled)){
+            ++stats.triangles;
+            const auto clipped=gsTriangleCull(s,b.vertices);
+            stats.outsideTriangles+=clipped==GSTriangleCull::Outside;
+            stats.degenerateTriangles+=clipped==GSTriangleCull::Degenerate;
+            if(triangleCulling && clipped!=GSTriangleCull::Keep){++stats.draws;return;}
+        }
         if (!tri && !sprite && !line)
         {
             ++stats.skippedPrim;
@@ -2296,7 +2317,10 @@ struct GSHwBackend::Impl
                 g.ActiveTexture(kTexture0 + 5);
                 g.BindTexture(kTexture2D, paletteFor(s));
                 g.Uniform1i(locIdxPalette, 5);
-                g.Uniform4i(locWrap, (c.clamp & 3u) == 0u ? 0 : 1, ((c.clamp >> 2) & 3u) == 0u ? 0 : 1, 0, 0);
+                const unsigned width=std::max<unsigned>(s.textureWidth,1),height=std::max<unsigned>(s.textureHeight,1);
+                g.Uniform4i(locWrap, (c.clamp & 3u) == 0u ? 0 : 1, ((c.clamp >> 2) & 3u) == 0u ? 0 : 1,
+                    integerFast && (width&(width-1))==0?int(width-1):-1,
+                    integerFast && (height&(height-1))==0?int(height-1):-1);
             }
             g.ActiveTexture(kTexture0);
             g.BindTexture(kTexture2D, zsrc ? zsrc->depth : src ? sampleColor(*src) : rsrc ? sampleColor(*rsrc) : tex.id);
@@ -2552,10 +2576,12 @@ struct GSHwBackend::Impl
         if (now - stats.last < std::chrono::seconds(5))
             return;
         stats.last = now;
-        std::fprintf(stderr, "[gs-hw] shuffles=%llu draws=%llu batches=%llu texDecodes=%llu texHits=%llu skippedPsm=%llu skippedPrim=%llu unsupportedBlend=%llu textures=%zu presents=%llu reusedPresents=%llu\n",
+        std::fprintf(stderr, "[gs-hw] shuffles=%llu draws=%llu batches=%llu texDecodes=%llu texHits=%llu skippedPsm=%llu skippedPrim=%llu unsupportedBlend=%llu textures=%zu presents=%llu reusedPresents=%llu triangles=%llu outside=%llu degenerate=%llu\n",
                      (unsigned long long)stats.shuffles, (unsigned long long)stats.draws, (unsigned long long)stats.batches, (unsigned long long)stats.texDecodes,
                      (unsigned long long)stats.texHits, (unsigned long long)stats.skippedPsm, (unsigned long long)stats.skippedPrim,
-                     (unsigned long long)stats.unsupportedBlend, textures.size(),(unsigned long long)stats.presents,(unsigned long long)stats.reusedPresents);
+                     (unsigned long long)stats.unsupportedBlend, textures.size(),(unsigned long long)stats.presents,(unsigned long long)stats.reusedPresents,
+                     (unsigned long long)stats.triangles,(unsigned long long)stats.outsideTriangles,(unsigned long long)stats.degenerateTriangles);
+        stats.triangles=stats.outsideTriangles=stats.degenerateTriangles=0;
         stats.presents=stats.reusedPresents=0;
         stats.shuffles = stats.draws = stats.batches = stats.texDecodes = stats.texHits = stats.skippedPsm = stats.skippedPrim = stats.unsupportedBlend = 0;
     }
