@@ -5,6 +5,13 @@ paridade de experiência com Black Android foi estabelecida.
 
 Data dos testes: 24 e 25 de outubro de 2026 (America/Fortaleza).
 
+Na rodada mais recente da primeira luta, o opt37 marcou **20,735–24,533 FPS**
+em seis janelas de cinco segundos, mediana **21,622**. Isso alcança a faixa da
+meta intermediária nesse trecho. O desempenho com o aparelho já aquecido ainda
+cai abaixo de 20 FPS; não há comprovação de 30 FPS sustentados nem de campanha
+sem defeitos visuais. Os detalhes das rodadas e dos limites de frequência estão
+no final deste documento.
+
 ## Ambiente observado
 
 - POCO M8 Pro 5G; Android 16; ARM64; Snapdragon SM7635.
@@ -518,3 +525,146 @@ O perfil subsequente de 16 s coletou 20.811 amostras sem perda. A participação
 nos ciclos de CPU de usuário foi VUWorker 35,66%, GameThread 25,58%, GSThread
 22,90% e GSFrontend 11,60%. Isso orienta a próxima investigação para VIF/VU,
 sem interpretar essas participações como tempo de parede ou ganho possível.
+
+### Expansão de VIF em grupos no ARM (opt33)
+
+O caminho sem máscara/arithmetic mode expande quatro vetores por grupo para
+V2-16, V4-16 e V4-8. Sinais, endereços, STCYCL e os caminhos de máscara/mode
+mantêm a semântica anterior. A comparação com um oráculo escalar passou em
+43.200 casos; mais 102 pacotes terminando em uma página inacessível validaram
+as leituras nas caudas de 1–17 vetores e a volta do endereço de destino.
+Todos os probes de frontend, GIF, arbitragem e barreiras também passaram.
+
+Três pares no mesmo executável, alternando `GOW_VIF_QUAD_OFF=1`, mediram as
+seguintes medianas para 12,8 milhões de vetores:
+
+| Formato | Anterior (ms) | Novo (ms) |
+| --- | ---: | ---: |
+| V2-16 | 13,053 | 7,528 |
+| V4-16 | 10,498 | 7,395 |
+| V4-8 | 17,339 | 10,363 |
+| V3-8, sem alteração | 24,187 | 24,190 |
+
+No jogo, sem estatísticas extras, o opt33 registrou **19,522; 19,410; 19,025;
+19,479; 19,656; 20,399 FPS**, mediana **19,501**, p95 entre 52,077 e 57,102 ms.
+As primeiras duas janelas (27,505/22,181) foram excluídas como transição.
+Uma rodada limpa anterior do opt32 mediu 19,958; 17,392; 18,870; 20,645;
+20,166; 20,421 FPS, mediana 20,062. O ganho isolado do VIF ainda não demonstra
+ganho no combate. A temperatura da bateria foi 39,1 °C durante a introdução
+do opt33; não se deve atribuir diferenças pequenas somente à alteração.
+`perf-vif-quad-off` permite selecionar o caminho anterior no mesmo APK ao
+reabrir. A meta atual de 20–22 FPS sustentados continua pendente nessa rodada.
+
+### Indicadores MAC da VU diretamente em NEON (opt34)
+
+Para máscaras DEST constantes, os bits de zero, sinal e overflow são montados
+nas próprias lanes, com uma redução inteira ao final. Isso substitui três
+movemasks SSE e suas consultas de inversão de bits. Não muda operações de
+ponto flutuante nem arredondamento; FLT_MAX, infinitos e todos os NaNs mantêm
+a interpretação anterior. Máscaras em tempo de execução e outras arquiteturas
+conservam a implementação existente.
+
+Um oráculo independente verificou **4.194.304 casos**, cobrindo todas as 16
+máscaras, combinações de valores extremos, bits aleatórios e os controles FP
+do host e da VU. Para 8.388.608 cálculos com DEST=7, três pares no aparelho
+mediram medianas de 49,149 ms no caminho SSE e 24,989 ms no nativo. Esse número
+é somente o custo do cálculo isolado. Os oito probes de CPU passaram, incluindo
+substituição de microcódigo, fallback, temporização DIV/EFU, FPCR, relógio do
+jogo e memória GS.
+
+No combate, o opt34 registrou **19,734; 19,839; 18,625; 18,530; 18,564;
+16,740 FPS**, mediana **18,595**, depois de excluir a transição. Não comprovou
+ganho de FPS. No perfil subsequente, a VU permaneceu com 35,69% dos ciclos de
+CPU de usuário. Amostras de `/proc` durante 24 s registraram aproximadamente
+79,5% de execução e 0,3% de espera para rodar na VU; ela apareceu no núcleo 7
+em 16 de 20 amostras. As medianas de frequência foram 2,074 GHz no cluster
+4–6 e 1,834 GHz no núcleo 7. Depois da coleta, `scaling_max_freq` indicava
+2,074/1,901 GHz nesses grupos, abaixo dos máximos de hardware 2,4/2,707 GHz.
+A bateria estava em 39,9 °C. Esses dados mostram limites aplicados pelo sistema,
+sem identificar sozinhos qual política os acionou. Nenhum clock, governor ou
+limite térmico foi alterado.
+
+### VIF com destinos intercalados (opt35–opt36)
+
+O opt36 trata WL=1/CL>1 em uma chamada para o fluxo inteiro. V2-16, V4-16 e
+V4-8 expandem quatro vetores e os gravam nos destinos individuais, com máscara
+de volta nos 16 KiB da VU. V3-8 mantém W e lê somente os três componentes.
+Os outros casos do caminho rápido avançam o endereço e a posição no ciclo
+incrementalmente, eliminando divisões por WL a cada trecho. Máscaras, row
+arithmetic e preenchimento CL<WL conservam o caminho anterior.
+
+Os **43.200 casos numéricos** e **544 pacotes com página de proteção** passaram
+com o kernel novo e com `GOW_VIF_QUAD_OFF=1`. Os pacotes V3 incluem o padding
+de palavra exigido pelo VIF, para que todos sejam processados. Há sinais,
+STCYCL, TOPS, NUM=0, preservação de W, lacunas e volta de endereços. Os demais
+probes de frontend, GIF, arbitragem, propriedade e barreiras também passaram.
+
+Três pares no mesmo executável, para 12,8 milhões de vetores com CL=4/WL=1,
+mediram estas medianas. O caminho de referência já inclui o avanço incremental
+de endereços; a comparação isola a escolha dos kernels ARM.
+
+| Formato | Referência (ms) | Kernel ARM (ms) |
+| --- | ---: | ---: |
+| V2-16 | 74,092 | 10,380 |
+| V3-8 | 85,601 | 54,087 |
+| V4-16 | 90,421 | 10,379 |
+| V4-8 | 72,172 | 11,785 |
+
+As 24 verificações Python/Java e o CI do commit `c1b489b` passaram, incluindo
+o oráculo MAC no fallback SSE.
+
+A rodada longa do opt36 teve 22 janelas de combate, aproximadamente 110 s:
+**12,995–18,786 FPS**, mediana **14,928**, p95 de 67,789–91,925 ms. Durante
+essa rodada, os limites e as frequências atuais dos dois grupos rápidos
+chegaram a 1,190/1,210 GHz; a bateria registrou 41,0 °C. O modo de economia
+global estava desligado. Essa condição não permite atribuir a diferença das
+rodadas anteriores somente ao código; também impede declarar desempenho estável.
+
+### Captura reproduzível e rodada após resfriamento (opt37)
+
+O gravador existente de VU ganhou um gatilho opcional. O modo Android limita
+a captura a 2.000 entradas e permite iniciá-la no combate, depois de medir FPS.
+Quando o diagnóstico está desativado, a função retorna antes de consultar
+arquivos. O teste sintético comprovou ausência de arquivo antes do gatilho,
+captura limitada a 16 registros e reprodução dos 16 sem divergência.
+Depois da medição, foram capturadas 2.000 execuções reais da primeira luta.
+O arquivo ficou local; ele contém microcódigo e dados do jogo.
+
+As entradas foram reproduzidas por executáveis independentes que usam os mesmos
+32 objetos VU nativos e a biblioteca de produção, sem renderizar a cena. Em três
+pares no mesmo núcleo, todos os 2.000 hashes coincidiram. Para 8.000 execuções
+com cache aquecido por processo, as medianas foram:
+
+| Experiência | Referência (ms) | Variante (ms) | Decisão |
+| --- | ---: | ---: | --- |
+| Separar a preparação inicial do despachante | 117,378 | 115,762 | Fora do APK; diferença pequena |
+| Ler o anel de flags fora do bloco gerado | 96,214 | 95,986 | Fora do APK; sem ganho relevante |
+| Ajustar agendamento de instruções para Cortex-A720 | 98,243 | 98,985 | Fora do APK; sem ganho |
+| Informar separação entre contexto, estado e dados em blocos sem callouts | 98,243 | 95,093 | Experiência local; sem medição no jogo |
+
+São pares de testes distintos, em momentos e frequências diferentes. Não se
+devem comparar os valores absolutos entre linhas nem convertê-los em ganho de
+FPS. A afinidade restringiu somente cada processo auxiliar de benchmark, sem
+alterar a afinidade do jogo ou políticas do sistema. Nenhuma dessas quatro
+variantes foi incorporada ao APK.
+
+Uma rodada anterior do opt37, ainda aquecido, marcou **18,662–19,600 FPS**,
+mediana **19,310** nas seis janelas de combate. Depois de encerrar o jogo e
+deixar o aparelho esfriar, a rodada sem captura ou estatísticas extras marcou:
+
+**24,533; 22,952; 21,319; 21,637; 20,735; 21,606 FPS**, mediana **21,622**.
+As duas primeiras janelas, 28,092/26,446 FPS, foram excluídas como transição.
+Os p95 ficaram entre 42,779 e 52,532 ms. Nas 29 amostras dos últimos 30 s,
+os tetos de CPU tiveram medianas de 1,709 GHz no grupo 4–6 e 1,651 GHz no
+núcleo 7; o indicador global de GPU teve mediana de 65,3%.
+
+Essa rodada alcançou a meta intermediária na primeira luta, mas a rodada quente
+e o teste longo impedem afirmar que a faixa se mantém em sessões prolongadas.
+As capturas mostram cenário, modelos, texturas e HUD; sombras ainda precisam de
+comparação com referência. Não há prova de ausência de defeitos na campanha.
+
+O APK opt37 ficou instalado e foi copiado para `artifacts/GodOfWar2Android-debug.apk`.
+Assinatura e alinhamento ZIP passaram; os segmentos ELF têm alinhamento de 16 KiB.
+SHA256: `229f161dd8a0969dc329d2c230db2d8f6b46f9c177c7694b8930fb92ce4ac4b7`.
+Os marcadores e as cópias de captura no aparelho foram removidos; os arquivos
+locais permanecem ignorados pelo Git. O CI de `f5e994a` passou nos dois branches.
