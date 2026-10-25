@@ -37,3 +37,7 @@ target_link_options(ps2EntryRunner PRIVATE "-Wl,-z,max-page-size=16384")
 set_target_properties(ps2EntryRunner PROPERTIES UNITY_BUILD ON UNITY_BUILD_BATCH_SIZE 32)
 set_source_files_properties(${GOW_NATIVE_SOURCES} overrides/gow2_overrides.cpp native/android_bridge.cpp
     "${CMAKE_CURRENT_SOURCE_DIR}/PS2Recomp/ps2xRuntime/src/main.cpp" TARGET_DIRECTORY ps2EntryRunner PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+
+# Preserve the VU multiply/add rounding boundaries when translating SSE to NEON.
+set_source_files_properties(${GOW_NATIVE_SOURCES} TARGET_DIRECTORY ps2EntryRunner
+    PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")

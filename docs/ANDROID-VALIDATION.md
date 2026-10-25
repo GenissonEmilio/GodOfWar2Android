@@ -3,6 +3,8 @@
 Status: em desenvolvimento. Nenhuma declaração de campanha completa ou de
 paridade de experiência com Black Android foi estabelecida.
 
+Data dos testes: 24 de outubro de 2026 (America/Fortaleza).
+
 ## Ambiente observado
 
 - POCO M8 Pro 5G; Android 16; ARM64; Snapdragon SM7635.

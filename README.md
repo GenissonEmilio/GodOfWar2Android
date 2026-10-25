@@ -20,7 +20,7 @@ Os fontes gerados do jogo e seus arquivos de disco ficam locais.
 - Interface em português com tema escuro, vermelho e dourado.
 - Importação local de ISO/ZIP DVD9 com verificação do executável e das duas camadas.
 - Dois analógicos touch, botões PS2, D-pad e controles simultâneos por multitoque.
-- Editor de posições por arraste, tamanho por botão e persistência do layout.
+- Presets para 2, 3 ou 4 dedos; editor de posições por arraste, tamanho por botão e persistência do layout.
 - Menu de pausa sobre o jogo com opacidade, tamanho, zona morta, sensibilidade,
   volume e limite da apresentação em 30/60 FPS.
 - Resolução interna 1×, 2× ou 3× aplicada ao reiniciar o jogo.

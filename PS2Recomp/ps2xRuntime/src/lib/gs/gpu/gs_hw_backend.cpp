@@ -633,6 +633,9 @@ struct GSHwBackend::Impl
     struct Snapshot { GLuint tex = 0, fbo = 0; uint32_t w = 0, h = 0; };
     std::unordered_map<GLuint, Snapshot> snapshots;
     GLuint sampleColor(RenderTarget &target) {
+        GLint attached = 0;
+        glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &attached);
+        if (static_cast<GLuint>(attached) != target.fbo) return target.color;
         auto &copy = snapshots[target.color];
         GLint oldRead = 0, oldDraw = 0, oldTexture = 0;
         glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &oldRead);
