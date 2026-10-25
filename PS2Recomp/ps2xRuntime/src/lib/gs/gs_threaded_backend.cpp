@@ -11,6 +11,7 @@
 #include "android_bridge.h"
 #endif
 #include "ThreadNaming.h"
+#include "runtime/ps2_worker_ids.h"
 
 #include <atomic>
 #include <algorithm>
@@ -211,6 +212,7 @@ void GSThreadedBackend::Drain() const
 void GSThreadedBackend::WorkerLoop()
 {
     ThreadNaming::SetCurrentThreadName("GSThread");
+    const ps2_workers::Registration worker(ps2_workers::Role::Gs);
     ThreadPriority::RaiseCurrentThread(ThreadPriority::Level::AboveNormal);
     GSPrimitiveBatch draw;
     for (;;)

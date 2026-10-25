@@ -15,6 +15,7 @@
 #include <mutex>
 #include <string_view>
 #include <unordered_map>
+#include <vector>
 #include <cstring>
 
 // GOW-Port: presentación compartida (PS2X_GS_DIRECT_PRESENT, activa por defecto): el contexto del GS comparte
@@ -97,23 +98,75 @@ namespace
     thread_local GSGL::Api uniformDriver;
     thread_local GSGL::GLuint uniformProgram = 0;
     struct UniformValue { std::array<uint32_t,4> words{}; size_t bytes = 0; };
-    thread_local std::unordered_map<uint64_t,UniformValue> uniformValues;
+    thread_local std::unordered_map<GSGL::GLuint,std::vector<UniformValue>> programUniforms;
+    thread_local std::vector<UniformValue> *currentUniforms = nullptr;
+    thread_local std::unordered_map<uint64_t,UniformValue> sparseUniforms;
     bool changedUniform(GSGL::GLint location,const void *value,size_t bytes) {
         if(location<0) return false;
-        const uint64_t key=(uint64_t(uniformProgram)<<32)|uint32_t(location);
-        auto &previous=uniformValues[key];
+        // Dense GLES locations need one indexed read per uniform instead of a
+        // hash lookup. Keep an unbounded fallback for driver-specific locations.
+        UniformValue *slot;
+        if(currentUniforms && location<1024){
+            if(currentUniforms->size()<=size_t(location))currentUniforms->resize(size_t(location)+1);
+            slot=&(*currentUniforms)[location];
+        } else slot=&sparseUniforms[(uint64_t(uniformProgram)<<32)|uint32_t(location)];
+        auto &previous=*slot;
         if(previous.bytes==bytes && std::memcmp(previous.words.data(),value,bytes)==0)return false;
         std::memcpy(previous.words.data(),value,bytes);previous.bytes=bytes;return true;
     }
+
+    template<class T,size_t N> struct CachedGLValue {
+        std::array<T,N> value{};
+        bool valid=false;
+        template<class... Args> bool changed(Args... args){
+            const std::array<T,N> next{static_cast<T>(args)...};
+            if(valid && std::memcmp(value.data(),next.data(),sizeof(next))==0)return false;
+            value=next;valid=true;return true;
+        }
+    };
+    struct RasterState {
+        CachedGLValue<GSGL::GLint,4> viewport,scissor;
+        CachedGLValue<GSGL::GLenum,4> blendFunc;
+        CachedGLValue<GSGL::GLenum,2> blendEquation;
+        CachedGLValue<float,4> blendColor,clearColor;
+        CachedGLValue<GSGL::GLboolean,4> colorMask;
+        CachedGLValue<GSGL::GLboolean,1> depthMask;
+        CachedGLValue<GSGL::GLenum,1> depthFunc;
+        std::array<uint8_t,3> enables{}; // 0 unknown, 1 disabled, 2 enabled
+        bool enableChanged(GSGL::GLenum cap,bool enabled){
+            unsigned index;
+            switch(cap){case 0x0BE2:index=0;break;case 0x0B71:index=1;break;case 0x0C11:index=2;break;default:return true;}
+            const uint8_t next=enabled?2:1;
+            if(enables[index]==next)return false;
+            enables[index]=next;return true;
+        }
+    };
+    thread_local RasterState raster;
+
     void cacheUniforms(GSGL::Api &api) {
-        uniformDriver=api;uniformProgram=0;uniformValues.clear();
-        api.UseProgram=[](GSGL::GLuint p){if(p!=uniformProgram){uniformDriver.UseProgram(p);uniformProgram=p;}};
+        uniformDriver=api;uniformProgram=0;programUniforms.clear();sparseUniforms.clear();currentUniforms=nullptr;
+        api.UseProgram=[](GSGL::GLuint p){if(p!=uniformProgram){uniformDriver.UseProgram(p);uniformProgram=p;currentUniforms=&programUniforms[p];}};
         api.Uniform1i=[](GSGL::GLint l,GSGL::GLint x){if(changedUniform(l,&x,sizeof(x)))uniformDriver.Uniform1i(l,x);};
         api.Uniform1ui=[](GSGL::GLint l,GSGL::GLuint x){if(changedUniform(l,&x,sizeof(x)))uniformDriver.Uniform1ui(l,x);};
         api.Uniform1f=[](GSGL::GLint l,float x){if(changedUniform(l,&x,sizeof(x)))uniformDriver.Uniform1f(l,x);};
         api.Uniform2f=[](GSGL::GLint l,float x,float y){const float v[]{x,y};if(changedUniform(l,v,sizeof(v)))uniformDriver.Uniform2f(l,x,y);};
         api.Uniform4f=[](GSGL::GLint l,float x,float y,float z,float w){const float v[]{x,y,z,w};if(changedUniform(l,v,sizeof(v)))uniformDriver.Uniform4f(l,x,y,z,w);};
         api.Uniform4i=[](GSGL::GLint l,GSGL::GLint x,GSGL::GLint y,GSGL::GLint z,GSGL::GLint w){const GSGL::GLint v[]{x,y,z,w};if(changedUniform(l,v,sizeof(v)))uniformDriver.Uniform4i(l,x,y,z,w);};
+        // All mutations of these raster properties go through the worker API.
+        // Raylib runs in a different EGL context and never uses this cache.
+        raster={};
+        if(const char *off=std::getenv("GOW_GLES_STATE_CACHE_OFF");off && *off=='1')return;
+        api.Enable=[](GSGL::GLenum cap){if(raster.enableChanged(cap,true))uniformDriver.Enable(cap);};
+        api.Disable=[](GSGL::GLenum cap){if(raster.enableChanged(cap,false))uniformDriver.Disable(cap);};
+        api.Viewport=[](GSGL::GLint x,GSGL::GLint y,GSGL::GLsizei w,GSGL::GLsizei h){if(raster.viewport.changed(x,y,w,h))uniformDriver.Viewport(x,y,w,h);};
+        api.Scissor=[](GSGL::GLint x,GSGL::GLint y,GSGL::GLsizei w,GSGL::GLsizei h){if(raster.scissor.changed(x,y,w,h))uniformDriver.Scissor(x,y,w,h);};
+        api.BlendFuncSeparate=[](GSGL::GLenum a,GSGL::GLenum b,GSGL::GLenum c,GSGL::GLenum d){if(raster.blendFunc.changed(a,b,c,d))uniformDriver.BlendFuncSeparate(a,b,c,d);};
+        api.BlendEquationSeparate=[](GSGL::GLenum a,GSGL::GLenum b){if(raster.blendEquation.changed(a,b))uniformDriver.BlendEquationSeparate(a,b);};
+        api.BlendColor=[](float a,float b,float c,float d){if(raster.blendColor.changed(a,b,c,d))uniformDriver.BlendColor(a,b,c,d);};
+        api.ColorMask=[](GSGL::GLboolean a,GSGL::GLboolean b,GSGL::GLboolean c,GSGL::GLboolean d){if(raster.colorMask.changed(a,b,c,d))uniformDriver.ColorMask(a,b,c,d);};
+        api.DepthMask=[](GSGL::GLboolean a){if(raster.depthMask.changed(a))uniformDriver.DepthMask(a);};
+        api.DepthFunc=[](GSGL::GLenum a){if(raster.depthFunc.changed(a))uniformDriver.DepthFunc(a);};
+        api.ClearColor=[](float a,float b,float c,float d){if(raster.clearColor.changed(a,b,c,d))uniformDriver.ClearColor(a,b,c,d);};
     }
 #endif
 

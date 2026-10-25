@@ -38,3 +38,7 @@ jobs:
         run: |
           c++ -std=c++20 -O2 -I PS2Recomp/ps2xRuntime/include tests/android/gif_arbiter_probe.cpp PS2Recomp/ps2xRuntime/src/lib/gs/ps2_gif_arbiter.cpp -o /tmp/gow2-gif-arbiter
           /tmp/gow2-gif-arbiter
+      - name: CLUT load and comparison banks
+        run: |
+          c++ -std=c++20 -O2 -w -I PS2Recomp/ps2xRuntime/include -I PS2Recomp/ps2xRuntime/src/lib/gs/gpu tests/android/texture_store_probe.cpp PS2Recomp/ps2xRuntime/src/lib/gs/gpu/gs_texture_store.cpp PS2Recomp/ps2xRuntime/src/lib/gs/ps2_gs_memory.cpp -o /tmp/gow2-texture-store
+          /tmp/gow2-texture-store

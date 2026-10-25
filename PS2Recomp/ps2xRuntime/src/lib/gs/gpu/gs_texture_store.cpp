@@ -82,25 +82,36 @@ void GSTextureStore::Reset()
 
 // ---- CLUT ------------------------------------------------------------------------------------------------------------
 
-void GSTextureStore::LoadClut(const GSTex0Reg &tex0, const GSTexClutReg &texclut, const ClutSource &source)
+bool GSTextureStore::NeedsClutLoad(const GSTex0Reg &tex0) const
 {
+    if (!m_vram || (!isFourBitIndexedPsm(tex0.psm) && !isEightBitIndexedPsm(tex0.psm)))return false;
+    switch(tex0.cld){
+    case 1u: case 2u: case 3u:return true;
+    case 4u:return m_clutCbp[0]!=tex0.cbp;
+    case 5u:return m_clutCbp[1]!=tex0.cbp;
+    default:return false;
+    }
+}
+
+bool GSTextureStore::LoadClut(const GSTex0Reg &tex0, const GSTexClutReg &texclut, const ClutSource &source,
+                            const std::function<void()> &beforeChange)
+{
+    if(!NeedsClutLoad(tex0))return false;
     const bool fourBit = isFourBitIndexedPsm(tex0.psm);
-    if (!m_vram || (!fourBit && !isEightBitIndexedPsm(tex0.psm)))
-        return;
     switch (tex0.cld) // CLD: 1 always, 2/3 always + set CBP0/1, 4/5 only when CBP differs from CBP0/1
     {
     case 1u: break;
     case 2u: m_clutCbp[0] = tex0.cbp; break;
     case 3u: m_clutCbp[1] = tex0.cbp; break;
-    case 4u: if (m_clutCbp[0] == tex0.cbp) return; m_clutCbp[0] = tex0.cbp; break;
-    case 5u: if (m_clutCbp[1] == tex0.cbp) return; m_clutCbp[1] = tex0.cbp; break;
-    default: return;
+    case 4u: m_clutCbp[0] = tex0.cbp; break;
+    case 5u: m_clutCbp[1] = tex0.cbp; break;
+    default: return false;
     }
 
     const bool sixteenBit = tex0.cpsm == GS_PSM_CT16 || tex0.cpsm == GS_PSM_CT16S;
     const bool thirtyTwoBit = tex0.cpsm == GS_PSM_CT32 || tex0.cpsm == GS_PSM_CT24;
     if (!sixteenBit && !thirtyTwoBit)
-        return;
+        return false;
     const uint32_t entryCount = fourBit ? 16u : 256u;
     const uint32_t destinationBase = (static_cast<uint32_t>(tex0.csa) & (sixteenBit ? 0x1Fu : 0x0Fu)) << 4u;
     // CSM1 with a 32-bit 256-colour CLUT: entries below CSA*16 keep their previous values.
@@ -130,6 +141,16 @@ void GSTextureStore::LoadClut(const GSTex0Reg &tex0, const GSTexClutReg &texclut
     if (!source || !source(tex0, sourceWidth, xy.data(), count, words.data()))
         for (uint32_t i = 0; i < count; ++i)
             words[i] = readPixel(m_vram, tex0.cpsm, tex0.cbp, sourceWidth, xy[i * 2u], xy[i * 2u + 1u]);
+    bool changed = false;
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        const uint32_t entry = first + i, raw = words[i];
+        const uint32_t destination = (loadCsm1Suffix ? entry : destinationBase + entry) & (sixteenBit ? 0x1FFu : 0x0FFu);
+        changed = changed || m_clut[destination] != static_cast<uint16_t>(raw) ||
+                  (!sixteenBit && m_clut[destination + 256u] != static_cast<uint16_t>(raw >> 16u));
+    }
+    if(!changed)return false;
+    if(beforeChange)beforeChange();
     for (uint32_t i = 0; i < count; ++i)
     {
         const uint32_t entry = first + i, raw = words[i];
@@ -142,6 +163,7 @@ void GSTextureStore::LoadClut(const GSTex0Reg &tex0, const GSTexClutReg &texclut
             m_clut[destination + 256u] = static_cast<uint16_t>(raw >> 16u);
         }
     }
+    return true;
 }
 
 uint64_t GSTextureStore::ClutHash() const

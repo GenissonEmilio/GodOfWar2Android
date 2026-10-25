@@ -131,6 +131,7 @@ extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivit
     if(std::filesystem::exists(std::string(p)+"/perf-vif-only"))setenv("GOW_VIF_STATS","1",1);else unsetenv("GOW_VIF_STATS");
     performanceHints.store(!std::filesystem::exists(std::string(p)+"/perf-adpf-off"));
     if(std::filesystem::exists(std::string(p)+"/perf-stage-barriers"))setenv("PS2X_GS_STAGE_BARRIERS","1",1);else unsetenv("PS2X_GS_STAGE_BARRIERS");
+    if(std::filesystem::exists(std::string(p)+"/perf-gl-state-off"))setenv("GOW_GLES_STATE_CACHE_OFF","1",1);else unsetenv("GOW_GLES_STATE_CACHE_OFF");
     setenv("GOW_PERF_DIAG",diagnostic?"1":"frames",1);
     if(diagnostic || counters){setenv("GOW_GS_HW_STATS","1",1);setenv("GOW_VU1_STATS","1",1);}
     else {unsetenv("GOW_GS_HW_STATS");unsetenv("GOW_VU1_STATS");}

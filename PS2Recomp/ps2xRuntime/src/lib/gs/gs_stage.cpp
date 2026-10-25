@@ -1,5 +1,6 @@
 #include "runtime/gs/gs_stage.h"
 #include "ThreadNaming.h"
+#include "runtime/ps2_worker_ids.h"
 
 #include <condition_variable>
 #include <cstdio>
@@ -46,6 +47,7 @@ namespace
     void loop()
     {
         ThreadNaming::SetCurrentThreadName("GSFrontend");
+        const ps2_workers::Registration worker(ps2_workers::Role::Frontend);
         Stage &s = stage();
         std::deque<Packet> batch;
         for (;;)

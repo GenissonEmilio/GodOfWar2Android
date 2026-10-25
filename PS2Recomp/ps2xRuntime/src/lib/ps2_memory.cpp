@@ -1,5 +1,6 @@
 #include "runtime/ps2_memory.h"
 #include "ThreadNaming.h"
+#include "runtime/ps2_worker_ids.h"
 #include "runtime/gs/gs_stage.h"
 #include "runtime/gs/gs_display.h"
 #include <chrono>
@@ -1999,6 +2000,7 @@ void PS2Memory::runGsWorkerJob(GsWorkerJob &job)
 void PS2Memory::gsWorkerLoop()
 {
     ThreadNaming::SetCurrentThreadName("VUWorker");
+    const ps2_workers::Registration worker(ps2_workers::Role::Vu);
     for (;;)
     {
         GsWorkerJob job;

@@ -254,7 +254,42 @@ na pasta de dados ativam respectivamente contadores, escopos completos e apenas
 estatísticas de formatos VIF. Reabra o processo ao alterá-los. `perf-adpf-off`
 desativa os hints e pode ser alternado durante o jogo; a mudança é observada na
 próxima janela de medição. O arquivo `perf-stage-barriers` repõe as barreiras completas para comparação
+(requer novo processo). O arquivo `perf-gl-state-off` desativa o novo cache raster GLES para comparação
 (requer novo processo). Remova esses arquivos ao concluir a medição.
+
+## Rastreamento do pipeline e custo dos desenhos
+
+- Um rastreamento Perfetto de 15 segundos na primeira luta registrou 12,15 s de
+  CPU na thread GS, 9,83 s no worker VU, 8,59 s no EE e 5,12 s no frontend.
+  A thread GS ficou executando por cerca de 81% do intervalo. A frequência média
+  durante sua execução foi aproximadamente 1,65 GHz sem hints; outro trecho
+  com hints ativos chegou a aproximadamente 1,96 GHz. As cenas não são um replay
+  determinístico; esses números não estabelecem um ganho causal de FPS.
+- A identificação das threads dos hints passou a usar registros dos próprios
+  workers. O driver Adreno cria auxiliares com o nome herdado `GSThread`, o que
+  fazia a busca por nome incluir oito threads. Os IDs registrados no log foram
+  comparados com o processo: a sessão manteve os quatro workers reais, excluindo
+  os quatro auxiliares, inclusive depois do vídeo de abertura.
+- As cores dos vértices enviados à GPU usam quatro bytes não normalizados,
+  preservando os valores 0–255 dos atributos anteriores. O vértice passou de
+  64 para 52 bytes. Os testes de pixels verificaram também RGBA com 0, 1, 127,
+  128, 254 e 255 nos dois caminhos GLES e em três grupos EGL sucessivos.
+- O cache GLES evita reenviar propriedades raster idênticas. O cache de uniforms
+  usa índices para locations densos e mantém o fallback para locations esparsos.
+  Esses caches pertencem ao contexto do worker e são reiniciados por sessão EGL.
+- Escritas TEX0 que não carregam CLUT deixaram de encerrar lotes. Recarregamentos
+  com os mesmos pixels também preservam o lote; uma mudança real termina os
+  desenhos anteriores antes de substituir a paleta. Se o próprio desenho fornece
+  os pixels da CLUT, ele é enviado antes de ler essa fonte na GPU.
+  O probe da CLUT passou em 81 verificações. O teste GLES verificou dois meios
+  de uma imagem usando paletas vermelha e azul e uma paleta obtida de um desenho
+  ainda pendente, mantendo os pixels esperados nos dois caminhos de feedback.
+- A versão anterior à comparação de pixels da CLUT foi medida sem simpleperf:
+  seis janelas consecutivas da luta ficaram entre 16,93 e 18,53 FPS; os p95 dos
+  intervalos ficaram entre 60,55 e 65,61 ms. A introdução da sala foi excluída.
+  Não houve estabilização em 30 FPS. A alteração seguinte está em medição.
+- Os rastreamentos completos, imagens, dados do jogo e APKs continuam locais.
+  Estes testes não validam a campanha inteira.
 
 ## Critérios restantes
 

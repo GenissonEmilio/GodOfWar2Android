@@ -480,11 +480,12 @@ void main()
     struct HwVertex
     {
         float x, y, z;
-        float r, g, b, a;
+        uint8_t r, g, b, a;
         float s, t, q;
         float u, v;
         float cu0 = -1e30f, cv0 = -1e30f, cu1 = 1e30f, cv1 = 1e30f; // texel range the GS samples (sprites)
     };
+    static_assert(sizeof(HwVertex) == 52);
 
     struct Texture
     {
@@ -781,7 +782,9 @@ struct GSHwBackend::Impl
         const GLsizei stride = sizeof(HwVertex);
         g.VertexAttribPointer(0, 2, kFloat, kFalse, stride, reinterpret_cast<const void *>(offsetof(HwVertex, x)));
         g.VertexAttribPointer(1, 1, kFloat, kFalse, stride, reinterpret_cast<const void *>(offsetof(HwVertex, z)));
-        g.VertexAttribPointer(2, 4, kFloat, kFalse, stride, reinterpret_cast<const void *>(offsetof(HwVertex, r)));
+        // Unnormalized bytes convert to the exact original 0..255 float values
+        // in the shader, without four CPU conversions or 12 extra upload bytes.
+        g.VertexAttribPointer(2, 4, kUnsignedByte, kFalse, stride, reinterpret_cast<const void *>(offsetof(HwVertex, r)));
         g.VertexAttribPointer(3, 3, kFloat, kFalse, stride, reinterpret_cast<const void *>(offsetof(HwVertex, s)));
         g.VertexAttribPointer(4, 2, kFloat, kFalse, stride, reinterpret_cast<const void *>(offsetof(HwVertex, u)));
         g.VertexAttribPointer(5, 4, kFloat, kFalse, stride, reinterpret_cast<const void *>(offsetof(HwVertex, cu0)));
@@ -1305,6 +1308,7 @@ struct GSHwBackend::Impl
     GLint locClTables = -1, locClRtColor = -1, locClCoords = -1, locClTexFmt = -1, locClTexFmt2 = -1, locClRtFmt = -1, locClRtFmt2 = -1,
           locClTex0 = -1, locClRtPx = -1;
     std::unordered_map<uint64_t, std::vector<uint32_t>> clutCache;
+    std::array<const uint16_t *,64> ownerInverseData{};
 
     bool ensureClutProgram()
     {
@@ -1400,6 +1404,23 @@ struct GSHwBackend::Impl
         return true;
     }
 
+    bool pendingWritesClut(const GSTex0Reg &tex0,uint32_t width,const uint16_t *xy,uint32_t count) const
+    {
+        if(!havePending || pending.empty())return false;
+        const GSContext &c=pendingState.context;
+        const uint32_t rows=uint32_t(c.scissor.y1)+1u;
+        const uint32_t colorBase=c.frame.fbp*8192u,depthBase=c.zbuf.zbp*8192u;
+        const uint32_t colorBytes=spanBlocks(c.frame.psm,c.frame.fbw,rows)*256u;
+        const uint32_t depthBytes=spanBlocks(c.zbuf.psm,c.frame.fbw,rows)*256u;
+        const auto &format=GSSwizzle::GetFormat(tex0.cpsm);
+        for(uint32_t i=0;i<count;++i){
+            const uint32_t byte=GSSwizzle::Locate(format,tex0.cbp,width,xy[2*i],xy[2*i+1]).byte;
+            if(((byte-colorBase)&0x3fffffu)<colorBytes ||
+               (!c.zbuf.zmask && ((byte-depthBase)&0x3fffffu)<depthBytes))return true;
+        }
+        return false;
+    }
+
     // ---- drawing --------------------------------------------------------------------------------------------------
     static bool sameState(const GSDrawState &a, const GSDrawState &b)
     {
@@ -1451,8 +1472,9 @@ struct GSHwBackend::Impl
     }
 
     // ---- channel shuffles (see kShuffleFs) -------------------------------------------------------------------------
-    const std::vector<uint16_t> &inverseFor(uint32_t ownerPsm)
+    const uint16_t *inverseFor(uint32_t ownerPsm)
     {
+        if(ownerPsm<ownerInverseData.size() && ownerInverseData[ownerPsm])return ownerInverseData[ownerPsm];
         std::vector<uint16_t> &inv = ownerInverse[ownerPsm];
         if (inv.empty())
         {
@@ -1461,7 +1483,8 @@ struct GSHwBackend::Impl
             for (uint32_t e = 0; e < 2048u; ++e)
                 inv[f.table[e]] = static_cast<uint16_t>(e);
         }
-        return inv;
+        if(ownerPsm<ownerInverseData.size())ownerInverseData[ownerPsm]=inv.data();
+        return inv.data();
     }
 
     // pixel (x, y) of a 16 bit view (psm/base/bw) -> pixel and halfword of the 32 bit owner laid out as ownerPsm at fbp/fbw
@@ -2069,7 +2092,7 @@ struct GSHwBackend::Impl
             for (const HwVertex &v : verts)
             {
                 bx0 = std::min(bx0, v.x), by0 = std::min(by0, v.y), bx1 = std::max(bx1, v.x), by1 = std::max(by1, v.y);
-                cmax = std::max({cmax, v.r, v.g, v.b}), amax = std::max(amax, v.a), zlo = std::min(zlo, v.z), zhi = std::max(zhi, v.z);
+                cmax = std::max({cmax, float(v.r), float(v.g), float(v.b)}), amax = std::max(amax, float(v.a)), zlo = std::min(zlo, v.z), zhi = std::max(zhi, v.z);
             }
             const float zscale = zMaxFor(c.zbuf.psm) < 4294967295.0f ? zMaxFor(c.zbuf.psm) : 16777215.0f;
             std::fprintf(stderr, "[gs-hw-dump-bb] #%d %.0f-%.0f,%.0f-%.0f ta0=%x ta1=%x aem=%d fge=%d tfx=%u tcc=%u iip=%d cmax=%.0f amax=%.0f prim=%u z=%x-%x\n",
@@ -2077,10 +2100,10 @@ struct GSHwBackend::Impl
                          c.tex0.tfx, c.tex0.tcc, s.prim.iip ? 1 : 0, cmax, amax, static_cast<unsigned>(s.prim.type),
                          static_cast<unsigned>(zlo * zscale + 0.5f), static_cast<unsigned>(zhi * zscale + 0.5f));
             std::fprintf(stderr,
-                         "[gs-hw-dump] #%d fb=%d verts=%zu fbp=%u fbw=%u fpsm=%u zbp=%x zpsm=%x zmsk=%d tme=%d tbp=%x tbw=%u tpsm=%u %ux%u cbp=%x test=%llx alpha=%llx abe=%d fbmsk=%x rawz=%.0f v0=(%.1f,%.1f z=%.3f col=%.0f,%.0f,%.0f,%.0f uv=%.1f,%.1f) scis=%u-%u,%u-%u\n",
+                         "[gs-hw-dump] #%d fb=%d verts=%zu fbp=%u fbw=%u fpsm=%u zbp=%x zpsm=%x zmsk=%d tme=%d tbp=%x tbw=%u tpsm=%u %ux%u cbp=%x test=%llx alpha=%llx abe=%d fbmsk=%x rawz=%.0f v0=(%.1f,%.1f z=%.3f col=%u,%u,%u,%u uv=%.1f,%.1f) scis=%u-%u,%u-%u\n",
                          dumped, frameBatch, verts.size(), c.frame.fbp, c.frame.fbw, c.frame.psm, c.zbuf.zbp, c.zbuf.psm, c.zbuf.zmask ? 1 : 0, s.prim.tme ? 1 : 0,
                          c.tex0.tbp0, c.tex0.tbw, c.tex0.psm, s.textureWidth, s.textureHeight, c.tex0.cbp, (unsigned long long)c.test,
-                         (unsigned long long)c.alpha, s.prim.abe ? 1 : 0, c.frame.fbmsk, firstRawZ, v0.x, v0.y, v0.z, v0.r, v0.g, v0.b, v0.a, v0.u, v0.v,
+                         (unsigned long long)c.alpha, s.prim.abe ? 1 : 0, c.frame.fbmsk, firstRawZ, v0.x, v0.y, v0.z, unsigned(v0.r), unsigned(v0.g), unsigned(v0.b), unsigned(v0.a), v0.u, v0.v,
                          c.scissor.x0, c.scissor.x1, c.scissor.y0, c.scissor.y1);
         }
         RenderTarget &rt = target(c.frame.fbp, c.frame.fbw);
@@ -2165,7 +2188,7 @@ struct GSHwBackend::Impl
             const uint32_t a = al & 3u, b = (al >> 2) & 3u, cc = (al >> 4) & 3u, d = (al >> 6) & 3u, fix = static_cast<uint32_t>((al >> 32) & 0xFFu);
             if (a == 0u && b == 2u && cc == 2u && d == 1u)
             {
-                const float col[3] = {verts[0].r, verts[0].g, verts[0].b};
+                const float col[3] = {float(verts[0].r), float(verts[0].g), float(verts[0].b)};
                 const GLboolean written[3] = {mr, mg, mb};
                 bool flat = true;
                 for (const HwVertex &v : verts)
@@ -2581,13 +2604,19 @@ void GSHwBackend::Submit(const GSPrimitiveBatch &batch)
 void GSHwBackend::LoadClut(const GSTex0Reg &tex0, const GSTexClutReg &texclut)
 {
     Impl &d = *m_impl;
-    d.flushPending();
-    if (d.initialized)
-        d.store.LoadClut(tex0, texclut, [&d](const GSTex0Reg &t, uint32_t width, const uint16_t *xy, uint32_t count, uint32_t *words)
-                         { return d.clutFromTarget(t, width, xy, count, words); });
-    else
-        d.store.LoadClut(tex0, texclut);
-    d.clutHash = d.store.ClutHash();
+    // TEX0 writes that do not load a palette must not split a pending batch.
+    // Conditional CLD modes still use the texture store's CBP0/CBP1 state.
+    if(!d.store.NeedsClutLoad(tex0))return;
+    for(const auto &quads:d.shuffleQuads)if(!quads.empty()){d.flushPending();break;}
+    const bool changed=d.store.LoadClut(tex0,texclut,
+        [&d](const GSTex0Reg &t,uint32_t width,const uint16_t *xy,uint32_t count,uint32_t *words){
+            // A pending colour/depth draw can supply the palette itself. Submit
+            // it before reading the source; unrelated CPU palettes can compare
+            // first and preserve an otherwise identical pending batch.
+            if(d.pendingWritesClut(t,width,xy,count))d.flushPending();
+            return d.initialized && d.clutFromTarget(t,width,xy,count,words);
+        },[&d]{d.flushPending();});
+    if(changed)d.clutHash=d.store.ClutHash();
 }
 
 void GSHwBackend::BeginTransfer(const GSTransferCommand &command)

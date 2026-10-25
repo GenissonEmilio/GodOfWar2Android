@@ -26,7 +26,11 @@ public:
     // TEX0.CBP and writes their raw words; returns false when that memory holds no render target.
     using ClutSource = std::function<bool(const GSTex0Reg &tex0, uint32_t width, const uint16_t *xy, uint32_t count, uint32_t *words)>;
     // TEX0 with an indexed PSM: load the CLUT when TEX0.CLD says so, from `source` or else from the uploaded bytes.
-    void LoadClut(const GSTex0Reg &tex0, const GSTexClutReg &texclut, const ClutSource &source = {});
+    // beforeChange runs while the previous palette is still visible, allowing
+    // queued draws to finish only when the incoming palette actually differs.
+    bool LoadClut(const GSTex0Reg &tex0, const GSTexClutReg &texclut, const ClutSource &source = {},
+                  const std::function<void()> &beforeChange = {});
+    bool NeedsClutLoad(const GSTex0Reg &tex0) const;
     uint64_t ClutHash() const;
     // 256-entry RGBA palette for the indexed texture described by `state` (CSA/CSM/CPSM + TEXA applied).
     void BuildPalette(const GSDrawState &state, uint32_t out[256]) const;

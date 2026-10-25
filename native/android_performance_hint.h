@@ -1,13 +1,10 @@
 #pragma once
 #include <android/performance_hint.h>
+#include "runtime/ps2_worker_ids.h"
 #include <algorithm>
 #include <cstdio>
-#include <cstdlib>
 #include <cstdint>
-#include <cstring>
-#include <dirent.h>
 #include <dlfcn.h>
-#include <unistd.h>
 #include <vector>
 
 // NDK hints are optional (API 33+). Resolve at runtime so API 29 remains
@@ -46,23 +43,17 @@ class AndroidPerformanceHint
         auto *manager=a.manager();
         if(!manager || (updateRate=a.rate(manager))<=0)return;
         std::vector<int32_t> tids;
-        if(DIR *tasks=opendir("/proc/self/task"))
+        for(const auto &worker : ps2_workers::ids)
         {
-            while(auto *entry=readdir(tasks))
-            {
-                char path[128],name[64]{};
-                std::snprintf(path,sizeof(path),"/proc/self/task/%s/comm",entry->d_name);
-                if(FILE *f=std::fopen(path,"r")){std::fgets(name,sizeof(name),f);std::fclose(f);}
-                if(std::strcmp(name,"GameThread\n")==0 || std::strcmp(name,"VUWorker\n")==0 ||
-                   std::strcmp(name,"GSFrontend\n")==0 || std::strcmp(name,"GSThread\n")==0)
-                    tids.push_back(std::atoi(entry->d_name));
-            }
-            closedir(tasks);
+            const int32_t tid=worker.load(std::memory_order_acquire);
+            if(tid>0 && std::find(tids.begin(),tids.end(),tid)==tids.end())tids.push_back(tid);
         }
         if(tids.empty())return;
         session=a.create(manager,tids.data(),tids.size(),1000000000ll/target);
-        std::fprintf(stderr,"[gow-adpf] session=%s threads=%zu target_ns=%lld update_ns=%lld\n",
+        std::fprintf(stderr,"[gow-adpf] session=%s threads=%zu target_ns=%lld update_ns=%lld",
             session?"active":"unsupported",tids.size(),1000000000ll/target,static_cast<long long>(updateRate));
+        for(const auto tid:tids)std::fprintf(stderr," tid=%d",tid);
+        std::fputc('\n',stderr);
     }
 public:
     AndroidPerformanceHint()=default;

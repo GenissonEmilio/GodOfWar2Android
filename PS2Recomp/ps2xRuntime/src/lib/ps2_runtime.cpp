@@ -15,6 +15,7 @@ static bool gowUsePcsx2Vu1(); // GOW_VU1_PCSX2=1, defined before PS2Runtime::ini
 #include "runtime/gs/gs_frontend.h"
 #include "runtime/ee_scheduler.h"
 #include "ThreadNaming.h"
+#include "runtime/ps2_worker_ids.h"
 #include "ThreadPriority.h"
 #if defined(__ANDROID__)
 #include "android_bridge.h"
@@ -2643,6 +2644,7 @@ void PS2Runtime::run()
     std::thread gameThread([&]()
                            {
         ThreadNaming::SetCurrentThreadName("GameThread");
+        const ps2_workers::Registration worker(ps2_workers::Role::Ee);
 #if defined(__ANDROID__)
         ThreadPriority::RaiseCurrentThread(ThreadPriority::Level::AboveNormal);
 #endif
