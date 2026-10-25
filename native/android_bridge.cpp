@@ -2,6 +2,7 @@
 #include "raylib.h"
 #include "runtime/ps2_perf.h"
 #include <jni.h>
+#include <GLES3/gl3.h>
 #include <atomic>
 #include <algorithm>
 #include <cmath>
@@ -10,7 +11,7 @@
 #include <unistd.h>
 namespace {
 std::atomic<uint64_t> input{0x808080800000ULL};
-std::atomic<bool> paused{false};
+std::atomic<bool> paused{false},backRequested{false};
 std::atomic<int> volume{80}, frameLimit{60};
 std::atomic<int> screenMode{0};
 std::atomic<float> deadzone{0.14f}, sensitivity{1.0f};
@@ -33,7 +34,10 @@ void gowAndroidReadPad(uint8_t *data) {
 }
 void gowAndroidFrame() {
     SetMasterVolume(paused.load()?0.0f:volume.load()/100.0f);
-    SetTargetFPS(frameLimit.load());
+    static int appliedLimit=-1;
+    const int wanted=frameLimit.load();
+    if (wanted!=appliedLimit) {SetTargetFPS(wanted);appliedLimit=wanted;}
+    if (IsKeyPressed(KEY_BACK) || IsKeyPressed(KEY_ESCAPE)) backRequested.store(true);
     SetExitKey(KEY_NULL);
 }
 extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivity_nativeConfigure(JNIEnv *env,jclass,jstring path,jint scale) {
@@ -44,7 +48,9 @@ extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivit
     setenv("GOW_MC0",(std::string(p)+"/memcards/Mcd001.ps2").c_str(),1);
     setenv("PS2X_GS_HW_SCALE",std::to_string(std::clamp(int(scale),1,3)).c_str(),1);
     setenv("GOW_PERF_FRAME_PC","0x14E380",1);
-    setenv("GOW_PERF_DIAG","frames",1);
+    const bool diagnostic=std::filesystem::exists(std::string(p)+"/perf-diagnostics");
+    setenv("GOW_PERF_DIAG",diagnostic?"1":"frames",1);
+    if(diagnostic){setenv("GOW_GS_HW_STATS","1",1);setenv("GOW_VU1_STATS","1",1);}
     env->ReleaseStringUTFChars(path,p);
 }
 extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivity_nativeInput(JNIEnv *,jclass,jint buttons,jfloat lx,jfloat ly,jfloat rx,jfloat ry) {
@@ -60,3 +66,9 @@ extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivit
 }
 
 extern "C" JNIEXPORT jlong JNICALL Java_io_github_genissonemilio_gow2_GameActivity_nativeFrames(JNIEnv *,jclass) { return static_cast<jlong>(ps2_perf::guestFlips.load(std::memory_order_relaxed)); }
+
+// raylib 5.5 calls the EXT spelling even with its ES3 backend. Android exports
+// the equivalent core ES3 function; keep this compatibility shim local.
+extern "C" void glDrawBuffersEXT(GLsizei count,const GLenum *buffers) { glDrawBuffers(count,buffers); }
+
+extern "C" JNIEXPORT jboolean JNICALL Java_io_github_genissonemilio_gow2_GameActivity_nativeConsumeBack(JNIEnv *,jclass) { return backRequested.exchange(false); }

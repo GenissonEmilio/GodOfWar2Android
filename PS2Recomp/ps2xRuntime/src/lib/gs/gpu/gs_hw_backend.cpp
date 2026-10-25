@@ -528,6 +528,7 @@ struct GSHwBackend::Impl
     GSTextureStore store; // uploaded texture bytes + CLUT (no rasteriser, no framebuffer)
     GSGL::Context context;
     bool initialized = false, failed = false;
+    bool mobileFetch = false;
     uint8_t *vram = nullptr;
     uint32_t vramSize = 0;
 
@@ -682,9 +683,16 @@ struct GSHwBackend::Impl
             auto replaceAll = [&](const std::string &a, const std::string &b) {
                 size_t at = 0; while ((at = source.find(a, at)) != std::string::npos) { source.replace(at,a.size(),b); at += b.size(); }
             };
-            replaceAll("#version 430 core", "#version 320 es\nprecision highp float;\nprecision highp int;\nprecision highp usampler2D;");
+            std::string header="#version 320 es\n";
+            if (mobileFetch && type==kFragmentShader) header+="#extension GL_EXT_shader_framebuffer_fetch : require\n";
+            header+="precision highp float;\nprecision highp int;\nprecision highp usampler2D;";
+            replaceAll("#version 430 core", header);
+            if (mobileFetch && type==kFragmentShader)
+                replaceAll("texelFetch(uDest, ivec2(gl_FragCoord.xy), 0)","oColor");
             replaceAll("noperspective ", "");
             replaceAll("layout(location = 0, index = 0)", "layout(location = 0)");
+            if (mobileFetch && type==kFragmentShader)
+                replaceAll("layout(location = 0) out vec4 oColor;", "layout(location = 0) inout vec4 oColor;");
             replaceAll("layout(location = 0, index = 1) out vec4 oBlend;", "vec4 oBlend;");
             translated.push_back(std::move(source));
         }
@@ -721,6 +729,11 @@ struct GSHwBackend::Impl
             return false;
         }
         const Api &g = gl();
+#if defined(__ANDROID__)
+        const char *extensions=reinterpret_cast<const char *>(glGetString(GL_EXTENSIONS));
+        mobileFetch=extensions && (std::string(" ")+extensions+" ").find(" GL_EXT_shader_framebuffer_fetch ")!=std::string::npos && !std::getenv("GOW_GLES_FETCH_OFF");
+        std::fprintf(stderr,"[gs-gles] coherent framebuffer fetch: %s\n",mobileFetch?"enabled":"copy fallback");
+#endif
         const GLuint v = compile(GSGL::kVertexShader, kVsSource);
         const GLuint f = compile(GSGL::kFragmentShader, {kFsSource, kReinterpretSource, kFsTail});
         if (!v || !f)
@@ -2192,7 +2205,7 @@ struct GSHwBackend::Impl
             g.Uniform1i(locZAlias, zAlias ? 1 + static_cast<GLint>(ztst) : 0);
             g.Uniform1i(locZAliasWrite, zAliasWrite ? 1 : 0);
             g.Uniform1f(locZAliasMax, zMaxFor(c.zbuf.psm));
-            if (date || softBlend || zAlias)
+            if ((date || softBlend || zAlias) && !mobileFetch)
             {
                 g.ActiveTexture(kTexture0 + 4);
                 g.BindTexture(kTexture2D, sampleColor(rt));
@@ -2343,7 +2356,7 @@ struct GSHwBackend::Impl
         }
         g.ColorMask(mr, mg, mb, ma);
         g.DepthMask(zwrite ? kTrue : kFalse);
-        if (softBlend && !zAliasWrite
+        if (softBlend && !zAliasWrite && !mobileFetch
 #if !defined(__ANDROID__)
             && (s.colclamp & 1u) == 0u
 #endif

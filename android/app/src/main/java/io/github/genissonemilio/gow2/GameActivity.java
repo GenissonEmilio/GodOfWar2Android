@@ -10,9 +10,10 @@ public final class GameActivity extends NativeActivity {
     static native void nativeInput(int buttons,float lx,float ly,float rx,float ry);
     static native void nativePause(boolean paused);
     static native long nativeFrames();
+    static native boolean nativeConsumeBack();
     private final Handler meter=new Handler(android.os.Looper.getMainLooper());
     private long lastFrames,lastTime;
-    private final Runnable sample=new Runnable(){public void run(){long now=android.os.SystemClock.elapsedRealtime(),frames=nativeFrames();if(touch!=null && lastTime>0){touch.gameFps=(frames-lastFrames)*1000f/(now-lastTime);touch.invalidate();}lastTime=now;lastFrames=frames;meter.postDelayed(this,1000);}};
+    private final Runnable sample=new Runnable(){public void run(){if(nativeConsumeBack())onBackPressed();long now=android.os.SystemClock.elapsedRealtime(),frames=nativeFrames();if(touch!=null && lastTime>0){touch.gameFps=(frames-lastFrames)*1000f/(now-lastTime);touch.invalidate();}lastTime=now;lastFrames=frames;meter.postDelayed(this,1000);}};
     static native void nativeSettings(int volume,int fps,float deadzone,float sensitivity);
     private TouchOverlay touch; private boolean menu,background,childMenu;
     private int padButtons; private float lx,ly,rx,ry; private boolean controller;
@@ -23,7 +24,15 @@ public final class GameActivity extends NativeActivity {
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN|View.SYSTEM_UI_FLAG_HIDE_NAVIGATION|View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY|View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN|View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION|View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
         meter.postDelayed(sample,1000);
-        touch=new TouchOverlay(this);addContentView(touch,new android.view.ViewGroup.LayoutParams(-1,-1));applySettings();
+        touch=new TouchOverlay(this);
+        getWindow().getDecorView().post(()->{
+            WindowManager.LayoutParams params=new WindowManager.LayoutParams(-1,-1,
+                WindowManager.LayoutParams.TYPE_APPLICATION_PANEL,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE|WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                android.graphics.PixelFormat.TRANSLUCENT);
+            params.token=getWindow().getDecorView().getWindowToken();
+            getWindowManager().addView(touch,params);
+        });applySettings();
     }
     private void applySettings(){nativeSettings(prefs().getInt("volume",80),prefs().getInt("fps",60),prefs().getInt("deadzone",14)/100f,prefs().getInt("sensitivity",100)/100f);if(touch!=null)touch.settingsChanged();}
     void sendTouch(int buttons,float x,float y,float dx,float dy){controller=false;padButtons=0;nativeInput(buttons,x,y,dx,dy);touch.setController(false);}
@@ -39,7 +48,7 @@ public final class GameActivity extends NativeActivity {
     @Override public void onBackPressed(){if(touch!=null && touch.editing){touch.editing=false;touch.saveLayout();touch.invalidate();nativePause(background || menu);return;}pauseMenu();}
     @Override protected void onPause(){background=true;nativePause(true);if(touch!=null)touch.clear();super.onPause();}
     @Override protected void onResume(){super.onResume();background=false;if(!menu && !childMenu && (touch==null || !touch.editing))nativePause(false);}
-    @Override protected void onDestroy(){meter.removeCallbacks(sample);nativePause(false);super.onDestroy();}
+    @Override protected void onDestroy(){meter.removeCallbacks(sample);if(touch!=null && touch.getParent()!=null)getWindowManager().removeViewImmediate(touch);nativePause(false);super.onDestroy();}
     private int bit(int key){switch(key){case KeyEvent.KEYCODE_BUTTON_A:return 0x4000;case KeyEvent.KEYCODE_BUTTON_B:return 0x2000;case KeyEvent.KEYCODE_BUTTON_X:return 0x8000;case KeyEvent.KEYCODE_BUTTON_Y:return 0x1000;case KeyEvent.KEYCODE_BUTTON_L1:return 0x400;case KeyEvent.KEYCODE_BUTTON_R1:return 0x800;case KeyEvent.KEYCODE_BUTTON_L2:return 0x100;case KeyEvent.KEYCODE_BUTTON_R2:return 0x200;case KeyEvent.KEYCODE_BUTTON_START:return 8;case KeyEvent.KEYCODE_BUTTON_SELECT:return 1;case KeyEvent.KEYCODE_BUTTON_THUMBL:return 2;case KeyEvent.KEYCODE_BUTTON_THUMBR:return 4;case KeyEvent.KEYCODE_DPAD_UP:return 16;case KeyEvent.KEYCODE_DPAD_RIGHT:return 32;case KeyEvent.KEYCODE_DPAD_DOWN:return 64;case KeyEvent.KEYCODE_DPAD_LEFT:return 128;default:return 0;}}
     @Override public boolean dispatchKeyEvent(KeyEvent e){
         if(e.getKeyCode()==KeyEvent.KEYCODE_BACK){if(e.getAction()==KeyEvent.ACTION_UP)onBackPressed();return true;}

@@ -17,8 +17,8 @@ int main(){auto d=eglGetDisplay(EGL_DEFAULT_DISPLAY);EGLint n;eglInitialize(d,nu
 def convert(s):
  return s.replace('#version 430 core','#version 320 es\nprecision highp float;\nprecision highp int;\nprecision highp usampler2D;').replace('noperspective ','').replace('layout(location = 0, index = 0)','layout(location = 0)').replace('layout(location = 0, index = 1) out vec4 oBlend;','vec4 oBlend;')
 for name,vs,fs in [('draw','kVsSource',['kFsSource','kReinterpretSource','kFsTail']),('shuffle','kShuffleVs',['kShuffleFs']),('present','kPresentVs',['kPresentFs']),('clut','kPresentVs',['kClutFsHead','kReinterpretSource','kClutFsMain'])]:
- if all(k in parts for k in [vs]+fs):
-  cpp+='ok=pair("'+name+'",R"GOW('+convert(parts[vs])+')GOW",R"GOW('+convert(''.join(parts[k] for k in fs))+')GOW") && ok;\n'
+ assert all(k in parts for k in [vs]+fs), name
+ cpp+='ok=pair("'+name+'",R"GOW('+convert(parts[vs])+')GOW",R"GOW('+convert(''.join(parts[k] for k in fs))+')GOW") && ok;\n'
 cpp+='return ok?0:1;}\n'
 (root / 'artifacts').mkdir(exist_ok=True)
 (root / 'artifacts/gles-probe.cpp').write_text(cpp)

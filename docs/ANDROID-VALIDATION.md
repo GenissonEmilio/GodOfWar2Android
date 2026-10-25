@@ -43,6 +43,21 @@ Data dos testes: 24 de outubro de 2026 (America/Fortaleza).
   lidos do framebuffer e verificados. Não houve erro GL no teste final.
   Esse teste identificou e corrigiu a configuração inicial dos samplers GLES.
 
+- O mesmo teste sintético passou novamente com a biblioteca estática de produção
+  recompilada, incluindo a otimização que copia o framebuffer somente quando uma
+  textura é simultaneamente fonte e destino.
+
+- APK ARM64 de desenvolvimento gerado e instalado por USB no aparelho. O jogo
+  carregou o ELF, os oito módulos IOP nativos e o áudio a 48 kHz, chegando ao
+  menu original com imagem. A presença de saída de áudio não valida sua qualidade.
+- O overlay touch aparece sobre a superfície nativa; o diálogo de pausa foi
+  aberto no aparelho. Sua presença visual foi confirmada; os demais fluxos ainda
+  estão sendo testados.
+- O fallback inicial por cópias tinha cerca de 1 FPS no menu. O caminho com
+  `GL_EXT_shader_framebuffer_fetch` passou pelo teste de pixels e mostrou trechos
+  de 8–16 FPS no menu. Esses valores são observações iniciais, com desempenho
+  ainda insuficiente, e não um benchmark da campanha.
+
 ## Critérios restantes
 
 - Build e instalação do APK final; carregamento de todos os shaders no driver móvel.

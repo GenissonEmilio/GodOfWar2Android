@@ -593,6 +593,7 @@ namespace
             gow2PadReturn(ctx, 0xFFFFFFFFu);
             return;
         }
+#if !defined(__ANDROID__)
         if (!IsGamepadAvailable(0) && !IsGamepadAvailable(1) && !IsGamepadAvailable(2) && !IsGamepadAvailable(3))
         {
             state[6] = IsKeyDown(KEY_A) ? 0 : IsKeyDown(KEY_D) ? 255 : 128;
@@ -600,6 +601,7 @@ namespace
             state[4] = IsKeyDown(KEY_J) ? 0 : IsKeyDown(KEY_L) ? 255 : 128;
             state[5] = IsKeyDown(KEY_I) ? 0 : IsKeyDown(KEY_K) ? 255 : 128;
         }
+#endif
         if (const uint32_t scripted = gow2PadScriptButtons())
         {
             state[2] &= static_cast<uint8_t>(~scripted);

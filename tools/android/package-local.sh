@@ -13,7 +13,7 @@ from pathlib import Path
 import sys
 root,stage=map(Path,sys.argv[1:])
 s=(root/'android/app/src/main/AndroidManifest.xml').read_text()
-(stage/'AndroidManifest.xml').write_text(s.replace('<manifest ', '<manifest package="io.github.genissonemilio.gow2" ',1))
+(stage/'AndroidManifest.xml').write_text(s.replace('<manifest ', '<manifest package="io.github.genissonemilio.gow2" ',1).replace('<application ', '<application android:debuggable="true" ',1))
 PYMANIFEST
 "$build_tools/aapt" package -f -M "$stage/AndroidManifest.xml" -I "$ANDROID_HOME/platforms/android-35/android.jar" -S "$root/android/app/src/main/res" --min-sdk-version 29 --target-sdk-version 35 --version-code 1 --version-name 0.1.0-dev -F "$stage/base.apk"
 cp "$root/artifacts/build/arm64/PS2Recomp/ps2xRuntime/libps2EntryRunner.so" "$stage/lib/arm64-v8a/"
