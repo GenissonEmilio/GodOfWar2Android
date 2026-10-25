@@ -28,9 +28,9 @@ estão em [docs/VU-PROFILE.md](docs/VU-PROFILE.md).
 - Dois analógicos touch, botões PS2, D-pad e controles simultâneos por multitoque.
 - Presets para 2, 3 ou 4 dedos; editor de posições por arraste, tamanho por botão e persistência do layout.
 - Menu de pausa sobre o jogo com opacidade, tamanho, zona morta, sensibilidade,
-  volume e meta de 30 FPS no jogo e na apresentação (ou 60 FPS). A meta limita
-  o ritmo dos frames reais; não aumenta o desempenho quando o trabalho excede
-  33,3 ms. A renderização assíncrona é
+  volume e limite de 24, 30 ou 60 FPS. O padrão é 30; 24 permite reduzir o consumo
+  no jogo e mantém a apresentação dos vídeos a 30 FPS. O limite regula quadros
+  reais e não aumenta a capacidade de processamento do aparelho. A renderização assíncrona é
   experimental e vem desativada. O processamento paralelo também é opcional e
   exige reabrir o jogo.
 - Opção experimental para priorizar quatro núcleos de desempenho quando disponíveis,

@@ -32,7 +32,14 @@ final class MobileUi {
         body.addView(text(a,"IMAGEM E DESEMPENHO",18));
         body.addView(text(a,"Resolução interna: 1×, 2× ou 3×. A mudança vale na próxima abertura do jogo.",14));
         slider(body,p,"scale","Resolução interna",1,3,1,changed);
-        Switch fps=new Switch(a);fps.setText("Meta de 30 FPS no jogo e na apresentação");fps.setTextColor(TEXT);fps.setChecked(p.getInt("fps",30)==30);fps.setOnCheckedChangeListener((v,b)->{p.edit().putInt("fps",b?30:60).apply();changed.run();});body.addView(fps);
+        body.addView(text(a,"Limite de quadros do jogo",16));
+        Spinner fps=new Spinner(a);
+        final int[] limits={24,30,60};
+        String[] rates={"24 FPS — menor consumo","30 FPS","60 FPS — experimental"};
+        fps.setAdapter(new ArrayAdapter<>(a,android.R.layout.simple_spinner_dropdown_item,rates));
+        int saved=p.getInt("fps",30);fps.setSelection(saved==24?0:saved==60?2:1);
+        fps.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onNothingSelected(AdapterView<?> v){}public void onItemSelected(AdapterView<?> v,View row,int pos,long id){if(limits[pos]!=p.getInt("fps",30)){p.edit().putInt("fps",limits[pos]).apply();changed.run();}}});body.addView(fps);
+        body.addView(text(a,"O limite de 24 FPS reduz o consumo durante o jogo. Vídeos mantêm a cadência original. O desempenho depende do aparelho e da cena.",14));
         Switch pipeline=new Switch(a);pipeline.setText("Renderização assíncrona (experimental)");pipeline.setTextColor(TEXT);pipeline.setChecked(p.getBoolean("graphicsAsync",false));pipeline.setOnCheckedChangeListener((v,b)->{p.edit().putBoolean("graphicsAsync",b).apply();changed.run();});body.addView(pipeline);
         Switch parallel=new Switch(a);parallel.setText("Processamento paralelo (experimental; próxima abertura)");parallel.setTextColor(TEXT);parallel.setChecked(p.getBoolean("graphicsParallel",false));parallel.setOnCheckedChangeListener((v,b)->{p.edit().putBoolean("graphicsParallel",b).apply();changed.run();});body.addView(parallel);
         Switch cores=new Switch(a);cores.setText("Priorizar núcleos de desempenho (experimental)");cores.setTextColor(TEXT);cores.setChecked(p.getBoolean("performanceCores",false));cores.setOnCheckedChangeListener((v,b)->{p.edit().putBoolean("performanceCores",b).apply();changed.run();});body.addView(cores);

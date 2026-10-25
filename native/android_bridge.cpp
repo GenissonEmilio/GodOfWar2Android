@@ -94,7 +94,7 @@ void gowAndroidReadPad(uint8_t *data) {
 }
 void gowAndroidFrame() {
     SetMasterVolume(gowAndroidPaused()?0.0f:volume.load()/100.0f);
-    const int wanted=frameLimit.load();
+    const int wanted=GameFrameClock::presentationTarget(frameLimit.load(),movieActive.load());
     if (appliedLimit.exchange(wanted)!=wanted)SetTargetFPS(wanted);
     // Read raylib only on its host/input thread. The EE thread consumes an
     // atomic DualShock snapshot, including short press edges and pressure bytes.
@@ -178,7 +178,8 @@ extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivit
 }
 extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivity_nativePause(JNIEnv *,jclass,jboolean value) { if(paused.exchange(value)!=bool(value))pacingEpoch.fetch_add(1); input.store(0x808080800000ULL); pendingPress.store(0); physicalPress.store(0); if (IsAudioDeviceReady()) SetMasterVolume(gowAndroidPaused()?0.0f:volume.load()/100.0f); }
 extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivity_nativeSettings(JNIEnv *,jclass,jint vol,jint fps,jfloat dz,jfloat gain,jboolean graphicsAsync,jboolean performanceCores) {
-    volume.store(std::clamp(int(vol),0,100));if(frameLimit.exchange(fps==30?30:60)!=(fps==30?30:60))pacingEpoch.fetch_add(1);asyncFinish.store(graphicsAsync);
+    const int target=GameFrameClock::target(fps);
+    volume.store(std::clamp(int(vol),0,100));if(frameLimit.exchange(target)!=target)pacingEpoch.fetch_add(1);asyncFinish.store(graphicsAsync);
     deadzone.store(std::clamp(dz,0.0f,0.5f)); sensitivity.store(std::clamp(gain,0.1f,3.0f));
     preferPerformanceCores.store(performanceCores);
 }

@@ -5,12 +5,12 @@ paridade de experiência com Black Android foi estabelecida.
 
 Data dos testes: 24 e 25 de outubro de 2026 (America/Fortaleza).
 
-Na rodada mais recente da primeira luta, o opt37 marcou **20,735–24,533 FPS**
-em seis janelas de cinco segundos, mediana **21,622**. Isso alcança a faixa da
-meta intermediária nesse trecho. O desempenho com o aparelho já aquecido ainda
-cai abaixo de 20 FPS; não há comprovação de 30 FPS sustentados nem de campanha
-sem defeitos visuais. Os detalhes das rodadas e dos limites de frequência estão
-no final deste documento.
+O opt40 reduziu a retenção de memória e incorporou IR-PGO na VU. Na primeira
+luta, duas rodadas de cinco minutos tiveram medianas **24,537** e **22,389 FPS**,
+com mínimos de **19,428** e **20,772 FPS**, respectivamente. Ainda há quedas
+abaixo de 22 FPS com o aparelho aquecido; a faixa de 22–24 sustentados não está
+comprovada. Também não há comprovação de 30 FPS sustentados nem de campanha sem
+defeitos visuais. Os detalhes das rodadas estão no final deste documento.
 
 ## Ambiente observado
 
@@ -742,3 +742,53 @@ pool de quatro núcleos habilitado, 18 janelas após a transição marcaram
 20,640–25,242 FPS, mediana 22,219. Os valores finais de 20–22 FPS ainda não
 comprovam a meta sustentada. O aparelho reportou `false` para o recurso Android
 `config_sustainedPerformanceModeSupported`; não foi forçado um modo não suportado.
+
+
+### Perfil VU local e combate prolongado (opt40)
+
+O treinamento público em `tools/android/train_vu_profile.py` gerou o perfil
+IR-PGO local a partir de 2.000 registros reais, todos com hash idêntico. Apenas
+os 32 fontes nativos VU e `ps2_vu1_core.cpp` usam o perfil e ThinLTO; EE, IOP,
+renderizador e opções de ponto flutuante conservam os flags anteriores.
+Em quatro rodadas alternadas, 8.000 replays aquecidos tiveram medianas de
+84,202 ms sem perfil, 83,432 ms com ThinLTO e 75,677 ms com IR-PGO + ThinLTO.
+A biblioteca extraída do APK opt40 também reproduziu os 2.000 registros sem
+nenhuma diferença de estado, memória VU ou pacotes GIF. O resultado valida essa
+captura; não prova a campanha nem converte o ganho isolado em percentual de FPS.
+
+A seleção do conjunto de quatro núcleos de desempenho agora é uma preferência
+visível nos ajustes. Continua desligada por padrão. Foi habilitada pela interface
+no POCO, com processamento paralelo, resolução 1×, limite 30 e renderização
+assíncrona desligada. Os marcadores de afinidade estavam removidos.
+
+Duas rodadas mantiveram Kratos vivo, defendendo com L1 pelo caminho de gamepad
+Android. Cada rodada coletou 62 janelas; as duas primeiras foram excluídas como
+transição, restando 60 janelas de aproximadamente 5 s. A segunda retomou a mesma
+cena depois de uma pausa breve, com caches aquecidos. Não é uma comparação
+controlada de temperatura, posicionamento ou movimentos dos inimigos.
+
+| Rodada | Mediana | Menor/maior janela | Janelas abaixo de 22 |
+| --- | ---: | ---: | ---: |
+| Primeira, opt40 | 24,537 FPS | 19,428–27,637 FPS | 1/60 |
+| Retomada, opt40 | 22,389 FPS | 20,772–27,976 FPS | 16/60 |
+
+Na primeira rodada, a janela de 19,428 teve p95 de 87,426 ms e máximo de
+105,439 ms. Na retomada, o maior intervalo foi 112,725 ms; várias janelas
+ficaram em 21,5–21,8 FPS. As quedas foram mantidas nos resultados. Não foram
+usadas janelas de menu, morte ou vídeo como FPS de combate. A captura final da
+retomada confirma Kratos vivo, HUD e inimigos ativos. A primeira rodada teve
+capturas intermediárias; a segunda teve somente a captura final.
+
+Depois da primeira rodada, dumpsys registrou 111.978 KiB alocados no heap
+nativo, PSS total 346.528 KiB, RSS 426.224 KiB e swap PSS 60.277 KiB. O heap
+permaneceu muito abaixo dos 840.282 KiB observados antes do limite de buffers.
+O perfil aquecido posterior coletou 21.602 amostras sem perda em 16 s:
+VUWorker 32,87%, GameThread 27,01%, GSThread 24,28%, GSFrontend 11,83%.
+A VU continua sendo a maior parcela dos ciclos amostrados.
+
+Os probes CPU e de captura passaram com o build PGO; os testes Java/Python
+passaram e o CI de `792fc5a` passou nos dois branches. Os testes de pixels e
+streaming GLES já haviam passado com o mesmo renderizador. As capturas da sala
+foram inspecionadas sem nova corrupção observada em modelos/texturas; sombras
+escuras preexistentes ainda precisam de comparação com uma referência PS2.
+Não há declaração de ausência de defeitos na campanha.
