@@ -58,6 +58,7 @@ layout(location = 3) in vec3 aSTQ;
 layout(location = 4) in vec2 aUV;      // texels
 layout(location = 5) in vec4 aUVClamp; // texels: the range the GS samples (sprites), else unbounded
 uniform vec2 uInvSize;
+uniform int uZInverted;
 noperspective out vec4 vCol;
 flat out vec4 vColFlat;
 noperspective out vec3 vSTQ;
@@ -65,7 +66,8 @@ noperspective out vec2 vUV;
 flat out vec4 vUVClamp;
 void main()
 {
-    gl_Position = vec4(aPos * uInvSize * 2.0 - 1.0, aZ * 2.0 - 1.0, 1.0);
+    precise float z = uZInverted != 0 ? 1.0 - aZ : aZ;
+    gl_Position = vec4(aPos * uInvSize * 2.0 - 1.0, z * 2.0 - 1.0, 1.0);
     vCol = aCol;
     vColFlat = aCol;
     vSTQ = aSTQ;
@@ -545,6 +547,7 @@ struct GSHwBackend::Impl
           locAte = -1, locFailTint = -1, locAtst = -1, locAref = -1, locPass = -1, locBlendScale = -1, locRtTex24 = -1, locRtClamp = -1, locPxScale = -1, locTa0 = -1, locTa1 = -1, locReinterp = -1, locDate = -1, locDatm = -1, locDest = -1, locZTex = -1, locZMax = -1, locTables = -1, locRtColor = -1, locPalette = -1, locTexFmt = -1, locTexFmt2 = -1,
           locRtFmt = -1, locRtFmt2 = -1, locTex0 = -1, locRtPx = -1, locAem = -1;
     GLint locIndexed = -1, locLinear = -1, locWrap = -1, locIdxPalette = -1;
+    GLint locZInverted = -1;
     GLint locSwBlend = -1, locColClamp = -1, locAbcd = -1, locFix = -1, locZAlias = -1, locZAliasWrite = -1, locZAliasMax = -1;
 
     GLuint tableTex = 0, paletteTex = 0, mobileNeutral = 0;
@@ -768,7 +771,7 @@ struct GSHwBackend::Impl
             return false;
         }
         const auto loc = [&](const char *name) { return g.GetUniformLocation(program, name); };
-        locInvSize = loc("uInvSize"); locTex = loc("uTex"); locTexSize = loc("uTexSize"); locTexDim = loc("uTexDim"); locTme = loc("uTme");
+        locInvSize = loc("uInvSize"); locZInverted = loc("uZInverted"); locTex = loc("uTex"); locTexSize = loc("uTexSize"); locTexDim = loc("uTexDim"); locTme = loc("uTme");
         locFst = loc("uFst"); locTfx = loc("uTfx"); locTcc = loc("uTcc"); locIip = loc("uIip"); locAte = loc("uAte");
         locAtst = loc("uAtst"); locFailTint = loc("uFailTint"); locAref = loc("uAref"); locPass = loc("uPass"); locBlendScale = loc("uBlendScale");
         locReinterp = loc("uReinterp"); locDate = loc("uDate"); locDatm = loc("uDatm"); locDest = loc("uDest"); locZTex = loc("uZTex"); locZMax = loc("uZMax"); locTables = loc("uTables"); locRtColor = loc("uRtColor"); locPalette = loc("uPalette");
@@ -2149,14 +2152,9 @@ struct GSHwBackend::Impl
             g.DepthFunc(ztst == 0 ? kNever : ztst == 1 ? kAlways : ztst == 2 ? kLEqual : kLess);
         else
             g.DepthFunc(ztst == 0 ? kNever : ztst == 1 ? kAlways : ztst == 2 ? kGEqual : kGreater);
-        std::vector<HwVertex> flippedZ;
-        if (zInv)
-        {
-            flippedZ = verts;
-            for (HwVertex &v : flippedZ)
-                v.z = 1.0f - v.z;
-        }
-        const std::vector<HwVertex> &dverts = zInv ? flippedZ : verts;
+        // The vertex shader applies the same 1-z operation. Keep the original
+        // CPU vector instead of allocating and copying every inverted batch.
+        const std::vector<HwVertex> &dverts = verts;
         if (isZInversion(s, verts))
         {
             if (zInverted(c.zbuf.zbp))
@@ -2256,6 +2254,7 @@ struct GSHwBackend::Impl
             }
         }
         g.Uniform2f(locInvSize, 1.0f / rt.pxW, 1.0f / rt.pxH);
+        g.Uniform1i(locZInverted, zInv ? 1 : 0);
         g.Uniform1i(locTme, s.prim.tme ? 1 : 0);
         g.Uniform1i(locFst, s.prim.fst ? 1 : 0);
         g.Uniform1i(locIip, s.prim.iip ? 1 : 0);
@@ -2374,7 +2373,10 @@ struct GSHwBackend::Impl
             ++volTraced;
             float x0 = 1e9f, x1 = -1e9f, y0 = 1e9f, y1 = -1e9f, z0 = 2.0f, z1 = -1.0f;
             for (const HwVertex &v : dverts)
-                x0 = std::min(x0, v.x), x1 = std::max(x1, v.x), y0 = std::min(y0, v.y), y1 = std::max(y1, v.y), z0 = std::min(z0, v.z), z1 = std::max(z1, v.z);
+            {
+                const float z = zInv ? 1.0f - v.z : v.z;
+                x0 = std::min(x0, v.x), x1 = std::max(x1, v.x), y0 = std::min(y0, v.y), y1 = std::max(y1, v.y), z0 = std::min(z0, z), z1 = std::max(z1, z);
+            }
             const int bx0 = std::max(0, static_cast<int>(x0 * scale)), bx1 = std::min(static_cast<int>(rt.glW) - 1, static_cast<int>(x1 * scale));
             const int by0 = std::max(0, static_cast<int>(y0 * scale)), by1 = std::min(static_cast<int>(rt.glH) - 1, static_cast<int>(y1 * scale));
             volBox[0] = bx0, volBox[1] = bx1, volBox[2] = by0, volBox[3] = by1;

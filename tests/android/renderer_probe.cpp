@@ -172,6 +172,31 @@ static int runEpoch(int epoch){
     backend.SubmitCached(batch,gsNewDrawStateToken());backend.Flush();
     ok=pixel(backend.Present(request),0,220,200,48,16)&&ok;
     batch.state.context.frame.fbmsk=0;
+    // GoW's depth inversion pass marks a Z buffer as inverted without changing
+    // the host depth texture. Test both comparison directions and restoration.
+    batch.vertices[0].x=0;batch.vertices[1].x=64;
+    batch.state.context.zbuf.zmask=false;batch.state.context.zbuf.psm=GS_PSM_Z32;
+    batch.state.context.test=(1ULL<<16)|(1ULL<<17);
+    for(auto &v:batch.vertices){v.r=200;v.g=0;v.b=0;v.z=0xbfffffff;}
+    backend.Submit(batch);backend.Flush();
+    auto inversion=batch;inversion.state.context.frame.fbp=64;inversion.state.context.frame.psm=GS_PSM_CT24;
+    inversion.state.context.zbuf.zmask=true;inversion.state.context.test=0;
+    inversion.state.prim.abe=true;inversion.state.context.alpha=0x80000000a4ULL;
+    for(auto &v:inversion.vertices){v.r=255;v.g=255;v.b=255;}
+    backend.Submit(inversion);backend.Flush();
+    batch.state.context.zbuf.zmask=true;batch.state.context.test=(1ULL<<16)|(2ULL<<17);
+    for(auto &v:batch.vertices){v.r=0;v.g=0;v.b=200;v.z=0x7fffffff;}
+    backend.Submit(batch);backend.Flush();ok=pixel(backend.Present(request),0,0,200)&&ok;
+    for(auto &v:batch.vertices){v.r=200;v.b=0;v.z=0;}
+    backend.Submit(batch);backend.Flush();ok=pixel(backend.Present(request),0,0,200)&&ok;
+    for(auto &v:batch.vertices){v.r=0;v.g=200;v.b=0;v.z=0xffffffff;}
+    backend.Submit(batch);backend.Flush();ok=pixel(backend.Present(request),0,200,0)&&ok;
+    backend.Submit(inversion);backend.Flush(); // Restore normal depth comparison.
+    for(auto &v:batch.vertices){v.r=200;v.g=200;v.b=0;v.z=0x7fffffff;}
+    backend.Submit(batch);backend.Flush();ok=pixel(backend.Present(request),0,200,0)&&ok;
+    for(auto &v:batch.vertices)v.z=0xffffffff;
+    backend.Submit(batch);backend.Flush();ok=pixel(backend.Present(request),200,200,0)&&ok;
+    batch.state.context.test=0;
     GSPrimitiveBatch triangles=batch;triangles.vertexCount=3;
     triangles.state.prim.type=GS_PRIM_TRIANGLE;triangles.state.prim.tme=false;
     for(unsigned i=0;i<3;++i){triangles.vertices[i].x=-128.0f+(i==1?16.0f:0.0f);triangles.vertices[i].y=-128.0f+(i==2?16.0f:0.0f);triangles.vertices[i].z=123456;}

@@ -353,10 +353,28 @@ e reutilizadas. Reabra o processo ao alterá-lo e remova-o ao terminar os testes
   triângulos caiu de 1,657 para 1,174 ms (Z32), 1,647 para 1,238 ms (Z24) e
   1,732 para 1,373 ms (Z16). Exclui flush/espera de GPU; não mede FPS do jogo.
 - `PS2X_GS_QUEUE_BYTES` permite comparar blocos de 4–256 KiB; o padrão continua
- 64 KiB. O marcador local `perf-queue-32k` seleciona 32 KiB na próxima abertura,
+  64 KiB. O marcador local `perf-queue-32k` seleciona 32 KiB na próxima abertura,
   com 16 blocos pendentes para preservar a capacidade total de aproximadamente
   512 KiB da fila padrão de oito blocos de 64 KiB.
   A alteração mantém registros inteiros e as mesmas barreiras de sincronização.
+- O probe da fila passou com 64 KiB/oito blocos, 32 KiB/16 blocos e 4 KiB/um
+  bloco. No mesmo APK opt23 e sem diagnósticos, seis janelas de cinco segundos
+  após a introdução mediram 15,45–16,95 FPS com 64 KiB e 16,34–18,88 FPS com
+  32 KiB. As medianas dessas janelas foram 16,25 e 16,44 FPS, respectivamente.
+  Uma execução por configuração não estabelece ganho consistente; 64 KiB
+  permanece como padrão. Menus e as duas primeiras janelas de introdução não
+  entram nesses intervalos. A meta de 30 FPS continua não cumprida.
+
+## Profundidade invertida sem cópia de vértices
+
+- A transformação `1-z` dos passes de profundidade invertida passou para o
+  vertex shader. Isso remove o vetor temporário, sua alocação e a cópia de
+  todos os vértices em cada lote invertido. O teste de profundidade e sua
+  direção de comparação permanecem iguais.
+- Um teste de pixels passou antes e depois da alteração, nos dois caminhos
+  GLES e em três ciclos EGL: escrita de Z32, inversão, fragmentos aceitos e
+  rejeitados, nova inversão e retorno à comparação normal. Sem erros GL.
+- Ainda não foi estabelecido ganho de FPS de combate devido a essa alteração.
 
 ## Critérios restantes
 
