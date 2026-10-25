@@ -374,7 +374,13 @@ e reutilizadas. Reabra o processo ao alterá-lo e remova-o ao terminar os testes
 - Um teste de pixels passou antes e depois da alteração, nos dois caminhos
   GLES e em três ciclos EGL: escrita de Z32, inversão, fragmentos aceitos e
   rejeitados, nova inversão e retorno à comparação normal. Sem erros GL.
-- Ainda não foi estabelecido ganho de FPS de combate devido a essa alteração.
+- O APK opt24 foi instalado e, sem diagnósticos e com blocos de 64 KiB, mediu
+  14,33–18,75 FPS nas seis janelas de combate; a mediana das janelas foi 18,06.
+  A pior janela teve p95 de 110,08 ms. É uma execução, não uma prova de ganho
+  sustentado ou de campanha validada. O objetivo de 30 FPS estáveis não foi atingido.
+- A assinatura e o alinhamento do APK foram verificados; os segmentos ELF estão
+  alinhados a 16 KiB. Os marcadores de diagnóstico e de blocos de 32 KiB foram
+  removidos do aparelho. A compilação normal permanece instalada.
 
 ## Critérios restantes
 
