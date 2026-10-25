@@ -112,6 +112,20 @@ static int runEpoch(int epoch){
     batch.state.context.frame.fbp=8;batch.state.prim.tme=true;backend.Submit(batch);backend.Flush();
     request.dispfb1=8|(1ULL<<9);
     ok=pixel(backend.Present(request),20,40,60)&&ok;
+    // A narrow FRAME can reuse an existing wider render target. A CSM2 palette
+    // on row 32 still depends on the pending draw across the owner's width.
+    batch.state.prim.tme=false;batch.state.context.frame.fbw=4;
+    for(auto &v:batch.vertices){v.r=80;v.g=100;v.b=120;}
+    backend.Submit(batch);backend.Flush();
+    batch.state.context.frame.fbw=1;
+    for(auto &v:batch.vertices){v.r=30;v.g=50;v.b=70;}
+    backend.Submit(batch);
+    tex0.cbp=8*32;tex0.csm=1;
+    GSTexClutReg csm2{};csm2.cbw=4;csm2.cov=32;
+    backend.LoadClut(tex0,csm2);
+    batch.state.context.frame.fbp=16;batch.state.prim.tme=true;batch.state.texclut=csm2;
+    backend.Submit(batch);backend.Flush();request.dispfb1=16|(1ULL<<9);
+    ok=pixel(backend.Present(request),30,50,70)&&ok;
     const auto error=glGetError();ok=(error==GL_NO_ERROR)&&ok;
     std::printf("Production GLES raster, blend, shuffle and shared presentation: %s (GL error %x)\n",ok?"PASS":"FAIL",error);
     } // Destroy shared textures/fences before terminating this EGL share group.

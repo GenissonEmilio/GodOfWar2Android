@@ -1409,9 +1409,13 @@ struct GSHwBackend::Impl
         if(!havePending || pending.empty())return false;
         const GSContext &c=pendingState.context;
         const uint32_t rows=uint32_t(c.scissor.y1)+1u;
+        // target() can reuse a wider existing target. Its colour/depth memory
+        // then spans that owner's width even after the guest reduces FRAME.FBW.
+        uint32_t ownerWidth=c.frame.fbw;
+        for(const auto &target:targets)if(target.fbp==c.frame.fbp)ownerWidth=std::max(ownerWidth,target.fbw);
         const uint32_t colorBase=c.frame.fbp*8192u,depthBase=c.zbuf.zbp*8192u;
-        const uint32_t colorBytes=spanBlocks(c.frame.psm,c.frame.fbw,rows)*256u;
-        const uint32_t depthBytes=spanBlocks(c.zbuf.psm,c.frame.fbw,rows)*256u;
+        const uint32_t colorBytes=spanBlocks(c.frame.psm,ownerWidth,rows)*256u;
+        const uint32_t depthBytes=spanBlocks(c.zbuf.psm,ownerWidth,rows)*256u;
         const auto &format=GSSwizzle::GetFormat(tex0.cpsm);
         for(uint32_t i=0;i<count;++i){
             const uint32_t byte=GSSwizzle::Locate(format,tex0.cbp,width,xy[2*i],xy[2*i+1]).byte;

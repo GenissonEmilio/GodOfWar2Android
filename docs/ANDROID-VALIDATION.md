@@ -287,7 +287,16 @@ próxima janela de medição. O arquivo `perf-stage-barriers` repõe as barreira
 - A versão anterior à comparação de pixels da CLUT foi medida sem simpleperf:
   seis janelas consecutivas da luta ficaram entre 16,93 e 18,53 FPS; os p95 dos
   intervalos ficaram entre 60,55 e 65,61 ms. A introdução da sala foi excluída.
-  Não houve estabilização em 30 FPS. A alteração seguinte está em medição.
+  Não houve estabilização em 30 FPS. Após a comparação de pixels da CLUT,
+  outras seis janelas ficaram entre 18,75 e 19,38 FPS, com p95 entre 55,07 e
+  63,42 ms. As execuções variam e não constituem um replay determinístico.
+- A dependência da CLUT também considera a largura de um alvo gráfico já
+  existente quando FRAME.FBW diminui. O teste reproduziu a cor antiga
+  (80,100,120) sem essa proteção; com a correção, obteve (30,50,70), tanto com
+  framebuffer fetch quanto por cópias, nos três ciclos EGL.
+- A [CI do checkpoint 384d38d](https://github.com/GenissonEmilio/GodOfWar2Android/actions/runs/40180721600)
+  passou. A variante ThinLTO também passou nos probes CPU, CLUT, kernel, fila e
+  pixels GLES; isso não comprova ganho de FPS.
 - Os rastreamentos completos, imagens, dados do jogo e APKs continuam locais.
   Estes testes não validam a campanha inteira.
 
