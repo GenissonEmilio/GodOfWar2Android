@@ -89,10 +89,20 @@ local, build nativo e aparelho conectado por ADB:
 ```sh
 tools/android/probe_frontend.sh
 tools/android/probe_cpu.sh
+tools/android/probe_vu_capture.sh
 tools/android/probe_kernel.sh
 tools/android/probe_queue.sh
 tools/android/probe_renderer.sh
 ```
+
+O diagnóstico de VU pode capturar um trecho de combate para comparações com os
+mesmos dados: crie `perf-vu-record` na pasta de arquivos do app e reinicie o
+processo. Já no trecho desejado, crie `perf-vu-capture-now`. O gravador termina
+em 2.000 registros e escreve `vu-combat.bin`; essa captura altera o tempo do
+teste e deve ocorrer depois da medição de FPS. `perf-vu-replay`, em uma nova
+abertura do processo, reproduz esse arquivo e informa divergências de estado,
+memória e pacotes GIF, além do tempo de execução com cache aquecido. Remova os
+marcadores ao terminar. Capturas contêm dados derivados do jogo e ficam locais.
 
 ## Créditos
 

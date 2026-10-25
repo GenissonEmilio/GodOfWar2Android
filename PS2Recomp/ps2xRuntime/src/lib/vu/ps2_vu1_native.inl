@@ -970,6 +970,21 @@ void VU1NativeAccess::recordReplay(VU1Interpreter &vu, void *contextPtr, uint32_
         std::fprintf(stderr, "[vu1n-replay] %u records, %u differ\n", total, differ);
         return;
     }
+    // Optional one-shot trigger: capture an actual combat segment after menus
+    // and movies. The disabled recorder returns above without filesystem work.
+    static const char *armPath = std::getenv("GOW_VU1N_RECORD_ARM");
+    static bool armed = armPath == nullptr;
+    static uint32_t armPoll = 0;
+    if (!armed)
+    {
+        if ((armPoll++ & 4095u) != 0u)
+            return;
+        std::error_code error;
+        armed = std::filesystem::exists(armPath, error) && !error;
+        if (!armed)
+            return;
+        std::fprintf(stderr, "[vu1n-record] capture armed\n");
+    }
     static const unsigned limit = std::getenv("GOW_VU1N_RECORD_N") ? static_cast<unsigned>(std::atoi(std::getenv("GOW_VU1N_RECORD_N"))) : 4000u;
     static const unsigned stride = std::getenv("GOW_VU1N_RECORD_STRIDE") ? static_cast<unsigned>(std::atoi(std::getenv("GOW_VU1N_RECORD_STRIDE"))) : 7u;
     static const unsigned long long skip = std::getenv("GOW_VU1N_RECORD_SKIP") ? std::strtoull(std::getenv("GOW_VU1N_RECORD_SKIP"), nullptr, 10) : 0ull;

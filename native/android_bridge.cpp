@@ -148,6 +148,19 @@ extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivit
     if(counters)setenv("PS2X_GS_WORKER_DIAG","1",1);else unsetenv("PS2X_GS_WORKER_DIAG");
     if(diagnostic || counters)setenv("GOW_VBLANK_DIAG","1",1);else unsetenv("GOW_VBLANK_DIAG");
     if(diagnostic)setenv("GOW_MPEG_DIAG","1",1);else unsetenv("GOW_MPEG_DIAG");
+    if(std::filesystem::exists(std::string(p)+"/perf-vu-record")){
+        setenv("GOW_VU1N_RECORD",(std::string(p)+"/vu-combat.bin").c_str(),1);
+        setenv("GOW_VU1N_RECORD_ARM",(std::string(p)+"/perf-vu-capture-now").c_str(),1);
+        setenv("GOW_VU1N_RECORD_N","2000",1);
+        setenv("GOW_VU1N_RECORD_STRIDE","7",1);
+    }else{
+        unsetenv("GOW_VU1N_RECORD");unsetenv("GOW_VU1N_RECORD_ARM");
+        unsetenv("GOW_VU1N_RECORD_N");unsetenv("GOW_VU1N_RECORD_STRIDE");
+    }
+    if(std::filesystem::exists(std::string(p)+"/perf-vu-replay")){
+        setenv("GOW_VU1N_REPLAY",(std::string(p)+"/vu-combat.bin").c_str(),1);
+        setenv("GOW_VU1N_REPLAY_REPS","5",1);
+    }else{unsetenv("GOW_VU1N_REPLAY");unsetenv("GOW_VU1N_REPLAY_REPS");}
     env->ReleaseStringUTFChars(path,p);
 }
 extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivity_nativeInput(JNIEnv *,jclass,jint buttons,jfloat lx,jfloat ly,jfloat rx,jfloat ry) {
