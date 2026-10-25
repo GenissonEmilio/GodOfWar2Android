@@ -427,3 +427,32 @@ e reutilizadas. Reabra o processo ao alterá-lo e remova-o ao terminar os testes
 - Medições do FPS real, consumo de memória e aquecimento em sessões longas.
 - Validação da campanha inteira, incluindo bosses, vídeos e as duas camadas do DVD.
 - Integração dos ajustes aos menus originais do jogo, além do overlay móvel.
+
+
+### Shaders comuns e leituras do destino (opt28–opt29)
+
+O `opt28` usou o shader simples nas passagens sem textura compatíveis. Na primeira
+luta, com contadores de renderização e leitura do `gpubusy` a cada segundo, as seis
+janelas de combate registraram 14,975; 14,594; 14,497; 14,769; 14,557; 14,957 FPS
+(mediana 14,682). O shader simples apareceu em cerca de 150 batches entre 15–16 mil
+por janela, portanto alcançou uma fração pequena do trabalho. Não há ganho de
+combate demonstrado. A bateria chegou a 38,9 °C; não se pode atribuir a diferença
+entre execuções somente ao código. A mediana do indicador global `gpubusy` nos
+últimos 30 s foi 72,7%, em 29 amostras. No `opt27`, foi 73,4%; as seis janelas de
+combate tiveram mediana de 16,964 FPS. Esse indicador não isola o processo do jogo.
+
+O `opt29` compila uma segunda variante do shader completo, sem leitura do destino,
+selecionada somente com DATE, mistura por shader e alias de Z desativados no estado
+GS. Texturas, filtragem, releitura de render targets, teste de alpha e seu passe de
+falha continuam com as mesmas operações. Cada programa guarda suas próprias
+localizações e valores de uniforms. `perf-direct-off` permite medir o caminho
+anterior na mesma compilação. Falha ao compilar ou ligar a variante opcional mantém
+o shader geral.
+
+O teste no Adreno validou pixels RGBA durante alternância entre textura comum,
+RGB_ONLY após falha de alpha, DATE aceitando/rejeitando, mistura por alpha do
+destino e teste/escrita de Z armazenado na cor. Os testes anteriores de CLUT,
+repetição negativa e bilinear também passaram. Foram 12 ciclos EGL: variante
+nova e geral, cada uma com framebuffer fetch e cópia de fallback, repetidos três
+vezes. A medição de combate do `opt29` ainda está em andamento; estes testes de
+pixels não comprovam 30 FPS nem validam toda a campanha.

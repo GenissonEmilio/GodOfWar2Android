@@ -293,6 +293,46 @@ static int runEpoch(int epoch){
     backend.Submit(counting);backend.Flush();ok=pixel(backend.Present(request),127,129,127)&&ok;
     counting.state.context.test=1ULL<<14; // DATE=1, DATM=0 rejects stored alpha >=128.
     backend.Submit(counting);backend.Flush();ok=pixel(backend.Present(request),127,129,127)&&ok;
+    // Switch between ordinary textured draws, alpha-fail passes and reads of
+    // destination alpha/colour. Each program has its own uniform locations.
+    auto composite=repeat;composite.state.context.frame.fbp=40;
+    composite.state.context.frame.fbmsk=0;composite.state.context.test=0;
+    composite.state.context.tex0={};composite.state.context.tex0.tbp0=0x3500;
+    composite.state.context.tex0.tbw=1;composite.state.context.tex0.psm=GS_PSM_CT32;
+    composite.state.context.tex0.tfx=1;composite.state.context.tex0.tcc=1;
+    composite.state.textureWidth=composite.state.textureHeight=1;composite.state.linearFilter=false;
+    for(auto &v:composite.vertices){v.s=v.t=0;v.q=1;}
+    backend.WriteVram(GS_PSM_CT32,0x3500,1,0,0,0x40c8a064);
+    request.dispfb1=40|(1ULL<<9);
+    backend.ClearFramebuffer(composite.state.context,0x80402810);
+    composite.state.context.test=1|(6ULL<<1)|(100ULL<<4)|(3ULL<<12); // Failed alpha writes RGB, retains alpha.
+    backend.Submit(composite);backend.Flush();
+    ok=pixel(backend.Present(request),100,160,200)&&ok;
+    uint8_t compositePixel[4]{};
+    // Present changes the bound FBO, so sample alpha before presentation on
+    // the next draw, alongside a rejected DATE test.
+    composite.state.context.test=1ULL<<14;
+    backend.Submit(composite);backend.Flush();glReadPixels(16,16,1,1,GL_RGBA,GL_UNSIGNED_BYTE,compositePixel);
+    ok=compositePixel[3]==128 && pixel(backend.Present(request),100,160,200)&&ok;
+    composite.state.context.test=(1ULL<<14)|(1ULL<<15); // Accept alpha >=128, replace it with texture alpha 64.
+    backend.Submit(composite);backend.Flush();glReadPixels(16,16,1,1,GL_RGBA,GL_UNSIGNED_BYTE,compositePixel);
+    ok=compositePixel[3]==64 && pixel(backend.Present(request),100,160,200)&&ok;
+    composite.state.context.test=0;composite.state.prim.abe=true;composite.state.context.alpha=0x54;
+    backend.ClearFramebuffer(composite.state.context,0x403c2814);
+    backend.Submit(composite);backend.Flush();ok=pixel(backend.Present(request),60,100,130)&&ok;
+    composite.state.prim.abe=false;
+    backend.Submit(composite);backend.Flush();ok=pixel(backend.Present(request),100,160,200)&&ok;
+    auto alias=composite;alias.state.prim.tme=false;alias.state.context.frame.fbp=48;
+    alias.state.context.zbuf.zbp=48;alias.state.context.zbuf.psm=GS_PSM_Z24;alias.state.context.zbuf.zmask=true;
+    alias.state.context.test=(1ULL<<16)|(2ULL<<17);
+    for(auto &v:alias.vertices){v.r=40;v.g=60;v.b=80;v.a=128;v.z=0x200000;}
+    request.dispfb1=48|(1ULL<<9);backend.ClearFramebuffer(alias.state.context,0x80400000);
+    backend.Submit(alias);backend.Flush();ok=pixel(backend.Present(request),0,0,64)&&ok;
+    for(auto &v:alias.vertices)v.z=0x600000;
+    backend.Submit(alias);backend.Flush();ok=pixel(backend.Present(request),40,60,80)&&ok;
+    alias.state.context.zbuf.zmask=false;
+    for(auto &v:alias.vertices)v.z=0x700000;
+    backend.Submit(alias);backend.Flush();ok=pixel(backend.Present(request),0,0,112)&&ok;
     request.dispfb1=16|(1ULL<<9);
     GSPrimitiveBatch triangles=batch;triangles.vertexCount=3;
     triangles.state.prim.type=GS_PRIM_TRIANGLE;triangles.state.prim.tme=false;

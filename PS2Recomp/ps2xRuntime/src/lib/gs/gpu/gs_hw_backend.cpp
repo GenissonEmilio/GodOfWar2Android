@@ -225,6 +225,7 @@ vec3 blendSel(int sel, vec3 cs, vec3 cd) { return sel == 0 ? cs : sel == 1 ? cd 
 
 void main()
 {
+#ifndef GOW_DIRECT_DRAW
     uint zFrag = uint(clamp(gl_FragCoord.z, 0.0, 1.0) * uZAliasMax + 0.5);
     if (uZAlias != 0)
     {
@@ -239,6 +240,7 @@ void main()
         bool bit = texelFetch(uDest, ivec2(gl_FragCoord.xy), 0).a >= 0.5;
         if (bit != (uDatm != 0)) discard;
     }
+#endif
     vec4 v = (uIip != 0) ? vCol : vColFlat;
     vec3 rgb = v.rgb;
     float a = v.a;
@@ -373,6 +375,7 @@ void main()
         if (uPass == 2 && pass) discard;
         if (uPass == 2 && uFailTint != 0) { rgb = vec3(255.0, 0.0, 255.0); a = 128.0; }
     }
+#ifndef GOW_DIRECT_DRAW
     if (uSwBlend != 0)
     {
         vec4 d = floor(texelFetch(uDest, ivec2(gl_FragCoord.xy), 0) * 255.0 + 0.5);
@@ -383,6 +386,7 @@ void main()
     }
     if (uZAlias != 0 && uZAliasWrite != 0)
         rgb = vec3(float(zFrag & 255u), float((zFrag >> 8) & 255u), float((zFrag >> 16) & 255u));
+#endif
     oColor = vec4(rgb / 255.0, a / 255.0);
     float f = min(a * uBlendScale, 1.0);
     oBlend = vec4(f);
@@ -553,7 +557,18 @@ void main()
     }
 }
 
-struct GSHwBackend::Impl
+// Uniform locations belong to a linked program, including optimized-out fields.
+struct DrawUniforms
+{
+    GLint locInvSize = -1, locTex = -1, locTexSize = -1, locTexDim = -1, locTme = -1, locFst = -1, locTfx = -1, locTcc = -1, locIip = -1,
+          locAte = -1, locFailTint = -1, locAtst = -1, locAref = -1, locPass = -1, locBlendScale = -1, locRtTex24 = -1, locRtClamp = -1, locPxScale = -1, locTa0 = -1, locTa1 = -1, locReinterp = -1, locDate = -1, locDatm = -1, locDest = -1, locZTex = -1, locZMax = -1, locTables = -1, locRtColor = -1, locPalette = -1, locTexFmt = -1, locTexFmt2 = -1,
+          locRtFmt = -1, locRtFmt2 = -1, locTex0 = -1, locRtPx = -1, locAem = -1;
+    GLint locIndexed = -1, locLinear = -1, locWrap = -1, locIdxPalette = -1;
+    GLint locZInverted = -1;
+    GLint locSwBlend = -1, locColClamp = -1, locAbcd = -1, locFix = -1, locZAlias = -1, locZAliasWrite = -1, locZAliasMax = -1;
+};
+
+struct GSHwBackend::Impl : DrawUniforms
 {
     bool xferWatchHit = false; // GOW_GS_HW_XFERWATCH: log the next upload's first bytes
     GSTextureStore store; // uploaded texture bytes + CLUT (no rasteriser, no framebuffer)
@@ -567,12 +582,8 @@ struct GSHwBackend::Impl
     GLuint program = 0, vao = 0, vbo = 0;
     GLuint simpleProgram = 0;
     std::array<GLint,4> simpleLoc{-1,-1,-1,-1};
-    GLint locInvSize = -1, locTex = -1, locTexSize = -1, locTexDim = -1, locTme = -1, locFst = -1, locTfx = -1, locTcc = -1, locIip = -1,
-          locAte = -1, locFailTint = -1, locAtst = -1, locAref = -1, locPass = -1, locBlendScale = -1, locRtTex24 = -1, locRtClamp = -1, locPxScale = -1, locTa0 = -1, locTa1 = -1, locReinterp = -1, locDate = -1, locDatm = -1, locDest = -1, locZTex = -1, locZMax = -1, locTables = -1, locRtColor = -1, locPalette = -1, locTexFmt = -1, locTexFmt2 = -1,
-          locRtFmt = -1, locRtFmt2 = -1, locTex0 = -1, locRtPx = -1, locAem = -1;
-    GLint locIndexed = -1, locLinear = -1, locWrap = -1, locIdxPalette = -1;
-    GLint locZInverted = -1;
-    GLint locSwBlend = -1, locColClamp = -1, locAbcd = -1, locFix = -1, locZAlias = -1, locZAliasWrite = -1, locZAliasMax = -1;
+    GLuint directProgram = 0;
+    DrawUniforms generalUniforms, directUniforms;
 
     GLuint tableTex = 0, paletteTex = 0, mobileNeutral = 0;
     GLuint presentProgram = 0, presentVao = 0, presentFbo = 0, presentTex = 0;
@@ -660,7 +671,7 @@ struct GSHwBackend::Impl
     struct Stats
     {
         uint64_t triangles = 0, outsideTriangles = 0, degenerateTriangles = 0;
-        uint64_t simpleBatches = 0;
+        uint64_t simpleBatches = 0, directBatches = 0;
         uint64_t shuffles = 0;
         uint64_t presents = 0, reusedPresents = 0;
         uint64_t draws = 0, batches = 0, skippedPsm = 0, unsupportedBlend = 0, texDecodes = 0, texHits = 0, skippedPrim = 0;
@@ -713,11 +724,10 @@ struct GSHwBackend::Impl
 #endif
 
     GLuint compile(GLenum type, const char *src) { return compile(type, {src}); }
-    GLuint compile(GLenum type, std::initializer_list<const char *> parts)
+    GLuint compile(GLenum type, std::initializer_list<const char *> parts, bool directDraw = false)
     {
         const Api &g = gl();
         const GLuint sh = g.CreateShader(type);
-#if defined(__ANDROID__)
         std::vector<std::string> translated;
         std::vector<const char *> sources;
         for (auto part : parts) {
@@ -725,24 +735,26 @@ struct GSHwBackend::Impl
             auto replaceAll = [&](const std::string &a, const std::string &b) {
                 size_t at = 0; while ((at = source.find(a, at)) != std::string::npos) { source.replace(at,a.size(),b); at += b.size(); }
             };
+#if defined(__ANDROID__)
             std::string header="#version 320 es\n";
-            if (mobileFetch && type==kFragmentShader) header+="#extension GL_EXT_shader_framebuffer_fetch : require\n#define GOW_FRAMEBUFFER_FETCH 1\n";
+            if (mobileFetch && !directDraw && type==kFragmentShader) header+="#extension GL_EXT_shader_framebuffer_fetch : require\n#define GOW_FRAMEBUFFER_FETCH 1\n";
             header+="precision highp float;\nprecision highp int;\nprecision highp usampler2D;";
+            if (directDraw) header+="\n#define GOW_DIRECT_DRAW 1\n";
             replaceAll("#version 430 core", header);
-            if (mobileFetch && type==kFragmentShader)
+            if (mobileFetch && !directDraw && type==kFragmentShader)
                 replaceAll("texelFetch(uDest, ivec2(gl_FragCoord.xy), 0)","oColor");
             replaceAll("noperspective ", "");
             replaceAll("layout(location = 0, index = 0)", "layout(location = 0)");
-            if (mobileFetch && type==kFragmentShader)
+            if (mobileFetch && !directDraw && type==kFragmentShader)
                 replaceAll("layout(location = 0) out vec4 oColor;", "layout(location = 0) inout vec4 oColor;");
             replaceAll("layout(location = 0, index = 1) out vec4 oBlend;", "vec4 oBlend;");
+#else
+            if (directDraw) replaceAll("#version 430 core", "#version 430 core\n#define GOW_DIRECT_DRAW 1\n");
+#endif
             translated.push_back(std::move(source));
         }
         for (auto &source : translated) sources.push_back(source.c_str());
         g.ShaderSource(sh, static_cast<GLsizei>(sources.size()), sources.data(), nullptr);
-#else
-        g.ShaderSource(sh, static_cast<GLsizei>(parts.size()), parts.begin(), nullptr);
-#endif
         g.CompileShader(sh);
         GLint ok = 0;
         g.GetShaderiv(sh, kCompileStatus, &ok);
@@ -798,20 +810,41 @@ struct GSHwBackend::Impl
             failed = true;
             return false;
         }
-        const auto loc = [&](const char *name) { return g.GetUniformLocation(program, name); };
-        locInvSize = loc("uInvSize"); locZInverted = loc("uZInverted"); locTex = loc("uTex"); locTexSize = loc("uTexSize"); locTexDim = loc("uTexDim"); locTme = loc("uTme");
-        locFst = loc("uFst"); locTfx = loc("uTfx"); locTcc = loc("uTcc"); locIip = loc("uIip"); locAte = loc("uAte");
-        locAtst = loc("uAtst"); locFailTint = loc("uFailTint"); locAref = loc("uAref"); locPass = loc("uPass"); locBlendScale = loc("uBlendScale");
-        locReinterp = loc("uReinterp"); locDate = loc("uDate"); locDatm = loc("uDatm"); locDest = loc("uDest"); locZTex = loc("uZTex"); locZMax = loc("uZMax"); locTables = loc("uTables"); locRtColor = loc("uRtColor"); locPalette = loc("uPalette");
-        locTexFmt = loc("uTexFmt"); locTexFmt2 = loc("uTexFmt2"); locRtFmt = loc("uRtFmt"); locRtFmt2 = loc("uRtFmt2");
-        locTex0 = loc("uTex0"); locRtPx = loc("uRtPx");
-        locIndexed = loc("uIndexed"); locLinear = loc("uLinear"); locWrap = loc("uWrap"); locIdxPalette = loc("uIdxPalette");
-        locSwBlend = loc("uSwBlend"); locColClamp = loc("uColClamp"); locAbcd = loc("uAbcd"); locFix = loc("uFix");
-        locZAlias = loc("uZAlias"); locZAliasWrite = loc("uZAliasWrite"); locZAliasMax = loc("uZAliasMax");
-        locRtTex24 = loc("uRtTex24"); locRtClamp = loc("uRtClamp"); locPxScale = loc("uPxScale"); locTa0 = loc("uTa0"); locTa1 = loc("uTa1"); locAem = loc("uAem");
+        const auto uniformsFor = [&](GLuint linkedProgram) {
+            DrawUniforms result;
+            const auto loc = [&](const char *name) { return g.GetUniformLocation(linkedProgram, name); };
+            result.locInvSize = loc("uInvSize"); result.locZInverted = loc("uZInverted"); result.locTex = loc("uTex"); result.locTexSize = loc("uTexSize"); result.locTexDim = loc("uTexDim"); result.locTme = loc("uTme");
+            result.locFst = loc("uFst"); result.locTfx = loc("uTfx"); result.locTcc = loc("uTcc"); result.locIip = loc("uIip"); result.locAte = loc("uAte");
+            result.locAtst = loc("uAtst"); result.locFailTint = loc("uFailTint"); result.locAref = loc("uAref"); result.locPass = loc("uPass"); result.locBlendScale = loc("uBlendScale");
+            result.locReinterp = loc("uReinterp"); result.locDate = loc("uDate"); result.locDatm = loc("uDatm"); result.locDest = loc("uDest"); result.locZTex = loc("uZTex"); result.locZMax = loc("uZMax"); result.locTables = loc("uTables"); result.locRtColor = loc("uRtColor"); result.locPalette = loc("uPalette");
+            result.locTexFmt = loc("uTexFmt"); result.locTexFmt2 = loc("uTexFmt2"); result.locRtFmt = loc("uRtFmt"); result.locRtFmt2 = loc("uRtFmt2");
+            result.locTex0 = loc("uTex0"); result.locRtPx = loc("uRtPx");
+            result.locIndexed = loc("uIndexed"); result.locLinear = loc("uLinear"); result.locWrap = loc("uWrap"); result.locIdxPalette = loc("uIdxPalette");
+            result.locSwBlend = loc("uSwBlend"); result.locColClamp = loc("uColClamp"); result.locAbcd = loc("uAbcd"); result.locFix = loc("uFix");
+            result.locZAlias = loc("uZAlias"); result.locZAliasWrite = loc("uZAliasWrite"); result.locZAliasMax = loc("uZAliasMax");
+            result.locRtTex24 = loc("uRtTex24"); result.locRtClamp = loc("uRtClamp"); result.locPxScale = loc("uPxScale"); result.locTa0 = loc("uTa0"); result.locTa1 = loc("uTa1"); result.locAem = loc("uAem");
+            return result;
+        };
+        generalUniforms=uniformsFor(program);
+        static_cast<DrawUniforms &>(*this)=generalUniforms;
+        if(!std::getenv("GOW_GLES_DIRECT_OFF")){
+            const GLuint df=compile(GSGL::kFragmentShader,{kFsSource,kReinterpretSource,kFsTail},true);
+            if(df){
+                directProgram=g.CreateProgram();g.AttachShader(directProgram,v);g.AttachShader(directProgram,df);g.LinkProgram(directProgram);
+                GLint linked=0;g.GetProgramiv(directProgram,kLinkStatus,&linked);
+                if(linked)directUniforms=uniformsFor(directProgram);
+                else{
+                    char log[1024];GLsizei count=0;g.GetProgramInfoLog(directProgram,sizeof(log),&count,log);
+                    std::fprintf(stderr,"[gs-direct] link failed, retaining general shader: %s\n",log);
+                    g.DeleteProgram(directProgram);directProgram=0;
+                }
+                g.DeleteShader(df);
+            }
+            std::fprintf(stderr,"[gs-direct] destination-independent draw path: %s\n",directProgram?"active":"unavailable");
+        }
 
         if(!std::getenv("GOW_GLES_SIMPLE_OFF")){
-            const GLuint sf=compile(GSGL::kFragmentShader,kSimpleFs);
+            const GLuint sf=compile(GSGL::kFragmentShader,{kSimpleFs},true);
             if(sf){
                 simpleProgram=g.CreateProgram();g.AttachShader(simpleProgram,v);g.AttachShader(simpleProgram,sf);g.LinkProgram(simpleProgram);
                 GLint linked=0;g.GetProgramiv(simpleProgram,kLinkStatus,&linked);
@@ -846,9 +879,13 @@ struct GSHwBackend::Impl
         buildTables();
 #if defined(__ANDROID__)
         // GLES validates all sampler types even when a uniform branch does not sample them.
-        g.UseProgram(program);
-        g.Uniform1i(locTex,0); g.Uniform1i(locRtColor,1); g.Uniform1i(locTables,2);
-        g.Uniform1i(locPalette,3); g.Uniform1i(locDest,4); g.Uniform1i(locIdxPalette,5);
+        const auto bindSamplers=[&](GLuint linked,const DrawUniforms &u){
+            g.UseProgram(linked);
+            g.Uniform1i(u.locTex,0);g.Uniform1i(u.locRtColor,1);g.Uniform1i(u.locTables,2);
+            g.Uniform1i(u.locPalette,3);g.Uniform1i(u.locDest,4);g.Uniform1i(u.locIdxPalette,5);
+        };
+        bindSamplers(program,generalUniforms);
+        if(directProgram)bindSamplers(directProgram,directUniforms);
         GLuint neutral = 0; const uint8_t white[]{255,255,255,255};
         g.GenTextures(1,&neutral); mobileNeutral=neutral; g.BindTexture(kTexture2D,neutral);
         g.TexImage2D(kTexture2D,0,kRgba8,1,1,0,kRgba,kUnsignedByte,white);
@@ -2305,7 +2342,12 @@ struct GSHwBackend::Impl
             g.Uniform1f(simpleLoc[3],1.0f/128.0f);
             ++stats.simpleBatches;
         }else{
-        g.UseProgram(program);
+        const bool direct=directProgram && !date && !softBlend && !zAlias;
+        // Keep every texture/alpha/depth operation; omit only destination reads
+        // when the GS state cannot execute them. Never share uniform locations.
+        static_cast<DrawUniforms &>(*this)=direct?directUniforms:generalUniforms;
+        g.UseProgram(direct?directProgram:program);
+        if(direct)++stats.directBatches;
         {
             g.Uniform1i(locDate, date ? 1 : 0);
             g.Uniform1i(locDatm, ((c.test >> 15) & 1u) != 0u ? 1 : 0);
@@ -2628,12 +2670,12 @@ struct GSHwBackend::Impl
         if (now - stats.last < std::chrono::seconds(5))
             return;
         stats.last = now;
-        std::fprintf(stderr, "[gs-hw] shuffles=%llu draws=%llu batches=%llu texDecodes=%llu texHits=%llu skippedPsm=%llu skippedPrim=%llu unsupportedBlend=%llu textures=%zu presents=%llu reusedPresents=%llu triangles=%llu outside=%llu degenerate=%llu simple=%llu\n",
+        std::fprintf(stderr, "[gs-hw] shuffles=%llu draws=%llu batches=%llu texDecodes=%llu texHits=%llu skippedPsm=%llu skippedPrim=%llu unsupportedBlend=%llu textures=%zu presents=%llu reusedPresents=%llu triangles=%llu outside=%llu degenerate=%llu simple=%llu direct=%llu\n",
                      (unsigned long long)stats.shuffles, (unsigned long long)stats.draws, (unsigned long long)stats.batches, (unsigned long long)stats.texDecodes,
                      (unsigned long long)stats.texHits, (unsigned long long)stats.skippedPsm, (unsigned long long)stats.skippedPrim,
                      (unsigned long long)stats.unsupportedBlend, textures.size(),(unsigned long long)stats.presents,(unsigned long long)stats.reusedPresents,
-                     (unsigned long long)stats.triangles,(unsigned long long)stats.outsideTriangles,(unsigned long long)stats.degenerateTriangles,(unsigned long long)stats.simpleBatches);
-        stats.simpleBatches=0;
+                     (unsigned long long)stats.triangles,(unsigned long long)stats.outsideTriangles,(unsigned long long)stats.degenerateTriangles,(unsigned long long)stats.simpleBatches, (unsigned long long)stats.directBatches);
+        stats.simpleBatches=stats.directBatches=0;
         stats.triangles=stats.outsideTriangles=stats.degenerateTriangles=0;
         stats.presents=stats.reusedPresents=0;
         stats.shuffles = stats.draws = stats.batches = stats.texDecodes = stats.texHits = stats.skippedPsm = stats.skippedPrim = stats.unsupportedBlend = 0;
