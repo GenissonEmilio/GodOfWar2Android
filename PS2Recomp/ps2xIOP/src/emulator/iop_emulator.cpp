@@ -1137,6 +1137,12 @@ namespace ps2x::iop::detail
             m_impl->runCycles(cycles);
     }
 
+    void IopEmulator::runIopCycleBatch(uint64_t cycles) noexcept
+    {
+        if (cycles != 0u)
+            m_impl->runCycles(cycles);
+    }
+
     RpcResult IopEmulator::handleRpc(const RpcRequest &request)
     {
         return m_impl->rpc.handleRpc(request, *m_impl);

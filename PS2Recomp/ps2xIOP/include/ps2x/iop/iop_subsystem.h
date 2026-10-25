@@ -2,6 +2,7 @@
 
 #include "ps2x/iop/iop_host.h"
 #include "ps2x/iop/iop_types.h"
+#include "ps2x/iop/ee_cycle_batch.h"
 
 #include <memory>
 #include <string>
@@ -29,7 +30,7 @@ namespace ps2x::iop
         void runEeCycles(uint64_t eeCycles) noexcept;
         // runEeCycles split in two so the caller can time only the real IOP work: accrue returns true when a batch
         // is due, then runPendingEeCycles runs it (same result as runEeCycles).
-        [[nodiscard]] bool accrueEeCycles(uint64_t eeCycles) noexcept;
+        [[nodiscard]] bool accrueEeCycles(uint64_t eeCycles) noexcept { return m_eeCycles.accrue(eeCycles); }
         void runPendingEeCycles() noexcept;
 
         [[nodiscard]] RpcAbi selectRpcAbi(const RpcAbiRequest &request) const;
@@ -54,5 +55,6 @@ namespace ps2x::iop
     private:
         class Impl;
         std::unique_ptr<Impl> m_impl;
+        EeCycleBatch m_eeCycles;
     };
 }

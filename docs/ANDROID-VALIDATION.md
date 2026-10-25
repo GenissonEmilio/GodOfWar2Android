@@ -197,6 +197,65 @@ Data dos testes: 24 e 25 de outubro de 2026 (America/Fortaleza).
   A assinatura e o alinhamento ZIP de 16 KiB foram verificados. O aparelho usa
   páginas de 4 KiB; isso não é um teste de boot num Android de páginas de 16 KiB.
 
+## Otimizações ARM64 e ritmo dos frames
+
+- A invalidação do cache VU usa um bitmap de 256 bytes, e cada entrada de
+  despacho ocupa 64 bytes, reduzindo o conjunto de entradas em 128 KiB.
+  Reenvios MPG idênticos conservam o código já resolvido. O probe ARM64 passou
+  em 34 casos, incluindo troca de programa, fallback, limites do bitmap e
+  comparação das operações DIV/WAITQ e EFU/WAITP com o intérprete.
+- A acumulação dos ciclos IOP passou a ser inline. Um milhão de partições
+  aleatórias preservou exatamente as concessões de ciclos e o resto da divisão
+  EE/IOP, incluindo drenagem parcial, fronteira de serviço e reset.
+- Leituras indexadas P8/P4 usam tabelas NEON, e escritas CT32/Z32 agrupam pares
+  adjacentes. Os 1.664 casos de linhas compararam os 13 formatos com operações
+  escalares, incluindo retorno da VRAM e preservação dos outros canais.
+- Os caminhos VIF V2-16, V3-8 e V4-32/16/8 expandem vetores em blocos.
+  Os 43.200 casos verificaram extensões com e sem sinal, máscaras, STMOD,
+  STCYCL, TOPS, NUM=0 e retorno da memória VU.
+- A análise PACKED agrupa ST/RGBAQ/XYZ. Os 378 casos verificaram os três PATHs,
+  fragmentos, tipos de primitivas, ADC, Q, NaN e profundidade de 32 bits.
+  O envio imediato do árbitro evita uma cópia intermediária quando a fila está
+  vazia; os testes verificaram prioridade, IMAGE fragmentado, posse dos buffers,
+  reentrância e limpeza após exceção.
+- A sincronização de registradores VIF1 e memória VU espera o worker VU,
+  permitindo que o frontend processe sua cópia dos pacotes. Acessos GS/GIF e
+  sincronização explícita continuam aguardando o frontend. O probe manteve
+  um pacote bloqueado e verificou essas duas formas de espera e a imutabilidade
+  dos bytes já enviados.
+- O controle de ponto flutuante ARM64 usa uma leitura de FPCR, preservando o
+  mapeamento SSE2NEON. Os 128 casos cobriram arredondamento, FZ/DAZ e bits
+  preservados. A fila também verificou mudanças desse controle entre desenhos.
+- O relógio de frames aplica a meta de 30 FPS na entrada real do frame do jogo,
+  além da apresentação. Descarta atraso após pausas e frames lentos, e não
+  transforma frames repetidos em frames novos. O probe passou em 100.000 prazos.
+  O log `[gow-frames]` registra média, p50, p95, p99 e máximo dos intervalos.
+- A sessão opcional de desempenho usa a
+  [API oficial de hints do Android](https://developer.android.com/ndk/reference/group/a-performance-hint),
+  resolvida dinamicamente para manter API 29. No POCO, a sessão aceitou as quatro
+  threads do pipeline. Sua criação não comprova ganho de FPS.
+- A biblioteca de produção passou novamente nos testes de pixels GLES, incluindo
+  três ciclos EGL com framebuffer fetch e três com o fallback por cópias.
+  Os 33 testes de kernel/agendamento passaram no aparelho. Uma expectativa antiga
+  do teste de heap foi corrigida para excluir os pools reservados de RPC/TLS.
+- Os 24 testes locais e os testes Java do importador também passaram.
+
+O menu apresentou janelas próximas de 29,7–30 FPS. Isso não comprova 30 FPS em
+combate. As medições anteriores à última expansão dos caminhos VIF continuaram
+aproximadamente em 16–20 FPS na primeira luta. A espera cooperativa de FINISH
+foi testada e retirada porque não demonstrou ganho material nesse trecho.
+
+Os probes medem correção e custo isolado. Por exemplo, no mesmo núcleo do POCO,
+524.160 vértices PACKED passaram de 22,659 para 16,884 ms; isso não representa
+25% de ganho no FPS do jogo. Os resultados da campanha continuam pendentes.
+
+Para diagnóstico, os arquivos `perf-counters`, `perf-diagnostics` e `perf-vif-only`
+na pasta de dados ativam respectivamente contadores, escopos completos e apenas
+estatísticas de formatos VIF. Reabra o processo ao alterá-los. `perf-adpf-off`
+desativa os hints e pode ser alternado durante o jogo; a mudança é observada na
+próxima janela de medição. O arquivo `perf-stage-barriers` repõe as barreiras completas para comparação
+(requer novo processo). Remova esses arquivos ao concluir a medição.
+
 ## Critérios restantes
 
 - Desempenho de combate estável e correção visual em outras áreas e shaders.

@@ -1,5 +1,6 @@
 // GOW-Port: native VU1 backend runtime (included at the end of ps2_vu1_core.cpp). See include/runtime/ps2_vu1_native.h.
 #include "runtime/ps2_vu1_native.h"
+#include "runtime/ps2_fp_control.h"
 
 #include <memory>
 #include <unordered_map>
@@ -634,7 +635,7 @@ VU1N_INLINE void VU1NativeAccess::finishBlockTiming(VU1Interpreter &vu, const VU
     if (sl.scalarCount != NS::kScalarMany)
     {
         for (uint32_t k = 0; k < sl.scalarCount; ++k)
-            scalarStart(vu, start + cyc[sl.scalar[k].pair], sl.scalar[k].latency, sl.scalar[k].fdiv);
+            scalarStart(vu, start + cyc[sl.scalar[k].pair], sl.scalar[k].latency(), sl.scalar[k].fdiv());
         return;
     }
     const NS::BlockTiming &bt = *sl.bt;
@@ -650,13 +651,13 @@ VU1Interpreter::NativeState::Slot &VU1NativeAccess::slotFor(VU1Interpreter &vu, 
 {
     VU1Interpreter::NativeState &ns = *vu.m_native;
     VU1Interpreter::NativeState::Slot &sl = ns.slots[pc >> 3];
-    if (!sl.known)
+    if (!ns.slotKnown(pc))
     {
         uint32_t words[128];
         const uint32_t count = nativeExtent(code, codeSize, pc, words);
         sl = {};
-        sl.known = true;
-        sl.pairs = static_cast<uint16_t>(count);
+        ns.markSlotKnown(pc);
+        sl.pairs = static_cast<uint8_t>(count);
         if (count != 0u)
         {
             const auto it = nativeRegistry().find(vu1n::blockKey(pc, words, count * 2u));
@@ -674,12 +675,13 @@ VU1Interpreter::NativeState::Slot &VU1NativeAccess::slotFor(VU1Interpreter &vu, 
                 sl.readsEntryFlags = bt.readsEntryFlags;
                 sl.memoable = bt.scalarRead == 0u;
                 sl.tail = it->second.tail;
-                if (bt.scalarPairs.size() > std::size(sl.scalar))
+                if (bt.scalarPairs.size() > std::size(sl.scalar) ||
+                    std::any_of(bt.scalarPairs.begin(),bt.scalarPairs.end(),[&](uint8_t i){return bt.dec[i].lowerUsage.latency>=128u;}))
                     sl.scalarCount = VU1Interpreter::NativeState::kScalarMany;
                 else
                     for (const uint8_t i : bt.scalarPairs)
-                        sl.scalar[sl.scalarCount++] = {i, static_cast<uint8_t>(bt.dec[i].lowerUsage.latency),
-                                                       bt.dec[i].lowerUsage.pipeline == VU1Interpreter::PipelineFdiv};
+                        sl.scalar[sl.scalarCount++] = {i, static_cast<uint8_t>(bt.dec[i].lowerUsage.latency |
+                            (bt.dec[i].lowerUsage.pipeline == VU1Interpreter::PipelineFdiv ? 128u : 0u))};
             }
             else if (ns.diag)
                 ++ns.missPcs[pc];
@@ -715,11 +717,10 @@ bool VU1Interpreter::runNative(StepContext &context)
     if (generation != ns.generation)
     {
         ns.generation = generation;
-        for (NativeState::Slot &sl : ns.slots)
-            sl.known = false;
+        ns.knownSlots.fill(0u);
     }
 
-    const unsigned savedCsr = _mm_getcsr();
+    const unsigned savedCsr = ps2_fp::readControl();
     bool armed = false; // pending exact-engine pipelines are committed only when a native block really runs
     VU1NativeCtx ctx;
     ctx.s = &m_state;
@@ -742,7 +743,7 @@ bool VU1Interpreter::runNative(StepContext &context)
         if (pc + 8u > context.codeSize)
             break;
         NativeState::Slot &sl = ns.slots[pc >> 3];
-        if (!sl.known)
+        if (!ns.slotKnown(pc))
             VU1NativeAccess::slotFor(*this, context.vuCode, context.codeSize, pc);
         VU1NativeFn fn = sl.fn;
         if (!fn)
@@ -774,7 +775,7 @@ bool VU1Interpreter::runNative(StepContext &context)
                 ns.arraysReadyBy = readyBy;
             }
             ++ns.nativeRuns;
-            _mm_setcsr((savedCsr & ~0x6000u) | 0x6000u | 0x8000u | 0x0040u); // round toward zero, FTZ, DAZ
+            ps2_fp::writeControl((savedCsr & ~0x6000u) | 0x6000u | 0x8000u | 0x0040u); // round toward zero, FTZ, DAZ
             armed = true;
         }
         if (ns.limit != ~0u)
@@ -824,7 +825,7 @@ bool VU1Interpreter::runNative(StepContext &context)
         VU1NativeAccess::exportFlags(*this);
         ns.exitCycle = m_cycle;
     }
-    _mm_setcsr(savedCsr);
+    ps2_fp::writeControl(savedCsr);
     if (ns.diag)
     {
         static auto last = std::chrono::steady_clock::now();

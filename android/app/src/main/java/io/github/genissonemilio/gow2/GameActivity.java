@@ -54,7 +54,7 @@ public final class GameActivity extends NativeActivity {
             getWindowManager().addView(touch,params);
         });applySettings();
     }
-    private void applySettings(){nativeSettings(prefs().getInt("volume",80),prefs().getInt("fps",60),prefs().getInt("deadzone",14)/100f,prefs().getInt("sensitivity",100)/100f,prefs().getBoolean("graphicsAsync",false));if(touch!=null)touch.settingsChanged();}
+    private void applySettings(){nativeSettings(prefs().getInt("volume",80),prefs().getInt("fps",30),prefs().getInt("deadzone",14)/100f,prefs().getInt("sensitivity",100)/100f,prefs().getBoolean("graphicsAsync",false));if(touch!=null)touch.settingsChanged();}
     void sendTouch(int buttons,float x,float y,float dx,float dy){controller=false;padButtons=0;nativeInput(buttons,x,y,dx,dy);touch.setController(false);}
     void pauseMenu(){if(menu)return;menu=true;nativePause(true);if(touch!=null)touch.clear();
         String[] actions={"Continuar","Touch, controle e desempenho","Editar posição dos controles","Restaurar layout","Voltar ao início"};

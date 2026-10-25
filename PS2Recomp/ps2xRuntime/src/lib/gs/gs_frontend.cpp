@@ -953,6 +953,35 @@ void GS::processGIFPacket(const uint8_t *data, uint32_t sizeBytes, GifPathId pat
         uint32_t offset = 0u;
         while (offset < sizeBytes)
         {
+            // Native VU output commonly repeats ST, RGBAQ, XYZ. Consume whole
+            // vertices together; fragmented tags and every other layout retain
+            // the byte-stream decoder below. In particular ST.Q is latched by
+            // RGBAQ, and XYZ's ADC bit still goes through the normal kick path.
+            if (!input.partialBytes && input.format == GIF_FMT_PACKED &&
+                input.nreg == 3u && input.regIndex == 0u &&
+                input.regs[0] == 2u && input.regs[1] == 1u &&
+                (input.regs[2] == 4u || input.regs[2] == 5u) &&
+                input.registersLeft >= 3u && sizeBytes - offset >= 48u)
+            {
+                const uint32_t vertices = std::min(input.registersLeft / 3u, (sizeBytes - offset) / 48u);
+                for (uint32_t v = 0u; v < vertices; ++v)
+                {
+                    const uint8_t *vertex = data + offset;
+                    std::memcpy(&m_curS, vertex, 4u);
+                    std::memcpy(&m_curT, vertex + 4u, 4u);
+                    std::memcpy(&m_packedStQ, vertex + 8u, 4u);
+                    if (m_packedStQ == 0.0f) m_packedStQ = 1.0f;
+                    m_curQ = m_packedStQ;
+                    m_curR = vertex[16u];
+                    m_curG = vertex[20u];
+                    m_curB = vertex[24u];
+                    m_curA = vertex[28u];
+                    writeRegisterPacked(input.regs[2], loadLE64(vertex + 32u), loadLE64(vertex + 40u));
+                    offset += 48u;
+                }
+                input.registersLeft -= vertices * 3u;
+                continue;
+            }
             if (input.imageBytes && !input.partialBytes && sizeBytes - offset >= 16u)
             {
                 // Mantener las subidas contiguas grandes; no llamar al backend por cada quadword.

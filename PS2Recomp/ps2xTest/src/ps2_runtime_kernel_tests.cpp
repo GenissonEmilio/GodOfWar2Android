@@ -937,7 +937,9 @@ void register_ps2_runtime_kernel_tests()
             const uint32_t a = env.runtime.guestMalloc(0x100u, 16u);
             t.IsTrue(a >= 0x000A0000u && a + 0x100u <= 0x000FF000u,
                      "guestMalloc should allocate inside the private runtime heap");
-            t.Equals(env.runtime.guestHeapLimit(), 0x000FF000u, "the runtime heap limit should be the private one");
+            // RPC/TLS/boot pools occupy the top 0x17000 bytes of this private
+            // range. General allocations must stop below those reserved pools.
+            t.Equals(env.runtime.guestHeapLimit(), 0x000E8000u, "the runtime heap must exclude its reserved kernel pools");
 
             env.runtime.guestFree(a);
             setRegU32(env.ctx, 4, 0x00190000u);

@@ -1,4 +1,6 @@
 #include "android_bridge.h"
+#include "game_frame_clock.h"
+#include "android_performance_hint.h"
 #include "raylib.h"
 #include "runtime/ps2_perf.h"
 #include <jni.h>
@@ -10,6 +12,10 @@
 #include <filesystem>
 #include <unistd.h>
 #include <android/looper.h>
+#include <array>
+#include <chrono>
+#include <cstdio>
+#include <thread>
 namespace {
 std::atomic<uint64_t> input{0x808080800000ULL};
 std::atomic<uint16_t> pendingPress{0}, physicalPress{0};
@@ -18,7 +24,9 @@ std::atomic<bool> paused{false},backRequested{false},asyncFinish{false},shutting
 std::atomic<bool> controllerConnected{false},controllerReady{false};
 std::atomic<bool> movieActive{false};
 std::atomic<uint64_t> movieFrames{0};
-std::atomic<int> volume{80}, frameLimit{60}, appliedLimit{-1};
+std::atomic<int> volume{80}, frameLimit{30}, appliedLimit{-1};
+std::atomic<uint64_t> pacingEpoch{0};
+std::atomic<bool> performanceHints{true};
 std::atomic<int> screenMode{0};
 std::atomic<float> deadzone{0.14f}, sensitivity{1.0f};
 uint8_t axis(float v) {
@@ -26,6 +34,35 @@ uint8_t axis(float v) {
     float a=std::abs(v);
     v=a<=dz?0:std::copysign((a-dz)/(1-dz),v)*sensitivity.load();
     return static_cast<uint8_t>(std::clamp(128+int(v*127),1,255));
+}
+void paceGameFrame() {
+    using Clock=std::chrono::steady_clock;
+    thread_local GameFrameClock pacing;
+    thread_local AndroidPerformanceHint hints;
+    thread_local uint64_t seenEpoch=~0ull,last=0;
+    thread_local std::array<double,512> intervals{};
+    thread_local size_t count=0;
+    thread_local double elapsed=0;
+    const auto epoch=pacingEpoch.load();
+    if(seenEpoch!=epoch){seenEpoch=epoch;last=0;count=0;elapsed=0;}
+    if(gowAndroidPaused() || movieActive.load()){last=0;return;}
+    auto now=Clock::now();
+    const auto ns=std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count();
+    hints.sample(ns,last,frameLimit.load(),epoch,performanceHints.load());
+    const auto deadline=pacing.deadline(ns,frameLimit.load(),epoch);
+    if(deadline>uint64_t(ns))std::this_thread::sleep_until(Clock::time_point(std::chrono::nanoseconds(deadline)));
+    const auto actual=std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now().time_since_epoch()).count();
+    if(last){const double ms=double(actual-last)*1e-6;intervals[count++]=ms;elapsed+=ms;}
+    last=actual;
+    if(count && (elapsed>=5000.0 || count==intervals.size())){
+        auto sorted=intervals;std::sort(sorted.begin(),sorted.begin()+count);
+        size_t late=0;for(size_t i=0;i<count;++i)late+=intervals[i]>35.3334;
+        std::fprintf(stderr,"[gow-frames] target=%d game_hz=%.3f n=%zu p50_ms=%.3f p95_ms=%.3f p99_ms=%.3f max_ms=%.3f over_35ms=%zu\n",frameLimit.load(),1000.0*count/elapsed,count,sorted[count/2],sorted[(count-1)*95/100],sorted[(count-1)*99/100],sorted[count-1],late);
+        count=0;elapsed=0;
+        std::error_code error;
+        const bool wanted=!std::filesystem::exists("perf-adpf-off",error);
+        if(!error && performanceHints.exchange(wanted)!=wanted){pacingEpoch.fetch_add(1);std::fprintf(stderr,"[gow-adpf] enabled=%d\n",wanted);}
+    }
 }
 }
 bool gowAndroidPaused() { return paused.load() || shuttingDown.load(); }
@@ -79,6 +116,7 @@ extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivit
     input.store(0x808080800000ULL);physicalInput.store(0x808080800000ULL);
     pendingPress.store(0);physicalPress.store(0);paused.store(false);backRequested.store(false);shuttingDown.store(false);appliedLimit.store(-1);
     controllerConnected.store(false);controllerReady.store(false);movieActive.store(false);movieFrames.store(0);
+    pacingEpoch.fetch_add(1);ps2_perf::gameFrameCallback.store(paceGameFrame);
     const char *p=env->GetStringUTFChars(path,nullptr);
     std::filesystem::create_directories(std::string(p)+"/memcards"); chdir(p);
     const std::string boot=std::string(p)+"/game/SCUS_974.81";
@@ -89,8 +127,16 @@ extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivit
     setenv("PS2X_GS_PIPELINE",parallel?"1":"0",1);
     setenv("GOW_PERF_FRAME_PC","0x14E380",1);
     const bool diagnostic=std::filesystem::exists(std::string(p)+"/perf-diagnostics");
+    const bool counters=std::filesystem::exists(std::string(p)+"/perf-counters");
+    if(std::filesystem::exists(std::string(p)+"/perf-vif-only"))setenv("GOW_VIF_STATS","1",1);else unsetenv("GOW_VIF_STATS");
+    performanceHints.store(!std::filesystem::exists(std::string(p)+"/perf-adpf-off"));
+    if(std::filesystem::exists(std::string(p)+"/perf-stage-barriers"))setenv("PS2X_GS_STAGE_BARRIERS","1",1);else unsetenv("PS2X_GS_STAGE_BARRIERS");
     setenv("GOW_PERF_DIAG",diagnostic?"1":"frames",1);
-    if(diagnostic){setenv("GOW_GS_HW_STATS","1",1);setenv("GOW_VU1_STATS","1",1);setenv("GOW_VBLANK_DIAG","1",1);setenv("GOW_MPEG_DIAG","1",1);}
+    if(diagnostic || counters){setenv("GOW_GS_HW_STATS","1",1);setenv("GOW_VU1_STATS","1",1);}
+    else {unsetenv("GOW_GS_HW_STATS");unsetenv("GOW_VU1_STATS");}
+    if(counters)setenv("PS2X_GS_WORKER_DIAG","1",1);else unsetenv("PS2X_GS_WORKER_DIAG");
+    if(diagnostic || counters)setenv("GOW_VBLANK_DIAG","1",1);else unsetenv("GOW_VBLANK_DIAG");
+    if(diagnostic)setenv("GOW_MPEG_DIAG","1",1);else unsetenv("GOW_MPEG_DIAG");
     env->ReleaseStringUTFChars(path,p);
 }
 extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivity_nativeInput(JNIEnv *,jclass,jint buttons,jfloat lx,jfloat ly,jfloat rx,jfloat ry) {
@@ -100,9 +146,9 @@ extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivit
     const auto previous=input.exchange(state);
     pendingPress.fetch_or(static_cast<uint16_t>(state & ~previous));
 }
-extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivity_nativePause(JNIEnv *,jclass,jboolean value) { paused.store(value); input.store(0x808080800000ULL); pendingPress.store(0); physicalPress.store(0); if (IsAudioDeviceReady()) SetMasterVolume(gowAndroidPaused()?0.0f:volume.load()/100.0f); }
+extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivity_nativePause(JNIEnv *,jclass,jboolean value) { if(paused.exchange(value)!=bool(value))pacingEpoch.fetch_add(1); input.store(0x808080800000ULL); pendingPress.store(0); physicalPress.store(0); if (IsAudioDeviceReady()) SetMasterVolume(gowAndroidPaused()?0.0f:volume.load()/100.0f); }
 extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivity_nativeSettings(JNIEnv *,jclass,jint vol,jint fps,jfloat dz,jfloat gain,jboolean graphicsAsync) {
-    volume.store(std::clamp(int(vol),0,100)); frameLimit.store(fps==30?30:60);asyncFinish.store(graphicsAsync);
+    volume.store(std::clamp(int(vol),0,100));if(frameLimit.exchange(fps==30?30:60)!=(fps==30?30:60))pacingEpoch.fetch_add(1);asyncFinish.store(graphicsAsync);
     deadzone.store(std::clamp(dz,0.0f,0.5f)); sensitivity.store(std::clamp(gain,0.1f,3.0f));
 }
 
@@ -114,8 +160,8 @@ extern "C" void glDrawBuffersEXT(GLsizei count,const GLenum *buffers) { glDrawBu
 
 extern "C" JNIEXPORT jboolean JNICALL Java_io_github_genissonemilio_gow2_GameActivity_nativeConsumeBack(JNIEnv *,jclass) { return backRequested.exchange(false); }
 
-void gowAndroidMovieFrame() { if(!movieActive.exchange(true))pendingPress.store(0);movieFrames.fetch_add(1); }
-void gowAndroidMovieEnd() { movieActive.store(false); }
+void gowAndroidMovieFrame() { if(!movieActive.exchange(true)){pendingPress.store(0);pacingEpoch.fetch_add(1);}movieFrames.fetch_add(1); }
+void gowAndroidMovieEnd() { if(movieActive.exchange(false))pacingEpoch.fetch_add(1); }
 extern "C" JNIEXPORT jlong JNICALL Java_io_github_genissonemilio_gow2_GameActivity_nativeMovieFrames(JNIEnv *,jclass) { return movieActive.load()?static_cast<jlong>(movieFrames.load()):-1; }
 
 extern "C" JNIEXPORT jboolean JNICALL Java_io_github_genissonemilio_gow2_GameActivity_nativeGamepadReady(JNIEnv *,jclass) { return controllerConnected.load() && controllerReady.load(); }

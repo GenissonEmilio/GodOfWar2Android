@@ -36,6 +36,9 @@ public:
     void reset() { m_queue.clear(); m_path3Input = {}; }
 
     void submit(GifPathId pathId, const uint8_t *data, uint32_t sizeBytes, bool path2DirectHl = false);
+    // The input remains valid until this synchronous call returns. When no
+    // older packet is queued, consume it without an intermediate allocation.
+    void submitAndDrain(GifPathId pathId, const uint8_t *data, uint32_t sizeBytes, bool path2DirectHl = false);
 
     void drain();
     bool empty() const { return m_queue.empty(); }
@@ -43,6 +46,7 @@ public:
 private:
     ProcessPathPacketFn m_processFn;
     std::vector<GifArbiterPacket> m_queue;
+    bool m_draining = false;
 
     // GOW-Port: el primer quadword de un bloque DMA puede ser payload, no una GIFtag.
     struct Path3InputState

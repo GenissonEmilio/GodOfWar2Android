@@ -125,13 +125,17 @@ namespace ps2_perf
     // single display buffer never flips, and new GS frames come at the vertical blank rate whatever the game does.
     inline std::atomic<uint32_t> gameFramePc{0};
     inline std::atomic<uint64_t> gameFrameEntries{0};
+    inline std::atomic<void(*)()> gameFrameCallback{nullptr};
     inline void setGameFramePc(uint32_t pc) { gameFramePc.store(pc, std::memory_order_relaxed); }
 
     inline void guestEntry(uint32_t pc, const uint8_t *rdram = nullptr)
     {
         const uint32_t gamePc = gameFramePc.load(std::memory_order_relaxed);
         if (gamePc != 0u && pc == gamePc)
+        {
+            if (auto callback = gameFrameCallback.load(std::memory_order_relaxed)) callback();
             gameFrameEntries.fetch_add(1, std::memory_order_relaxed);
+        }
         static const bool frames = countFrames(), speed = deltaDiag();
         if (!frames && !speed) return;
         static const uint32_t framePc = [] {

@@ -1,4 +1,5 @@
 #include "runtime/gs/gs_threaded_backend.h"
+#include "runtime/ps2_fp_control.h"
 #include <atomic>
 #include <cstdio>
 #include <cstdlib>
@@ -9,11 +10,13 @@ static std::atomic<bool> asyncMode{true};
 bool gowAndroidAsyncFinish(){return asyncMode.load();}
 struct RecordingBackend final:GSRasterBackend {
     std::vector<int> operations;int last=0;std::atomic<unsigned> finished{0};
+    std::vector<uint32_t> fpControls;
     void Initialize(uint8_t*,uint32_t)override{}void Reset()override{}
     void Submit(const GSPrimitiveBatch &b)override {
         last=int(b.vertices[0].x);
         if(b.state.context.alpha!=uint64_t(last%7))std::abort();
         operations.push_back(last);
+        fpControls.push_back(ps2_fp::readControl());
     }
     void LoadClut(const GSTex0Reg&,const GSTexClutReg&)override{}
     void BeginTransfer(const GSTransferCommand&)override{}void UploadImage(const uint8_t*,uint32_t)override{}
@@ -55,5 +58,13 @@ int main(){
     try {queue.CommandStream([&]{throw std::runtime_error("scope test");});}catch(const std::runtime_error&){}
     submit(9002);queue.ReadVram(0,0,0,0,0);
     if(record->operations.back()!=9002)return 7;
-    std::puts("Draw/FINISH order, readback, chunk backpressure, nested streams, competing producer and exception cleanup: PASS");
+    const auto saved=_mm_getcsr();const auto base=record->fpControls.size();std::vector<uint32_t> expected;
+    queue.CommandStream([&]{
+        for(unsigned mode=0;mode<4;++mode)for(unsigned flush:{0u,0x8040u}){
+            _mm_setcsr((mode<<13)|flush);expected.push_back(_mm_getcsr());submit(9010+expected.size());
+        }
+    });
+    _mm_setcsr(saved);queue.ReadVram(0,0,0,0,0);
+    for(size_t i=0;i<expected.size();++i)if(record->fpControls[base+i]!=expected[i])return 8;
+    std::puts("Draw/FINISH order, readback, chunk backpressure, nested streams, competing producer, exception cleanup and per-draw FP control: PASS");
 }

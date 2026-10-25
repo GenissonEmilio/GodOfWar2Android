@@ -32,7 +32,7 @@ final class MobileUi {
         body.addView(text(a,"IMAGEM E DESEMPENHO",18));
         body.addView(text(a,"Resolução interna: 1×, 2× ou 3×. A mudança vale na próxima abertura do jogo.",14));
         slider(body,p,"scale","Resolução interna",1,3,1,changed);
-        Switch fps=new Switch(a);fps.setText("Limitar apresentação a 30 FPS (o jogo mantém seu relógio)");fps.setTextColor(TEXT);fps.setChecked(p.getInt("fps",60)==30);fps.setOnCheckedChangeListener((v,b)->{p.edit().putInt("fps",b?30:60).apply();changed.run();});body.addView(fps);
+        Switch fps=new Switch(a);fps.setText("Meta de 30 FPS no jogo e na apresentação");fps.setTextColor(TEXT);fps.setChecked(p.getInt("fps",30)==30);fps.setOnCheckedChangeListener((v,b)->{p.edit().putInt("fps",b?30:60).apply();changed.run();});body.addView(fps);
         Switch pipeline=new Switch(a);pipeline.setText("Renderização assíncrona (experimental)");pipeline.setTextColor(TEXT);pipeline.setChecked(p.getBoolean("graphicsAsync",false));pipeline.setOnCheckedChangeListener((v,b)->{p.edit().putBoolean("graphicsAsync",b).apply();changed.run();});body.addView(pipeline);
         Switch parallel=new Switch(a);parallel.setText("Processamento paralelo (experimental; próxima abertura)");parallel.setTextColor(TEXT);parallel.setChecked(p.getBoolean("graphicsParallel",false));parallel.setOnCheckedChangeListener((v,b)->{p.edit().putBoolean("graphicsParallel",b).apply();changed.run();});body.addView(parallel);
         slider(body,p,"volume","Volume (%)",0,100,80,changed);

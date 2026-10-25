@@ -5,6 +5,7 @@
 #include "runtime/gs/gs_shared_present.h"
 #include "gs_inventory.h"
 #include "runtime/gs/gs_state_compare.h"
+#include "runtime/ps2_fp_control.h"
 #include "ThreadPriority.h"
 #if defined(__ANDROID__)
 #include "android_bridge.h"
@@ -131,7 +132,7 @@ void GSThreadedBackend::CommandStream(const std::function<void()> &commands)
 void GSThreadedBackend::Enqueue(Op op, const void *payload, uint32_t size)
 {
     auto lock = LockProducer();
-    const uint32_t csr = _mm_getcsr();
+    const uint32_t csr = ps2_fp::readControl();
     if (csr != m_lastMxcsr)
     {
         m_lastMxcsr = csr;
@@ -255,7 +256,7 @@ void GSThreadedBackend::Execute(const std::vector<uint8_t> &chunk, GSPrimitiveBa
         switch (op)
         {
         case Op::Mxcsr:
-            _mm_setcsr(readAt<uint32_t>(payload));
+            ps2_fp::writeControl(readAt<uint32_t>(payload));
             break;
         case Op::Submit:
             if (!discardDraws())

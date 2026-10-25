@@ -2,6 +2,16 @@
 #include <algorithm>
 #include <cstring>
 
+namespace
+{
+    struct DrainingScope
+    {
+        bool &flag;
+        explicit DrainingScope(bool &value) : flag(value) { flag = true; }
+        ~DrainingScope() { flag = false; }
+    };
+}
+
 GifArbiter::GifArbiter(ProcessPacketFn processFn)
 {
     setProcessPacketFn(std::move(processFn));
@@ -79,8 +89,9 @@ void GifArbiter::submit(GifPathId pathId, const uint8_t *data, uint32_t sizeByte
 
 void GifArbiter::drain()
 {
-    if (!m_processFn)
+    if (!m_processFn || m_draining)
         return;
+    DrainingScope scope(m_draining);
 
     while (!m_queue.empty())
     {
@@ -119,6 +130,25 @@ void GifArbiter::drain()
         // GOW-Port: conservar los paquetes que el callback haya añadido; se procesan en otra tanda.
         m_queue.erase(m_queue.begin(), m_queue.begin() + count);
     }
+}
+
+void GifArbiter::submitAndDrain(GifPathId pathId, const uint8_t *data, uint32_t sizeBytes, bool path2DirectHl)
+{
+    if (!data || sizeBytes < 16u || !m_processFn || pathId < GifPathId::Path1 || pathId > GifPathId::Path3)
+        return;
+    if (!m_draining && m_queue.empty())
+    {
+        if (pathId == GifPathId::Path3)
+            trackPath3Packet(data, sizeBytes);
+        {
+            DrainingScope scope(m_draining);
+            m_processFn(pathId, data, sizeBytes);
+        }
+        drain(); // A callback may have submitted more packets.
+        return;
+    }
+    submit(pathId, data, sizeBytes, path2DirectHl);
+    drain();
 }
 
 uint8_t GifArbiter::pathPriority(GifPathId id)

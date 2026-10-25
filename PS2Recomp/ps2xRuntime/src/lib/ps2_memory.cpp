@@ -1,4 +1,5 @@
 #include "runtime/ps2_memory.h"
+#include "ThreadNaming.h"
 #include "runtime/gs/gs_stage.h"
 #include "runtime/gs/gs_display.h"
 #include <chrono>
@@ -1997,6 +1998,7 @@ void PS2Memory::runGsWorkerJob(GsWorkerJob &job)
 
 void PS2Memory::gsWorkerLoop()
 {
+    ThreadNaming::SetCurrentThreadName("VUWorker");
     for (;;)
     {
         GsWorkerJob job;
@@ -2070,12 +2072,21 @@ void PS2Memory::waitGsWorkerIdle(const char *site, uint32_t address)
 {
     std::unique_lock<std::mutex> lock(m_gsWorkerMutex);
     const bool busy = !m_gsWorkerJobs.empty() || m_gsWorkerBusy;
-    const auto start = std::chrono::steady_clock::now();
+    const bool diagnostic = gsWorkerSyncDiagEnabled();
+    const auto start = diagnostic ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
     if (busy)
         m_gsWorkerIdleCv.wait(lock, [this] { return m_gsWorkerJobs.empty() && !m_gsWorkerBusy; });
     lock.unlock();
-    ps2_gs_stage::waitIdle(); // GOW-Port: the GS frontend stage is part of the worker (gs_stage.h)
-    if (!gsWorkerSyncDiagEnabled())
+    const uint32_t phys=address & 0x1FFFFFFFu;
+    const bool vuOwned=!site && ((phys>=0x10003C00u && phys<0x10003E00u) ||
+                                (phys>=0x11008000u && phys<0x11010000u));
+    static const bool forceStageBarrier=[] {const char *v=std::getenv("PS2X_GS_STAGE_BARRIERS");return v && v[0]=='1';}();
+    // VU/VIF data belongs to the VU worker. The frontend owns a copy of its
+    // output and cannot observe subsequent VU memory/register writes. GS/GIF
+    // accesses and explicit synchronization still drain the frontend as before.
+    if(!vuOwned || forceStageBarrier)
+        ps2_gs_stage::waitIdle();
+    if (!diagnostic)
         return;
     static GsWorkerSyncDiag diag;
     const auto now = std::chrono::steady_clock::now();
@@ -2087,7 +2098,7 @@ void PS2Memory::waitGsWorkerIdle(const char *site, uint32_t address)
     std::lock_guard<std::mutex> diagLock(diag.mutex);
     auto &entry = diag.sites[key];
     ++entry.syncs;
-    if (busy)
+    if (busy || now-start>std::chrono::microseconds(100))
     {
         ++entry.waits;
         entry.waitUs += static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(now - start).count());
@@ -2187,12 +2198,14 @@ void PS2Memory::submitGifPacket(GifPathId pathId, const uint8_t *data, uint32_t 
     }
 
     if (m_gifArbiter)
-        m_gifArbiter->submit(pathId, data, sizeBytes, path2DirectHl);
+    {
+        if (drainImmediately)
+            m_gifArbiter->submitAndDrain(pathId, data, sizeBytes, path2DirectHl);
+        else
+            m_gifArbiter->submit(pathId, data, sizeBytes, path2DirectHl);
+    }
     else if (m_gifPacketCallback)
         m_gifPacketCallback(data, sizeBytes);
-
-    if (m_gifArbiter && drainImmediately)
-        m_gifArbiter->drain();
 }
 
 void PS2Memory::processGIFPacket(uint32_t srcPhysAddr, uint32_t qwCount)

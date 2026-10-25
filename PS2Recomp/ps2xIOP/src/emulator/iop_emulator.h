@@ -27,6 +27,7 @@ namespace ps2x::iop::detail
         void runEeCycles(uint64_t eeCycles) noexcept;
         [[nodiscard]] bool accrueEeCycles(uint64_t eeCycles) noexcept;
         void runPendingEeCycles() noexcept;
+        void runIopCycleBatch(uint64_t cycles) noexcept;
         [[nodiscard]] RpcResult handleRpc(const RpcRequest &request);
         [[nodiscard]] bool hasRpcServer(uint32_t sid) const noexcept;
         void onSifTransfer(const SifTransfer &transfer);

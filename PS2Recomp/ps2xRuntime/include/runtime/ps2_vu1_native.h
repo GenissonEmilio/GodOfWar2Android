@@ -104,6 +104,11 @@ void vu1nRegisterBlock(uint64_t key, VU1NativeFn fn, uint32_t pairs, const VU1Ta
 struct VU1Interpreter::NativeState
 {
     uint64_t generation = ~0ull;
+    // Invalidating the dispatch cache touches 256 contiguous bytes instead of
+    // one byte in each of 2,048 large slots.
+    std::array<uint64_t, 32> knownSlots{};
+    bool slotKnown(uint32_t pc) const { return (knownSlots[pc >> 9u] & (1ull << ((pc >> 3u) & 63u))) != 0u; }
+    void markSlotKnown(uint32_t pc) { knownSlots[pc >> 9u] |= 1ull << ((pc >> 3u) & 63u); }
     // Exact issue cycles of a block from the pipeline state at its entry, so results and flags in flight from the previous
     // block (native or exact) stall and become visible exactly as in the exact engine. Pipeline lanes: VF reg*4+comp
     // (0-127), VI 128+reg, ACC 144+comp. While native blocks run, no per-lane state is kept: the recent blocks are
@@ -133,20 +138,25 @@ struct VU1Interpreter::NativeState
         VU1NativeFn fn = nullptr; // null: no native block at this pc
         const uint8_t *idle = nullptr;
         BlockTiming *bt = nullptr;
+        const VU1TailDesc *tail = nullptr;
         // Entry timing by predecessor (blocks that read entry flags): when the block before ran for maxLat cycles or more
         // and nothing from the exact engine is still in flight, that block and its timing table alone decide the entry
         // state; the timing found for it is reused.
         const BlockTiming *memoPred = nullptr;
         const uint8_t *memoCyc = nullptr;
         uint32_t memoPredId = 0, memoId = 0;
-        uint16_t pairs = 0;
-        bool known = false;
+        uint8_t pairs = 0; // nativeExtent is bounded to 64 pairs plus one delay slot
         bool readsEntryFlags = false;
         bool memoable = false;   // its entry timing does not depend on FDIV/EFU state
-        const VU1TailDesc *tail = nullptr;
         uint8_t scalarCount = 0; // FDIV / EFU operations it starts (kScalarMany: more than fit in `scalar`)
-        struct Scalar { uint8_t pair, latency; bool fdiv; } scalar[2] = {};
+        struct Scalar
+        {
+            uint8_t pair, latencyAndFdiv;
+            uint8_t latency() const { return latencyAndFdiv & 127u; }
+            bool fdiv() const { return (latencyAndFdiv & 128u) != 0u; }
+        } scalar[2] = {};
     };
+    static_assert(sizeof(Slot) == 64u, "VU dispatch slots must fit one cache line");
     static constexpr uint8_t kScalarMany = 0xFF;
     Slot slots[2048];
     // Native blocks run since native entry (or the last sync), newest last; histCount counts them all (the ring keeps the

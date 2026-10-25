@@ -22,7 +22,9 @@ Os fontes gerados do jogo e seus arquivos de disco ficam locais.
 - Dois analógicos touch, botões PS2, D-pad e controles simultâneos por multitoque.
 - Presets para 2, 3 ou 4 dedos; editor de posições por arraste, tamanho por botão e persistência do layout.
 - Menu de pausa sobre o jogo com opacidade, tamanho, zona morta, sensibilidade,
-  volume e limite da apresentação em 30/60 FPS. A renderização assíncrona é
+  volume e meta de 30 FPS no jogo e na apresentação (ou 60 FPS). A meta limita
+  o ritmo dos frames reais; não aumenta o desempenho quando o trabalho excede
+  33,3 ms. A renderização assíncrona é
   experimental e vem desativada. O processamento paralelo também é opcional e
   exige reabrir o jogo.
 - Resolução interna 1×, 2× ou 3× aplicada ao reiniciar o jogo.
@@ -84,6 +86,8 @@ local, build nativo e aparelho conectado por ADB:
 
 ```sh
 tools/android/probe_frontend.sh
+tools/android/probe_cpu.sh
+tools/android/probe_kernel.sh
 tools/android/probe_queue.sh
 tools/android/probe_renderer.sh
 ```

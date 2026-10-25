@@ -1,5 +1,8 @@
 #include <array>
 #include <mutex>
+#if defined(__aarch64__)
+#include <arm_neon.h>
+#endif
 
 #include "runtime/gs/ps2_gs_memory.h"
 
@@ -367,7 +370,21 @@ namespace GSMem
         void writeRunT(const Table& table, u8* data, u32 bp, u32 bw, u32 x, u32 y, u32 count, Fetch fetch)
         {
             using Packed = typename PixelStorageTraits<psm>::PackedT;
-            for (u32 i = 0; i < count; ++i)
+            u32 i = 0;
+            if constexpr (psm == C32 || psm == Z32)
+            {
+                if ((x & 1u) && count)
+                    PixelStorageTraits<psm>::Write(table, data, bp, bw, x, y, static_cast<Packed>(fetch(i++)));
+                // In CT32/Z32 every even-X pixel is adjacent to the next word.
+                // The pair is eight-byte aligned, including at VRAM wrap.
+                for (; i < count && count - i >= 2u; i += 2u)
+                {
+                    const u32 address = (PixelStorageTraits<psm>::Address(table, bp, bw, x + i, y) * 4u) & (MEMORY_SIZE - 8u);
+                    const uint64_t pair = uint64_t(fetch(i)) | (uint64_t(fetch(i + 1u)) << 32u);
+                    std::memcpy(data + address, &pair, sizeof(pair));
+                }
+            }
+            for (; i < count; ++i)
                 PixelStorageTraits<psm>::Write(table, data, bp, bw, x + i, y, static_cast<Packed>(fetch(i)));
         }
     }
@@ -377,7 +394,49 @@ namespace GSMem
         template<PixelStorageMode psm, typename Table>
         void readIndexRunT(const Table& table, const u8* data, u32 bp, u32 bw, u32 x, u32 y, u32 count, u8* out)
         {
-            for (u32 i = 0; i < count; ++i)
+            u32 i = 0;
+#if defined(__aarch64__)
+            if constexpr (psm == P8 || psm == P4)
+            {
+                constexpr u32 width = psm == P8 ? 16u : 32u;
+                while (i < count && ((x + i) & (width - 1u)))
+                {
+                    out[i] = static_cast<u8>(PixelStorageTraits<psm>::Read(table, data, bp, bw, x + i, y));
+                    ++i;
+                }
+                // One aligned indexed row lives in a 64-byte GS column. Gather
+                // it with NEON table lookups rather than one address calculation
+                // and scalar load for every pixel.
+                constexpr auto shuffle = [] {
+                    std::array<std::array<u8, width>, 16> result{};
+                    for (u32 row=0; row<16; ++row)
+                        for (u32 col=0; col<width; ++col)
+                            if constexpr (psm == P8) result[row][col] = ColumnTable8[row][col] & 63u;
+                            else result[row][col] = (ColumnTable4[row][col] / 2u) & 63u;
+                    return result;
+                }();
+                const auto first = vld1q_u8(shuffle[y & 15u].data());
+                for (; count - i >= width; i += width)
+                {
+                    u32 address = PixelStorageTraits<psm>::Address(table, bp, bw, x + i, y);
+                    if constexpr (psm == P4) address /= 2u;
+                    address &= (MEMORY_SIZE - 1u) & ~63u;
+                    const uint8x16x4_t column{{vld1q_u8(data + address), vld1q_u8(data + address + 16u),
+                                             vld1q_u8(data + address + 32u), vld1q_u8(data + address + 48u)}};
+                    auto lo = vqtbl4q_u8(column, first);
+                    if constexpr (psm == P8)
+                        vst1q_u8(out + i, lo);
+                    else
+                    {
+                        auto hi = vqtbl4q_u8(column, vld1q_u8(shuffle[y & 15u].data() + 16u));
+                        if (ColumnTable4[y & 15u][0] & 1u) { lo = vshrq_n_u8(lo, 4); hi = vshrq_n_u8(hi, 4); }
+                        vst1q_u8(out + i, vandq_u8(lo, vdupq_n_u8(15)));
+                        vst1q_u8(out + i + 16u, vandq_u8(hi, vdupq_n_u8(15)));
+                    }
+                }
+            }
+#endif
+            for (; i < count; ++i)
                 out[i] = static_cast<u8>(PixelStorageTraits<psm>::Read(table, data, bp, bw, x + i, y));
         }
     }

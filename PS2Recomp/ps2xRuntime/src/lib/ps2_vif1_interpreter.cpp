@@ -262,6 +262,29 @@ void PS2Memory::processVIF1Data(const uint8_t *data, uint32_t sizeBytes)
 
     uint32_t pos = 0;
     static const bool traceVif = std::getenv("GOW_VIF_DIAG") != nullptr;
+    static const bool statsEnabled = std::getenv("GOW_VIF_STATS") != nullptr;
+    struct UnpackStats
+    {
+        struct Entry { uint64_t calls=0, vectors=0; } entries[1024]{};
+        std::chrono::steady_clock::time_point last=std::chrono::steady_clock::now();
+    };
+    static thread_local UnpackStats stats;
+    if(statsEnabled)
+    {
+        const auto now=std::chrono::steady_clock::now();
+        if(now-stats.last>=std::chrono::seconds(5))
+        {
+            stats.last=now;
+            for(unsigned key=0;key<1024;++key)if(stats.entries[key].calls)
+            {
+                const auto &e=stats.entries[key];
+                std::fprintf(stderr,"[vif-stats] vn=%u vl=%u mask=%u mode=%u fill=%u equal_cycle=%u unsigned=%u calls=%llu vectors=%llu\n",
+                    key>>8,(key>>6)&3,(key>>5)&1,(key>>3)&3,(key>>2)&1,(key>>1)&1,key&1,
+                    static_cast<unsigned long long>(e.calls),static_cast<unsigned long long>(e.vectors));
+            }
+            for(auto &entry:stats.entries)entry={};
+        }
+    }
 
     while (pos < sizeBytes)
     {
@@ -480,8 +503,11 @@ void PS2Memory::processVIF1Data(const uint8_t *data, uint32_t sizeBytes)
                     copyBytes = PS2_VU1_CODE_SIZE - destAddr;
                 if (pos + copyBytes <= sizeBytes)
                 {
-                    std::memcpy(m_vu1Code + destAddr, data + pos, copyBytes);
-                    markVU1CodeModified();
+                    if (std::memcmp(m_vu1Code + destAddr, data + pos, copyBytes) != 0)
+                    {
+                        std::memcpy(m_vu1Code + destAddr, data + pos, copyBytes);
+                        markVU1CodeModified();
+                    }
                 }
                 else
                     std::fprintf(stderr, "[vif1] MPG cut: dest=%x bytes=%u have=%u\n", destAddr, copyBytes, sizeBytes - pos);
@@ -579,6 +605,12 @@ void PS2Memory::processVIF1Data(const uint8_t *data, uint32_t sizeBytes)
                 vuAddr = (vuAddr + (vif1_regs.tops & 0x3FFu)) & 0x3FFu;
 
             const bool zeroExtend = (imm & 0x4000u) != 0u;
+            if(statsEnabled)
+            {
+                const unsigned key=(unsigned(vn)<<8u)|(unsigned(vl)<<6u)|(unsigned(maskEnable)<<5u)|
+                    ((vif1_regs.mode&3u)<<3u)|(unsigned(cl<wl)<<2u)|(unsigned(cl==wl)<<1u)|unsigned(zeroExtend);
+                auto &entry=stats.entries[key];++entry.calls;entry.vectors+=writeVectorCount;
+            }
 
             // GOW-Port: report UNPACKs whose data runs past the end of this buffer (they are dropped below).
             if (totalBytes > 0 && pos + totalBytes > sizeBytes)
@@ -632,9 +664,10 @@ void PS2Memory::processVIF1Data(const uint8_t *data, uint32_t sizeBytes)
             if (m_vu1Data && totalBytes > 0 && pos + totalBytes <= sizeBytes)
             {
                 const uint8_t *srcBase = data + pos;
-                // V4-32 with no mask/row arithmetic is already in VU format.
-                // Copy contiguous runs, preserving STCYCL skips and 16 KiB wrap.
-                if (vn == 3u && vl == 0u && !maskEnable && vif1_regs.mode == 0u && cl >= wl)
+                // Full vectors without masks/row arithmetic: copy or widen in
+                // contiguous runs, preserving STCYCL skips and 16 KiB wrap.
+                const bool vectorFormat=(vn == 3u && vl <= 2u) || (vn == 1u && vl == 1u) || (vn == 2u && vl == 2u);
+                if (vectorFormat && !maskEnable && vif1_regs.mode == 0u && cl >= wl)
                 {
                     uint32_t copied = 0u;
                     while (copied < writeVectorCount)
@@ -644,7 +677,45 @@ void PS2Memory::processVIF1Data(const uint8_t *data, uint32_t sizeBytes)
                         uint32_t count = std::min(writeVectorCount - copied, 1024u - destVec);
                         if (cl != wl)
                             count = std::min(count, wl - cyclePos);
-                        std::memcpy(m_vu1Data + destVec * 16u, srcBase + copied * 16u, count * 16u);
+                        uint8_t *dest = m_vu1Data + destVec * 16u;
+                        const uint8_t *source = srcBase + copied * bytesPerVector;
+                        if (vn == 1u)
+                            for (uint32_t i=0u;i<count;++i)
+                            {
+                                uint32_t bytes;std::memcpy(&bytes,source+i*4u,sizeof(bytes));
+                                const __m128i packed=_mm_cvtsi32_si128(static_cast<int32_t>(bytes));
+                                const __m128i wide=zeroExtend?_mm_cvtepu16_epi32(packed):_mm_cvtepi16_epi32(packed);
+                                _mm_storeu_si128(reinterpret_cast<__m128i*>(dest+i*16u),_mm_unpacklo_epi64(wide,wide));
+                            }
+                        else if (vn == 2u)
+                            for (uint32_t i=0u;i<count;++i)
+                            {
+                                const uint8_t *value=source+i*3u;
+                                const uint32_t bytes=uint32_t(value[0])|(uint32_t(value[1])<<8u)|(uint32_t(value[2])<<16u);
+                                const __m128i packed=_mm_cvtsi32_si128(static_cast<int32_t>(bytes));
+                                __m128i wide=zeroExtend?_mm_cvtepu8_epi32(packed):_mm_cvtepi8_epi32(packed);
+                                uint32_t w;std::memcpy(&w,dest+i*16u+12u,sizeof(w));
+                                wide=_mm_insert_epi32(wide,static_cast<int32_t>(w),3);
+                                _mm_storeu_si128(reinterpret_cast<__m128i*>(dest+i*16u),wide);
+                            }
+                        else if (vl == 0u)
+                            std::memcpy(dest, source, count * 16u);
+                        else if (vl == 1u)
+                            for (uint32_t i = 0u; i < count; ++i)
+                            {
+                                const __m128i packed = _mm_loadl_epi64(reinterpret_cast<const __m128i *>(source + i * 8u));
+                                const __m128i wide = zeroExtend ? _mm_cvtepu16_epi32(packed) : _mm_cvtepi16_epi32(packed);
+                                _mm_storeu_si128(reinterpret_cast<__m128i *>(dest + i * 16u), wide);
+                            }
+                        else
+                            for (uint32_t i = 0u; i < count; ++i)
+                            {
+                                uint32_t bytes;
+                                std::memcpy(&bytes, source + i * 4u, sizeof(bytes));
+                                const __m128i packed = _mm_cvtsi32_si128(static_cast<int32_t>(bytes));
+                                const __m128i wide = zeroExtend ? _mm_cvtepu8_epi32(packed) : _mm_cvtepi8_epi32(packed);
+                                _mm_storeu_si128(reinterpret_cast<__m128i *>(dest + i * 16u), wide);
+                            }
                         copied += count;
                     }
                     pos += totalBytes;
