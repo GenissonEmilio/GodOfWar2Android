@@ -10,6 +10,8 @@ A experiência móvel do [Black Android](https://github.com/RanggaCasper/Black-A
 **Este projeto ainda não é um port concluído.** Compilar, iniciar e jogar o primeiro
 cenário não comprovam a compatibilidade da campanha inteira. Resultados reais e
 pendências ficam em [docs/ANDROID-VALIDATION.md](docs/ANDROID-VALIDATION.md).
+Comparação com o port HD de PS3 e técnicas aplicáveis:
+[gow2-recomp](docs/GOW2-RECOMP-COMPARISON.md).
 
 O executável PS2 é traduzido antecipadamente para C++ pelo PS2Recomp, compilado
 pelo NDK para ARM64. O runtime atende as APIs PS2, GS, IOP e VU; não depende de BIOS.

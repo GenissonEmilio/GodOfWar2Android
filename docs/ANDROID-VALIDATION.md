@@ -300,6 +300,64 @@ próxima janela de medição. O arquivo `perf-stage-barriers` repõe as barreira
 - Os rastreamentos completos, imagens, dados do jogo e APKs continuam locais.
   Estes testes não validam a campanha inteira.
 
+## Lotes sem textura e apresentação repetida
+
+- A preparação dos vértices foi incorporada ao chamador para reutilizar os
+  cálculos do lote. No mesmo núcleo do POCO, após aquecer os buffers, preparar
+  30 mil triângulos passou de aproximadamente 1,64–1,82 ms para 1,52–1,59 ms,
+  conforme o formato Z. O tempo exclui o flush e a espera da GPU; não é FPS.
+- A comparação completa dos snapshots da fila continua preservando os campos.
+  O renderizador pode ignorar os 25 campos de textura quando os dois desenhos
+  desativam TME. Mudanças de paleta também conservam geometria sem textura,
+  exceto quando ela fornece os pixels que a própria CLUT vai ler.
+- Os testes GLES incluem mil sprites sem textura intercalados com mudanças de
+  estado de textura e cargas reais de paleta; os pixels permaneceram iguais.
+  A fila passou novamente nos testes de ordem, concorrência e ponto flutuante.
+- A apresentação compartilhada reutiliza a textura publicada quando os dois
+  circuitos de exibição e seus alvos não mudaram. Capturas continuam compondo
+  a imagem; reset, tela em branco e clear invalidam a reutilização. O teste
+  verificou a mesma sequência numa repetição, uma nova sequência após desenho
+  e clear, e a transição para tela em branco e retorno, nos dois caminhos GLES.
+- Preservar a prioridade Android herdada foi testado, mas não demonstrou ganho
+  de FPS e foi revertido. Não foram alterados governador nem configurações
+  globais de desempenho do aparelho.
+- Com os contadores gráficos ativos, a versão opt22 mediu 15,20–18,21 FPS nas
+  seis janelas de combate. Das 150 apresentações pedidas a cada cinco segundos,
+  59–74 reutilizaram a textura anterior; isso reduz trabalho duplicado e não
+  aumenta a contagem de quadros reais do jogo.
+- O teste atualizado de ThinLTO na primeira luta apresentou 17,93–18,69 FPS;
+  não demonstrou ganho material. A opção permanece desligada por padrão.
+
+O arquivo `perf-render-stats` ativa apenas os contadores do renderizador, sem
+habilitar os escopos completos e os contadores VU. Inclui apresentações pedidas
+e reutilizadas. Reabra o processo ao alterá-lo e remova-o ao terminar os testes.
+
+## Estados imutáveis e comparação com gow2-recomp
+
+- A [análise da referência PS3](GOW2-RECOMP-COMPARISON.md) identifica técnicas
+  aplicáveis e diferenças de arquitetura. O código Android da referência foi
+  inspecionado; o runtime externo indicado por ele retornou HTTP 404.
+- Tokens identificam os snapshots imutáveis do frontend e do replay da fila.
+  O estado completo continua sendo comparado quando não há identidade válida.
+  Atributos de vértice continuam sendo atualizados em cada chamada.
+- O probe da fila passou com 3.000 desenhos adicionais atravessando vários
+  blocos, mudança de snapshot no meio e uma chamada sem token intercalada.
+  Também preservou FINISH, concorrência, leitura e controle de ponto flutuante.
+- Os probes de frontend/VIF/GIF passaram, incluindo 43.200 casos de unpack e
+  378 casos de fluxo GIF. A identidade se manteve nas mudanças de vértices e
+  mudou nas escritas de textura e no reset.
+- Os testes GLES passaram nos dois caminhos de feedback e em três ciclos EGL.
+  O teste adicional verificou pixels após mudar cores/coordenadas com o mesmo
+  snapshot, intercalar uma chamada sem token e trocar a máscara de escrita.
+- Nas seis medições sintéticas por formato Z, a mediana para preparar 30 mil
+  triângulos caiu de 1,657 para 1,174 ms (Z32), 1,647 para 1,238 ms (Z24) e
+  1,732 para 1,373 ms (Z16). Exclui flush/espera de GPU; não mede FPS do jogo.
+- `PS2X_GS_QUEUE_BYTES` permite comparar blocos de 4–256 KiB; o padrão continua
+ 64 KiB. O marcador local `perf-queue-32k` seleciona 32 KiB na próxima abertura,
+  com 16 blocos pendentes para preservar a capacidade total de aproximadamente
+  512 KiB da fila padrão de oito blocos de 64 KiB.
+  A alteração mantém registros inteiros e as mesmas barreiras de sincronização.
+
 ## Critérios restantes
 
 - Desempenho de combate estável e correção visual em outras áreas e shaders.

@@ -18,6 +18,7 @@ public:
     void Reset() override;
 
     void Submit(const GSPrimitiveBatch &batch) override;
+    void SubmitCached(const GSPrimitiveBatch &batch, uint64_t stateToken) override;
     void LoadClut(const GSTex0Reg &tex0, const GSTexClutReg &texclut) override;
     void BeginTransfer(const GSTransferCommand &command) override;
     void UploadImage(const uint8_t *data, uint32_t sizeBytes) override;

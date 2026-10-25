@@ -617,6 +617,7 @@ struct GSHwBackend::Impl
         }
     }
     GSDrawState pendingState{};
+    uint64_t pendingStateToken = 0;
     bool havePending = false;
     double firstRawZ = 0.0;
 
@@ -626,10 +627,13 @@ struct GSHwBackend::Impl
     struct UploadRecord { uint32_t lo, hi; uint64_t seq; };
     std::vector<UploadRecord> uploadLog;
     uint64_t clutHash = 0;
+    std::array<uint64_t,9> presentedState{};
+    bool presentedStateValid = false;
 
     struct Stats
     {
         uint64_t shuffles = 0;
+        uint64_t presents = 0, reusedPresents = 0;
         uint64_t draws = 0, batches = 0, skippedPsm = 0, unsupportedBlend = 0, texDecodes = 0, texHits = 0, skippedPrim = 0;
         std::chrono::steady_clock::time_point last = std::chrono::steady_clock::now();
     } stats;
@@ -1428,16 +1432,10 @@ struct GSHwBackend::Impl
     // ---- drawing --------------------------------------------------------------------------------------------------
     static bool sameState(const GSDrawState &a, const GSDrawState &b)
     {
-        const bool equal=gsSameDrawState(a,b);
-        static const bool diagnostic=std::getenv("GOW_GS_HW_STATS")!=nullptr;
-        if (diagnostic && equal && std::memcmp(&a,&b,sizeof(GSDrawState))!=0) {
-            static thread_local uint64_t paddingOnly=0;
-            if(++paddingOnly==1000)std::fprintf(stderr,"[gs-state] prevented 1000 batch splits caused only by C++ padding\n");
-        }
-        return equal;
+        return gsSameDrawState(a,b,true);
     }
 
-    void addVertex(const GSDrawState &s, const GSVertex &v, float u, float tv, float zmax)
+    [[gnu::always_inline]] inline void addVertex(const GSDrawState &s, const GSVertex &v, float u, float tv, float zmax)
     {
         const GSContext &c = s.context;
         if (pending.empty())
@@ -1815,7 +1813,7 @@ struct GSHwBackend::Impl
         return true;
     }
 
-    void submit(const GSPrimitiveBatch &b)
+    void submit(const GSPrimitiveBatch &b, uint64_t stateToken = 0)
     {
         const GSDrawState &s = b.state;
         const GSPrimType type = s.prim.type;
@@ -1848,13 +1846,14 @@ struct GSHwBackend::Impl
                 dumpSkipped(s, b, "view");
                 return;
             }
-        if (havePending && !sameState(pendingState, s))
+        if (havePending && !(stateToken && stateToken == pendingStateToken) && !sameState(pendingState, s))
             flushPending();
         if (!havePending)
         {
             pendingState = s;
             havePending = true;
         }
+        pendingStateToken = stateToken;
         const float zmax = zMaxFor(s.context.zbuf.psm);
         const float texW = static_cast<float>(std::max<uint16_t>(s.textureWidth, 1)), texH = static_cast<float>(std::max<uint16_t>(s.textureHeight, 1));
         const auto texelUV = [&](const GSVertex &v, float &u, float &t)
@@ -2551,10 +2550,11 @@ struct GSHwBackend::Impl
         if (now - stats.last < std::chrono::seconds(5))
             return;
         stats.last = now;
-        std::fprintf(stderr, "[gs-hw] shuffles=%llu draws=%llu batches=%llu texDecodes=%llu texHits=%llu skippedPsm=%llu skippedPrim=%llu unsupportedBlend=%llu textures=%zu\n",
+        std::fprintf(stderr, "[gs-hw] shuffles=%llu draws=%llu batches=%llu texDecodes=%llu texHits=%llu skippedPsm=%llu skippedPrim=%llu unsupportedBlend=%llu textures=%zu presents=%llu reusedPresents=%llu\n",
                      (unsigned long long)stats.shuffles, (unsigned long long)stats.draws, (unsigned long long)stats.batches, (unsigned long long)stats.texDecodes,
                      (unsigned long long)stats.texHits, (unsigned long long)stats.skippedPsm, (unsigned long long)stats.skippedPrim,
-                     (unsigned long long)stats.unsupportedBlend, textures.size());
+                     (unsigned long long)stats.unsupportedBlend, textures.size(),(unsigned long long)stats.presents,(unsigned long long)stats.reusedPresents);
+        stats.presents=stats.reusedPresents=0;
         stats.shuffles = stats.draws = stats.batches = stats.texDecodes = stats.texHits = stats.skippedPsm = stats.skippedPrim = stats.unsupportedBlend = 0;
     }
 
@@ -2572,6 +2572,7 @@ GSHwBackend::~GSHwBackend() = default;
 
 void GSHwBackend::Initialize(uint8_t *vram, uint32_t vramSize)
 {
+    m_impl->presentedStateValid=false;
     m_impl->vram = vram;
     m_impl->vramSize = vramSize;
     m_impl->store.Initialize(vram, vramSize);
@@ -2589,6 +2590,7 @@ void GSHwBackend::Reset()
 {
     Impl &d = *m_impl;
     d.flushPending();
+    d.presentedStateValid=false;
     d.store.Reset();
     d.invertedZ.clear();
     for (auto &kv : d.textures)
@@ -2597,12 +2599,17 @@ void GSHwBackend::Reset()
 
 void GSHwBackend::Submit(const GSPrimitiveBatch &batch)
 {
+    SubmitCached(batch, 0);
+}
+
+void GSHwBackend::SubmitCached(const GSPrimitiveBatch &batch, uint64_t stateToken)
+{
     if (batch.vertexCount == 0u)
         return;
     Impl &d = *m_impl;
     if (!d.ensure())
         return;
-    d.submit(batch);
+    d.submit(batch, stateToken);
 }
 
 void GSHwBackend::LoadClut(const GSTex0Reg &tex0, const GSTexClutReg &texclut)
@@ -2619,7 +2626,11 @@ void GSHwBackend::LoadClut(const GSTex0Reg &tex0, const GSTexClutReg &texclut)
             // first and preserve an otherwise identical pending batch.
             if(d.pendingWritesClut(t,width,xy,count))d.flushPending();
             return d.initialized && d.clutFromTarget(t,width,xy,count,words);
-        },[&d]{d.flushPending();});
+        },[&d]{
+            // Untextured geometry cannot observe the CLUT. A source dependency
+            // on its colour/depth writes was already drained above.
+            if(!d.havePending || d.pendingState.prim.tme)d.flushPending();
+        });
     if(changed)d.clutHash=d.store.ClutHash();
 }
 
@@ -2697,6 +2708,7 @@ bool GSHwBackend::ClearFramebuffer(const GSContext &context, uint32_t rgba)
     if (!d.ensure() || context.frame.fbw == 0u)
         return false;
     d.flushPending();
+    d.presentedStateValid=false;
     const Api &g = d.gl();
     RenderTarget &rt = d.target(context.frame.fbp, context.frame.fbw);
     g.BindFramebuffer(kFramebuffer, rt.fbo);
@@ -2746,6 +2758,7 @@ PresentationFrame GSHwBackend::Present(const GSPresentationRequest &request)
         return frame;
     d.flushPending();
     ++d.presentCount;
+    ++d.stats.presents;
     d.dumpAfterSkip = false;
     d.frameBatch = 0;
     d.reportStats();
@@ -2784,16 +2797,29 @@ PresentationFrame GSHwBackend::Present(const GSPresentationRequest &request)
                          (unsigned long long)request.display1, (unsigned long long)request.dispfb2, (unsigned long long)request.display2);
     }
     // the two read circuits; circuit 1 is shown over circuit 2 (or BGCOLOR), blended by ALP (MMOD) or its own alpha x2
-    uint32_t fbp1, fbw1, dbx1, dby1, w1, h1, fbp2, fbw2, dbx2, dby2, w2, h2;
+    uint32_t fbp1=0, fbw1=0, dbx1=0, dby1=0, w1=0, h1=0, fbp2=0, fbw2=0, dbx2=0, dby2=0, w2=0, h2=0;
     const bool ok1 = enable1 && decode(true, request.dispfb1, request.display1, fbp1, fbw1, dbx1, dby1, w1, h1);
     const bool ok2 = enable2 && decode(true, request.dispfb2, request.display2, fbp2, fbw2, dbx2, dby2, w2, h2);
     const bool shared = !request.forceReadback && d.context.Shared() && GSSharedPresent::Active();
     if (!ok1 && !ok2)
     {
+        d.presentedStateValid=false;
         if (shared)
             GSGL::PublishSharedTexture(d.gl(), 0u, 0u, 0u, d.presentCount, 0u, 0u, request.vsyncTick);
         return frame;
     }
+    const auto drawnAt=[&](bool enabled,uint32_t base)->uint64_t{
+        if(!enabled)return 0;
+        const auto *target=d.findTarget(base);
+        return target?target->lastDrawSeq:0;
+    };
+    const std::array<uint64_t,9> stamp{request.pmode,request.smode2,request.dispfb1,request.display1,
+        request.dispfb2,request.display2,request.bgcolor,drawnAt(ok1,fbp1),drawnAt(ok2,fbp2)};
+    static const bool reusePresent=std::getenv("GOW_GLES_PRESENT_CACHE_OFF")==nullptr;
+    // The host can poll at 30/60 Hz while the game still works on the next
+    // buffer. Retain the published shared texture when neither display circuit
+    // changed; readback requests always run the full composition path.
+    if(reusePresent && shared && d.presentedStateValid && stamp==d.presentedState){++d.stats.reusedPresents;return frame;}
     // The host window shows the TV area of the game's own picture: 448 lines from DY 50 (gameplay, menus). The movies set
     // a 480-line display at the same DY; their streams are 640x480 with the picture in the top 448 lines and 32 black
     // lines below, which a TV shows in its bottom border. Taller displays are cut to 448 lines, so a movie fills the
@@ -2967,7 +2993,9 @@ PresentationFrame GSHwBackend::Present(const GSPresentationRequest &request)
     if (shared)
     {
         // GOW-Port: zero-copy presentation: GPU copy into a texture shared with the host window, no pixels returned.
-        GSGL::PublishSharedTexture(g, d.presentTex, outW, outH, d.presentCount, fbp, fbp, request.vsyncTick);
+        if(GSGL::PublishSharedTexture(g, d.presentTex, outW, outH, d.presentCount, fbp, fbp, request.vsyncTick)){
+            d.presentedState=stamp;d.presentedStateValid=true;
+        }
         return PresentationFrame{};
     }
     g.ReadPixels(0, 0, outW, outH, kRgba, kUnsignedByte, frame.pixels.data());

@@ -3,8 +3,10 @@
 #include <vector>
 struct CaptureBackend final : GSRasterBackend {
     std::vector<GSPrimitiveBatch> draws;
+    std::vector<uint64_t> tokens;
     void Initialize(uint8_t*,uint32_t)override{} void Reset()override{}
     void Submit(const GSPrimitiveBatch &batch)override{draws.push_back(batch);}
+    void SubmitCached(const GSPrimitiveBatch &batch,uint64_t token)override{tokens.push_back(token);Submit(batch);}
     void LoadClut(const GSTex0Reg&,const GSTexClutReg&)override{}
     void BeginTransfer(const GSTransferCommand&)override{} void UploadImage(const uint8_t*,uint32_t)override{}
     void Flush()override{} void TextureFlush()override{} void Sync(GSSyncReason)override{}

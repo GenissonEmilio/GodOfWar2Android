@@ -11,6 +11,8 @@ bool gowAndroidAsyncFinish(){return asyncMode.load();}
 struct RecordingBackend final:GSRasterBackend {
     std::vector<int> operations;int last=0;std::atomic<unsigned> finished{0};
     std::vector<uint32_t> fpControls;
+    std::vector<uint64_t> tokens;
+    void SubmitCached(const GSPrimitiveBatch &b,uint64_t token)override{tokens.push_back(token);Submit(b);}
     void Initialize(uint8_t*,uint32_t)override{}void Reset()override{}
     void Submit(const GSPrimitiveBatch &b)override {
         last=int(b.vertices[0].x);
@@ -66,5 +68,24 @@ int main(){
     });
     _mm_setcsr(saved);queue.ReadVram(0,0,0,0,0);
     for(size_t i=0;i<expected.size();++i)if(record->fpControls[base+i]!=expected[i])return 8;
+    const auto tokenBase=record->tokens.size();
+    const auto operationBase=record->operations.size();
+    const auto tokenA=gsNewDrawStateToken(),tokenB=gsNewDrawStateToken();
+    queue.CommandStream([&]{
+        for(int i=0;i<3000;++i){
+            const int id=10010+7*i+(i>=1500?1:0);
+            GSPrimitiveBatch b{};b.vertexCount=1;b.vertices[0].x=id;b.state.context.alpha=id%7;
+            if(i==1400)queue.Submit(b); // Untagged callers still compare the entire state.
+            else queue.SubmitCached(b,i<1500?tokenA:tokenB);
+        }
+    });
+    queue.ReadVram(0,0,0,0,0);
+    if(record->tokens.size()!=tokenBase+3000 || record->operations.size()!=operationBase+3000)return 9;
+    const auto replayA=record->tokens[tokenBase],replayB=record->tokens[tokenBase+1500];
+    if(!replayA || !replayB || replayA==replayB)return 10;
+    for(int i=0;i<3000;++i){
+        if(record->operations[operationBase+i]!=10010+7*i+(i>=1500?1:0))return 11;
+        if(record->tokens[tokenBase+i]!=(i<1500?replayA:replayB))return 12;
+    }
     std::puts("Draw/FINISH order, readback, chunk backpressure, nested streams, competing producer, exception cleanup and per-draw FP control: PASS");
 }

@@ -26,7 +26,6 @@
 
 namespace
 {
-    constexpr size_t kPublishBytes = 64u * 1024u;
     constexpr size_t kMaxPendingChunks = 256u;
     std::atomic<bool> s_enabledByDefault{false};
 
@@ -82,7 +81,9 @@ GSThreadedBackend::GSThreadedBackend(std::unique_ptr<GSRasterBackend> inner)
     m_compactQueue = !compact || *compact != '0';
     if (const char *limit = std::getenv("PS2X_GS_QUEUE_CHUNKS"))
         m_queueChunkLimit = static_cast<size_t>(std::clamp(std::atoi(limit), 1, static_cast<int>(kMaxPendingChunks)));
-    m_open.reserve(kPublishBytes + 4096u);
+    if (const char *bytes = std::getenv("PS2X_GS_QUEUE_BYTES"))
+        m_publishBytes = static_cast<size_t>(std::clamp(std::atoi(bytes), 4096, 262144));
+    m_open.reserve(m_publishBytes + 4096u);
     m_worker = std::thread([this]
                            { WorkerLoop(); });
 }
@@ -130,7 +131,7 @@ void GSThreadedBackend::CommandStream(const std::function<void()> &commands)
     commands();
 }
 
-void GSThreadedBackend::Enqueue(Op op, const void *payload, uint32_t size)
+void GSThreadedBackend::Enqueue(Op op, const void *payload, uint32_t size, uint64_t stateToken)
 {
     auto lock = LockProducer();
     const uint32_t csr = ps2_fp::readControl();
@@ -156,17 +157,18 @@ void GSThreadedBackend::Enqueue(Op op, const void *payload, uint32_t size)
     if (op == Op::Submit && m_compactQueue)
     {
         const auto &draw = *static_cast<const GSPrimitiveBatch *>(payload);
-        if (!m_drawStateValid || !gsSameDrawState(m_lastDrawState,draw.state))
+        if (!m_drawStateValid || (!(stateToken && stateToken == m_lastDrawToken) && !gsSameDrawState(m_lastDrawState,draw.state)))
         {
             std::memcpy(&m_lastDrawState, &draw.state, sizeof(draw.state));
             m_drawStateValid = true;
             append(Op::DrawState, &draw.state, sizeof(draw.state));
         }
+        m_lastDrawToken = stateToken;
         append(Op::Vertices, &draw, static_cast<uint32_t>(offsetof(GSPrimitiveBatch, state)));
     }
     else
         append(op, payload, size);
-    if (m_open.size() >= kPublishBytes)
+    if (m_open.size() >= m_publishBytes)
         PublishLocked();
 }
 
@@ -190,8 +192,8 @@ void GSThreadedBackend::PublishLocked()
     m_workCv.notify_one();
     next.clear();
     m_open = std::move(next);
-    if (m_open.capacity() < kPublishBytes)
-        m_open.reserve(kPublishBytes + 4096u);
+    if (m_open.capacity() < m_publishBytes)
+        m_open.reserve(m_publishBytes + 4096u);
 }
 
 void GSThreadedBackend::Drain() const
@@ -290,11 +292,12 @@ void GSThreadedBackend::Execute(const std::vector<uint8_t> &chunk, GSPrimitiveBa
             break;
         case Op::DrawState:
             std::memcpy(&draw.state, payload, sizeof(draw.state));
+            m_replayDrawToken = gsNewDrawStateToken();
             break;
         case Op::Vertices:
             std::memcpy(&draw, payload, offsetof(GSPrimitiveBatch, state));
             if (!discardDraws())
-                m_inner->Submit(draw);
+                m_inner->SubmitCached(draw, m_replayDrawToken);
             break;
         case Op::Present:
             m_inner->Present(readAt<GSPresentationRequest>(payload));
@@ -332,6 +335,13 @@ void GSThreadedBackend::Submit(const GSPrimitiveBatch &batch)
     if (GsInventory::get().enabled())
         GsInventory::get().draw(batch);
     Enqueue(Op::Submit, &batch, sizeof(batch));
+}
+
+void GSThreadedBackend::SubmitCached(const GSPrimitiveBatch &batch, uint64_t stateToken)
+{
+    if (GsInventory::get().enabled())
+        GsInventory::get().draw(batch);
+    Enqueue(Op::Submit, &batch, sizeof(batch), stateToken);
 }
 
 void GSThreadedBackend::LoadClut(const GSTex0Reg &tex0, const GSTexClutReg &texclut)

@@ -1973,7 +1973,7 @@ void GS::vertexKick(bool drawing)
         const GSPrimitiveBatch &batch = buildDrawBatch(needed);
         updatePreferredDisplaySourceForDraw(batch);
         gowFogDiagDraw(batch); // GOW-Port: PS2X_GS_FOG_DIAG.
-        m_backend->Submit(batch);
+        m_backend->SubmitCached(batch, m_drawStateToken);
         recordDrawDebugEventUnlocked(needed);
     }
 
@@ -2095,6 +2095,7 @@ const GSPrimitiveBatch &GS::buildDrawBatch(int vertexCount)
     if (m_drawStateDirty)
     {
         m_drawStateDirty = false;
+        m_drawStateToken = gsNewDrawStateToken();
         batch.state.context = m_ctx[m_prim.ctxt ? 1 : 0];
         batch.state.prim = m_prim;
         if (gowFogOff())

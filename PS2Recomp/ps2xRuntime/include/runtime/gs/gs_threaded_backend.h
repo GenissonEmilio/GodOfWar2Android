@@ -28,6 +28,7 @@ public:
     void Reset() override;
 
     void Submit(const GSPrimitiveBatch &batch) override;
+    void SubmitCached(const GSPrimitiveBatch &batch, uint64_t stateToken) override;
     void CommandStream(const std::function<void()> &commands) override;
     void LoadClut(const GSTex0Reg &tex0, const GSTexClutReg &texclut) override;
 
@@ -70,7 +71,7 @@ private:
         Call,
     };
 
-    void Enqueue(Op op, const void *payload, uint32_t size);
+    void Enqueue(Op op, const void *payload, uint32_t size, uint64_t stateToken = 0);
     std::unique_lock<std::mutex> LockProducer() const;
     void PublishLocked();
     void Drain() const;
@@ -87,8 +88,11 @@ private:
     uint32_t m_lastMxcsr = UINT32_MAX;
     GSDrawState m_lastDrawState{};
     bool m_drawStateValid = false;
+    uint64_t m_lastDrawToken = 0;
+    uint64_t m_replayDrawToken = 0;
     bool m_compactQueue = true;
     size_t m_queueChunkLimit = 8u;
+    size_t m_publishBytes = 64u * 1024u;
 
     mutable std::mutex m_queueMutex;
     mutable std::condition_variable m_workCv;

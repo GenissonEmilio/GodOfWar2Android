@@ -3,8 +3,17 @@
 #include "runtime/gs/gs_types.h"
 
 #include <cstdint>
+#include <atomic>
 #include <functional>
 #include <vector>
+
+// A token identifies one immutable state snapshot, including across GS instances
+// and queue replays. Zero means the caller has not supplied that guarantee.
+inline uint64_t gsNewDrawStateToken()
+{
+    static std::atomic<uint64_t> next{1};
+    return next.fetch_add(1, std::memory_order_relaxed);
+}
 
 class GSRasterBackend
 {
@@ -15,6 +24,9 @@ public:
     virtual void Reset() = 0;
 
     virtual void Submit(const GSPrimitiveBatch &batch) = 0;
+    // Only the state snapshot is cached: vertex attributes may change on every
+    // call. Allocate a new token whenever ANY field of batch.state changes.
+    virtual void SubmitCached(const GSPrimitiveBatch &batch, uint64_t stateToken) { Submit(batch); }
     // Keep one parsed GIF packet together. Synchronous operations inside the
     // stream still wait for the worker; other producers cannot interleave it.
     virtual void CommandStream(const std::function<void()> &commands) { commands(); }

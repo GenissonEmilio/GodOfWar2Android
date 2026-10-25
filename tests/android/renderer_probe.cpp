@@ -63,6 +63,27 @@ static int runEpoch(int epoch){
         for(int i=0;i<3;++i)ok=std::abs(int(px[i])-150)<=2 && ok;
         glDeleteFramebuffers(1,&fbo);
     }
+    backend.Present(request);glFinish();GSSharedPresent::Frame repeated;
+    if(!GSSharedPresent::Acquire(repeated) || repeated.sequence!=shared.sequence)ok=false;
+    request.pmode=0;backend.Present(request);glFinish();GSSharedPresent::Frame blank;
+    if(!GSSharedPresent::Acquire(blank) || !blank.blank)ok=false;
+    request.pmode=1;backend.Present(request);glFinish();GSSharedPresent::Frame restored;
+    if(!GSSharedPresent::Acquire(restored) || restored.blank || restored.sequence<=blank.sequence)ok=false;
+    if(!backend.ClearFramebuffer(batch.state.context,0x8038220c))ok=false;
+    backend.Present(request);glFinish();GSSharedPresent::Frame cleared;
+    if(!GSSharedPresent::Acquire(cleared) || cleared.sequence<=restored.sequence || !cleared.texture)ok=false;
+    else{
+        GLuint fbo=0;glGenFramebuffers(1,&fbo);glBindFramebuffer(GL_FRAMEBUFFER,fbo);
+        glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,cleared.texture,0);
+        uint8_t px[4]{};glReadPixels(4,4,1,1,GL_RGBA,GL_UNSIGNED_BYTE,px);
+        ok=std::abs(int(px[0])-12)<=1 && std::abs(int(px[1])-34)<=1 && std::abs(int(px[2])-56)<=1 && ok;
+        glDeleteFramebuffers(1,&fbo);
+    }
+    GSPrimitiveBatch update=batch;update.state.prim.abe=false;
+    for(auto &v:update.vertices){v.r=90;v.g=80;v.b=70;v.a=128;}
+    backend.Submit(update);backend.Flush();backend.Present(request);glFinish();
+    GSSharedPresent::Frame updated;
+    if(!GSSharedPresent::Acquire(updated) || updated.sequence<=cleared.sequence)ok=false;
     // Byte vertex attributes must retain the unnormalized 0..255 GS range,
     // including the alpha channel and values on either side of 128.
     constexpr uint8_t colors[]{0,1,127,128,254,255};
@@ -77,15 +98,20 @@ static int runEpoch(int epoch){
     }
     const auto start=std::chrono::steady_clock::now();
     for(unsigned i=0;i<1000;++i){
+        batch.state.context.tex0.tbp0=i;batch.state.context.clamp=i%4;
+        batch.state.textureWidth=1+(i%64);batch.state.linearFilter=(i&1)!=0;
         backend.Submit(batch);
         GSTex0Reg noop{};noop.cld=1; // A direct-color TEX0 cannot load a CLUT.
         backend.LoadClut(noop,{});
         noop.psm=GS_PSM_T8;noop.cld=0;backend.LoadClut(noop,{});
+        GSMem::WriteCT32(vram.data(),0x3000,1,0,0,0x80000000u|i);
+        noop.cld=1;noop.cbp=0x3000;noop.cpsm=GS_PSM_CT32;backend.LoadClut(noop,{});
     }
     backend.Flush();
     uint8_t batched[4]{};glReadPixels(16,16,1,1,GL_RGBA,GL_UNSIGNED_BYTE,batched);
     ok=batched[0]==255 && batched[1]==1 && batched[2]==127 && batched[3]==128 && ok;
-    std::printf("1000 sprites separated by no-op TEX0 writes: %.3f ms, RGBA %u,%u,%u,%u\n",std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count(),batched[0],batched[1],batched[2],batched[3]);
+    std::printf("1000 untextured sprites with texture-state/palette changes: %.3f ms, RGBA %u,%u,%u,%u\n",std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count(),batched[0],batched[1],batched[2],batched[3]);
+    batch.state.context.tex0={};batch.state.context.clamp=0;batch.state.linearFilter=false;
     batch.state.prim.tme=true;batch.state.prim.fst=true;
     auto &tex0=batch.state.context.tex0;
     tex0.tbp0=0x2000;tex0.tbw=1;tex0.psm=GS_PSM_T8;tex0.tw=6;tex0.th=6;
@@ -126,6 +152,44 @@ static int runEpoch(int epoch){
     batch.state.context.frame.fbp=16;batch.state.prim.tme=true;batch.state.texclut=csm2;
     backend.Submit(batch);backend.Flush();request.dispfb1=16|(1ULL<<9);
     ok=pixel(backend.Present(request),30,50,70)&&ok;
+    // Reusing immutable state must still submit changing vertices/colours.
+    // A legacy (untagged) call between tagged calls must invalidate the shortcut.
+    batch.state.prim.tme=false;batch.state.prim.abe=false;batch.state.context.frame.fbmsk=0;
+    const uint64_t stateToken=gsNewDrawStateToken();
+    batch.vertices[0].x=0;batch.vertices[1].x=32;
+    for(auto &v:batch.vertices){v.r=200;v.g=0;v.b=0;}
+    backend.SubmitCached(batch,stateToken);
+    auto masked=batch;masked.state.context.frame.fbmsk=0x00ffffff;
+    masked.vertices[0].x=32;masked.vertices[1].x=64;
+    backend.Submit(masked);
+    batch.vertices[0].x=32;batch.vertices[1].x=64;
+    for(auto &v:batch.vertices){v.r=0;v.g=0;v.b=200;}
+    backend.SubmitCached(batch,stateToken);backend.Flush();
+    auto tagged=backend.Present(request);
+    ok=pixel(tagged,200,0,0,16,16)&&pixel(tagged,0,0,200,48,16)&&ok;
+    batch.state.context.frame.fbmsk=0xffff00ff;
+    for(auto &v:batch.vertices)v.g=220;
+    backend.SubmitCached(batch,gsNewDrawStateToken());backend.Flush();
+    ok=pixel(backend.Present(request),0,220,200,48,16)&&ok;
+    batch.state.context.frame.fbmsk=0;
+    GSPrimitiveBatch triangles=batch;triangles.vertexCount=3;
+    triangles.state.prim.type=GS_PRIM_TRIANGLE;triangles.state.prim.tme=false;
+    for(unsigned i=0;i<3;++i){triangles.vertices[i].x=-128.0f+(i==1?16.0f:0.0f);triangles.vertices[i].y=-128.0f+(i==2?16.0f:0.0f);triangles.vertices[i].z=123456;}
+    for(uint8_t zpsm:{uint8_t(GS_PSM_Z32),uint8_t(GS_PSM_Z24),uint8_t(GS_PSM_Z16)}){
+        triangles.state.context.zbuf.psm=zpsm;
+        for(unsigned i=0;i<30000;++i)backend.Submit(triangles);
+        backend.Flush();glFinish();
+        const uint64_t triangleToken=gsNewDrawStateToken();
+        for(bool cached:{false,true}){
+            const auto begin=std::chrono::steady_clock::now();
+            for(unsigned i=0;i<30000;++i){
+                if(cached)backend.SubmitCached(triangles,triangleToken);else backend.Submit(triangles);
+            }
+            const double cpuMs=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-begin).count();
+            backend.Flush();glFinish();
+            std::printf("30000 offscreen triangles Z=%u cached=%d CPU: %.3f ms\n",zpsm,cached,cpuMs);
+        }
+    }
     const auto error=glGetError();ok=(error==GL_NO_ERROR)&&ok;
     std::printf("Production GLES raster, blend, shuffle and shared presentation: %s (GL error %x)\n",ok?"PASS":"FAIL",error);
     } // Destroy shared textures/fences before terminating this EGL share group.

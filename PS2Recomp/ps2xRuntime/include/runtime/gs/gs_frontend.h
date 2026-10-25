@@ -239,6 +239,7 @@ private:
     int m_vtxIndex = 0;
     GSPrimitiveBatch m_drawBatch{};
     bool m_drawStateDirty = true;
+    uint64_t m_drawStateToken = 0;
 
     std::vector<uint8_t> m_displaySnapshot;
     std::mutex m_snapshotMutex;

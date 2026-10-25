@@ -13,8 +13,11 @@ int main(){
     auto kick=[&](unsigned x){gs.writeRegister(GS_REG_XYZ2,uint64_t(x*16)|(16ULL<<16));};
     for(unsigned i=0;i<1000;++i){gs.writeRegister(GS_REG_RGBAQ,0x3f80000080123456ULL);kick(i);}
     require(capture->draws.size()==1000,"repeated vertices");
+    require(capture->tokens.size()==1000 && capture->tokens.front()!=0,"cached state tokens supplied");
+    for(auto token:capture->tokens)require(token==capture->tokens.front(),"vertices keep immutable state token");
     for(unsigned i=0;i<1000;++i)require(capture->draws[i].vertices[0].x==i && capture->draws[i].vertices[0].r==0x56,"vertex values");
     gs.writeRegister(GS_REG_TEX0_1,(5ULL<<26)|(4ULL<<30));gs.writeRegister(GS_REG_TEX1_1,1ULL<<5);kick(10);
+    require(capture->tokens.back()!=capture->tokens.front(),"texture writes invalidate token");
     require(capture->draws.back().state.textureWidth==32 && capture->draws.back().state.textureHeight==16 && capture->draws.back().state.linearFilter,"derived texture state");
     gs.writeRegister(GS_REG_TEX0_2,(3ULL<<26)|(2ULL<<30));gs.writeRegister(GS_REG_PRIM,GS_PRIM_POINT|(1ULL<<9));kick(11);
     require(capture->draws.back().state.textureWidth==8 && capture->draws.back().state.textureHeight==4 && !capture->draws.back().state.linearFilter,"context switch");
@@ -25,6 +28,7 @@ int main(){
     gs.processGIFPacket(reinterpret_cast<uint8_t*>(packet),sizeof(packet));
     require(capture->draws.back().state.fogR==0x32 && capture->draws.back().state.fogB==0x76,"packed A+D state");
     gs.reset();gs.writeRegister(GS_REG_PRIM,GS_PRIM_POINT);kick(13);
+    require(capture->tokens.back()!=capture->tokens.front(),"reset does not reuse tokens");
     require(capture->draws.back().state.textureWidth==1 && capture->draws.back().state.fogR==0 && !capture->draws.back().state.prim.ctxt,"reset state");
     std::puts("Cached GS state: changing vertices, textures, contexts, global state, packed A+D and reset: PASS");
 }
