@@ -3,6 +3,7 @@
 #include "gs_texture_store.h"
 #include "runtime/gs/gs_swizzle.h"
 #include "gs_gl.h"
+#include "runtime/gs/gs_state_compare.h"
 #if defined(__ANDROID__)
 #include <GLES3/gl32.h>
 #endif
@@ -1402,7 +1403,13 @@ struct GSHwBackend::Impl
     // ---- drawing --------------------------------------------------------------------------------------------------
     static bool sameState(const GSDrawState &a, const GSDrawState &b)
     {
-        return std::memcmp(&a, &b, sizeof(GSDrawState)) == 0;
+        const bool equal=gsSameDrawState(a,b);
+        static const bool diagnostic=std::getenv("GOW_GS_HW_STATS")!=nullptr;
+        if (diagnostic && equal && std::memcmp(&a,&b,sizeof(GSDrawState))!=0) {
+            static thread_local uint64_t paddingOnly=0;
+            if(++paddingOnly==1000)std::fprintf(stderr,"[gs-state] prevented 1000 batch splits caused only by C++ padding\n");
+        }
+        return equal;
     }
 
     void addVertex(const GSDrawState &s, const GSVertex &v, float u, float tv, float zmax)

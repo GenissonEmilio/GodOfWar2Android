@@ -12,11 +12,17 @@ public final class GameActivity extends NativeActivity {
     static native long nativeFrames();
     static native long nativeMovieFrames();
     static native boolean nativeConsumeBack();
+    static native boolean nativeGamepadReady();
+    static native void nativeControllerConnection(boolean connected);
     private final Handler meter=new Handler(android.os.Looper.getMainLooper());
     private long lastFrames,lastTime;
     private boolean lastMovie;
     private final Runnable sample=new Runnable(){public void run(){
         if(nativeConsumeBack())onBackPressed();
+        boolean attached=false;
+        for(int id:InputDevice.getDeviceIds()){InputDevice d=InputDevice.getDevice(id);if(d!=null && (((d.getSources()&InputDevice.SOURCE_GAMEPAD)==InputDevice.SOURCE_GAMEPAD)||((d.getSources()&InputDevice.SOURCE_JOYSTICK)==InputDevice.SOURCE_JOYSTICK))){attached=true;break;}}
+        nativeControllerConnection(attached);if(!attached)controller=false;
+        if(touch!=null)touch.setController(attached && (controller || nativeGamepadReady()));
         long now=android.os.SystemClock.elapsedRealtime(),videoFrames=nativeMovieFrames();boolean movie=videoFrames>=0;
         long frames=movie?videoFrames:nativeFrames();
         if(touch!=null){
@@ -36,7 +42,7 @@ public final class GameActivity extends NativeActivity {
         super.onCreate(state);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN|View.SYSTEM_UI_FLAG_HIDE_NAVIGATION|View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY|View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN|View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION|View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
-        meter.postDelayed(sample,1000);
+        meter.post(sample);
         touch=new TouchOverlay(this);
         getWindow().getDecorView().post(()->{
             WindowManager.LayoutParams params=new WindowManager.LayoutParams(-1,-1,

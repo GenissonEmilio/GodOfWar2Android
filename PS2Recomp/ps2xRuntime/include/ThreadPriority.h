@@ -3,6 +3,11 @@
 #pragma once
 
 #include <cstdlib>
+#if defined(__ANDROID__)
+#include <sys/resource.h>
+#include <sys/syscall.h>
+#include <unistd.h>
+#endif
 
 #if defined(_WIN32)
 #ifndef WINAPI
@@ -40,6 +45,8 @@ namespace ThreadPriority
             return;
 #if defined(_WIN32)
         ::SetThreadPriority(::GetCurrentThread(), static_cast<int>(level));
+#elif defined(__ANDROID__)
+        ::setpriority(PRIO_PROCESS, static_cast<id_t>(::syscall(SYS_gettid)), level==Level::Highest?-8:-4);
 #else
         (void)level;
 #endif

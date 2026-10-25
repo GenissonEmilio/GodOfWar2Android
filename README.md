@@ -28,7 +28,8 @@ Os fontes gerados do jogo e seus arquivos de disco ficam locais.
   do touch. Contador baseado nos frames do jogo.
 - Saves em cartão virtual dentro da pasta do app e pausa ao ir para segundo plano.
 - Renderização OpenGL ES 3.2 com contextos EGL compartilhados. A leitura do
-  framebuffer usa cópias explícitas, sem exigir barreiras de textura de desktop.
+  framebuffer usa a extensão coerente EXT quando disponível e cópias explícitas
+  como fallback, sem exigir barreiras de textura de desktop.
 
 A lista descreve o código implementado; a validação funcional é registrada
 separadamente. Os ajustes móveis são uma interface sobreposta ao jogo. Ainda não
@@ -51,8 +52,13 @@ Não há download de dados do jogo. Não são publicados APKs com código deriva
    Opcional: `--native-cache /caminho/native` reutiliza os fontes VU1/IOP gerados
    pelo seu próprio cache GodOfWar2PC. Sem esse cache, as rotinas correspondentes
    usam os caminhos de interpretação existentes na base, com custo de desempenho.
-3. Defina `ANDROID_HOME` e execute `tools/android/build.sh`.
-4. Instale `android/app/build/outputs/apk/debug/app-debug.apk` no aparelho.
+3. Defina `ANDROID_HOME` e execute `tools/android/build-local.sh`. Esse caminho usa
+   CMake/Ninja, Java, AAPT e D8 do SDK. O APK fica em
+   `artifacts/GodOfWar2Android-debug.apk`. `GOW_BUILD_JOBS` controla o paralelismo;
+   `GOW_RAYLIB_SOURCE` pode apontar para um checkout local do raylib 5.5.
+   A alternativa Gradle é `tools/android/build.sh`, que produz
+   `android/app/build/outputs/apk/debug/app-debug.apk`.
+4. Instale o APK de desenvolvimento no aparelho.
 5. Abra God of War II e importe o mesmo ISO/ZIP no app. A importação precisa
    de aproximadamente 18 GiB livres temporários; depois permanecem ~8 GiB.
 

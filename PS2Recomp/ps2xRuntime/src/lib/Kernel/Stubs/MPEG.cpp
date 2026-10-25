@@ -2761,10 +2761,14 @@ namespace ps2_stubs
         // GOW-Port: libmpeg's sceMpegIsEnd (God of War runs the original, 0x26FF70) returns the first word of the
         // decoder's work area (mp->sys); the decoder sets it when the stream is over. Without it the .m2 player never
         // leaves its playing state after the last picture.
-        if (streamFinished)
+        if (streamFinished) {
+#if defined(__ANDROID__)
+            gowAndroidMovieEnd();
+#endif
             if (uint8_t *base = getMemPtr(rdram, mpegAddr))
                 if (uint8_t *sys = getMemPtr(rdram, *reinterpret_cast<uint32_t *>(base + 0x40)))
                     *reinterpret_cast<uint32_t *>(sys) = 1u;
+        }
 
         mpegGuestWrite32(rdram, mpegAddr + 0x00u, width);
         mpegGuestWrite32(rdram, mpegAddr + 0x04u, height);

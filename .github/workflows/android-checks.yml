@@ -18,5 +18,9 @@ jobs:
           java -cp /tmp/gow2-java io.github.genissonemilio.gow2.DiscImporterTest
       - name: Disc import regression checks (no game data)
         run: python3 -m unittest discover -s tests/linux -v
+      - name: Render state ignores C++ padding
+        run: |
+          c++ -std=c++20 -I PS2Recomp/ps2xRuntime/include tests/android/state_compare_probe.cpp -o /tmp/gow2-state-probe
+          /tmp/gow2-state-probe
       - name: Python syntax
         run: python3 -m compileall -q tools/android

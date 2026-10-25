@@ -63,18 +63,51 @@ Data dos testes: 24 de outubro de 2026 (America/Fortaleza).
   Rhodes, exibindo Kratos, inimigos, HUD e o tutorial de combate. Essa é evidência
   de entrada na primeira área, não de campanha completa ou combate fluido.
 - O controle de opacidade foi alterado no menu e o valor persistiu após atualizar
-  o APK; o diálogo pausou a execução. O editor de posições ainda precisa de
-  uma validação funcional completa.
+  o APK; o diálogo pausou a execução. O botão Voltar do Android abriu a pausa.
+  No editor, L1 foi arrastado de (0,09; 0,18) para aproximadamente (0,12; 0,218),
+  e a nova posição apareceu nas preferências persistidas. Restaurar layout removeu
+  essa personalização. O preset de quatro dedos foi selecionado e apareceu no jogo.
+- Ir para a tela inicial e retornar pelo launcher preservou o mesmo processo e o
+  menu renderizado. Não foi observado reinício do runtime nesse teste.
 - O teste sintético foi ampliado com uma cópia CT16 entre canais do mesmo alvo:
   produziu RGB (150,150,150) a partir do resultado anterior. Passou no caminho
   com framebuffer fetch e no fallback por cópias. Sem erros GL.
+
+## Desempenho e controles após as correções
+
+- A comparação do estado gráfico agora ignora o preenchimento de estruturas C++.
+  O diagnóstico no aparelho confirmou mais de mil divisões de lotes causadas
+  somente por esses bytes. O menu passou a apresentar janelas próximas de 25–29 FPS
+  e amostras de 30 FPS; há variação entre execuções. Não é um resultado da campanha.
+- Na primeira sala de Rhodes, foram observados aproximadamente 10–19 FPS com
+  diagnósticos ativos. O desempenho de combate continua insuficiente.
+- Ataques pelo quadrado produziram a animação das lâminas e contato com inimigos.
+  Um probe externo injetou oito toques de ataque enquanto mantinha o analógico de
+  movimento. Os eventos foram aceitos, e o jogo registrou as transições do botão;
+  não foram validados todos os combos ou QTEs.
+- O perfil simpleperf de 12 segundos coletou 9.514 amostras sem perda. Os custos
+  aparecem em VIF/VU, processamento GIF, preparação de vértices e na fila do GS;
+  a busca repetida de glClearDepthf também apareceu e agora é armazenada em cache.
+- O estado do controle físico agora é capturado na thread de entrada e entregue
+  atomicamente à thread do jogo, com retenção de toques curtos, gatilhos e pressão
+  dos botões DS2. Não havia um gamepad físico conectado para validar essa rota.
+- A retomada do relógio Android foi ajustada para evitar que uma pausa ou cena
+  lenta acumulasse atraso e acelerasse o vídeo seguinte. Após a alteração, os
+  quadros 420 e 450 do vídeo foram entregues com 999,9 ms entre eles; cada grupo
+  avançou 90.090 ticks de PTS. Depois de uma pausa longa nos ajustes, os quadros
+  1530 a 1890 continuaram avançando em grupos de 30 por segundo, e o VBlank
+  estabilizou em 60,00 Hz sem recuperar o atraso por aceleração.
+  O limitador de apresentação mediu 29,97–30,12 Hz quando selecionado.
+- O cache VU/IOP utilizado foi capturado no início do jogo pela base PC. Blocos
+  posteriores não capturados continuam tendo o intérprete como fallback; isso
+  precisa ser medido e ampliado ao percorrer a campanha.
 
 ## Critérios restantes
 
 - Build e instalação do APK final; carregamento de todos os shaders no driver móvel.
 - Logos, menu, vídeo inicial e entrada em Rhodes com imagem e áudio corretos.
 - Combate e QTE com multitoque; reconexão de controle físico.
-- Pausa/retomada, saves/carregamento, editor e persistência das preferências.
+- Saves/carregamento; redimensionamento por botão; mais ciclos de pausa/retomada.
 - Medições do FPS real, consumo de memória e aquecimento em sessões longas.
 - Validação da campanha inteira, incluindo bosses, vídeos e as duas camadas do DVD.
 - Integração dos ajustes aos menus originais do jogo, além do overlay móvel.

@@ -4,6 +4,7 @@
 #include "runtime/gs/gs_hw_backend.h"
 #include "runtime/gs/gs_shared_present.h"
 #include "gs_inventory.h"
+#include "runtime/gs/gs_state_compare.h"
 #include "ThreadPriority.h"
 #include "ThreadNaming.h"
 
@@ -122,7 +123,7 @@ void GSThreadedBackend::Enqueue(Op op, const void *payload, uint32_t size)
     if (op == Op::Submit && m_compactQueue)
     {
         const auto &draw = *static_cast<const GSPrimitiveBatch *>(payload);
-        if (!m_drawStateValid || std::memcmp(&m_lastDrawState, &draw.state, sizeof(draw.state)) != 0)
+        if (!m_drawStateValid || !gsSameDrawState(m_lastDrawState,draw.state))
         {
             std::memcpy(&m_lastDrawState, &draw.state, sizeof(draw.state));
             m_drawStateValid = true;

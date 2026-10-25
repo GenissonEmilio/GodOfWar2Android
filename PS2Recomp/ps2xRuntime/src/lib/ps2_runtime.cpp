@@ -15,6 +15,7 @@ static bool gowUsePcsx2Vu1(); // GOW_VU1_PCSX2=1, defined before PS2Runtime::ini
 #include "runtime/gs/gs_frontend.h"
 #include "runtime/ee_scheduler.h"
 #include "ThreadNaming.h"
+#include "ThreadPriority.h"
 #include "Kernel/Stubs/Audio.h"
 #include "Kernel/Stubs/GS.h"
 #include "Kernel/Stubs/MPEG.h"
@@ -2634,6 +2635,9 @@ void PS2Runtime::run()
     std::thread gameThread([&]()
                            {
         ThreadNaming::SetCurrentThreadName("GameThread");
+#if defined(__ANDROID__)
+        ThreadPriority::RaiseCurrentThread(ThreadPriority::Level::AboveNormal);
+#endif
         // GOW-Port: EE FPU like PCSX2's default (Pcsx2Config.cpp DEFAULT_FPU_FP_CONTROL_REGISTER): round toward
         // zero, flush-to-zero and denormals-are-zero for all EE float math on this thread (division keeps its own
         // round-to-nearest, see ps2FpuDivideNearest, = PCSX2's FPUDivFPCR). GOW_EE_FPU_NEAREST=1 = old behavior.

@@ -11,8 +11,10 @@
 #include <unistd.h>
 namespace {
 std::atomic<uint64_t> input{0x808080800000ULL};
-std::atomic<uint16_t> pendingPress{0};
+std::atomic<uint16_t> pendingPress{0}, physicalPress{0};
+std::atomic<uint64_t> physicalInput{0x808080800000ULL};
 std::atomic<bool> paused{false},backRequested{false};
+std::atomic<bool> controllerConnected{false},controllerReady{false};
 std::atomic<bool> movieActive{false};
 std::atomic<uint64_t> movieFrames{0};
 std::atomic<int> volume{80}, frameLimit{60};
@@ -27,7 +29,17 @@ uint8_t axis(float v) {
 }
 bool gowAndroidPaused() { return paused.load(); }
 void gowAndroidReadPad(uint8_t *data) {
-    const auto state=paused.load()?0x808080800000ULL:(input.load()|pendingPress.exchange(0));
+    uint64_t state=input.load()|pendingPress.exchange(0);
+    if(controllerConnected.load()) {
+        const uint64_t pad=physicalInput.load()|physicalPress.exchange(0);
+        state|=pad&0xffff;
+        for(int i=0;i<4;++i) {
+            const int shift=16+8*i,touchAxis=(state>>shift)&255,padAxis=(pad>>shift)&255;
+            if(std::abs(padAxis-128)>std::abs(touchAxis-128))
+                state=(state&~(uint64_t(255)<<shift))|(uint64_t(padAxis)<<shift);
+        }
+    }
+    if(paused.load())state=0x808080800000ULL;
     const auto buttons=static_cast<uint16_t>(~state);
     data[2]=buttons&255; data[3]=buttons>>8;
     for (int i=0;i<4;++i) data[4+i]=(state>>(16+8*i))&255;
@@ -40,10 +52,32 @@ void gowAndroidFrame() {
     static int appliedLimit=-1;
     const int wanted=frameLimit.load();
     if (wanted!=appliedLimit) {SetTargetFPS(wanted);appliedLimit=wanted;}
-    if (IsKeyPressed(KEY_BACK) || IsKeyPressed(KEY_ESCAPE)) backRequested.store(true);
+    // Read raylib only on its host/input thread. The EE thread consumes an
+    // atomic DualShock snapshot, including short press edges and pressure bytes.
+    int slot=-1;for(int i=0;i<4;++i)if(IsGamepadAvailable(i)){slot=i;break;}
+    controllerReady.store(slot>=0);
+    uint64_t pad=0x808080800000ULL;
+    if(slot>=0 && controllerConnected.load()) {
+        constexpr int keys[]{GAMEPAD_BUTTON_MIDDLE_LEFT,GAMEPAD_BUTTON_LEFT_THUMB,GAMEPAD_BUTTON_RIGHT_THUMB,GAMEPAD_BUTTON_MIDDLE_RIGHT,
+            GAMEPAD_BUTTON_LEFT_FACE_UP,GAMEPAD_BUTTON_LEFT_FACE_RIGHT,GAMEPAD_BUTTON_LEFT_FACE_DOWN,GAMEPAD_BUTTON_LEFT_FACE_LEFT,
+            GAMEPAD_BUTTON_LEFT_TRIGGER_2,GAMEPAD_BUTTON_RIGHT_TRIGGER_2,GAMEPAD_BUTTON_LEFT_TRIGGER_1,GAMEPAD_BUTTON_RIGHT_TRIGGER_1,
+            GAMEPAD_BUTTON_RIGHT_FACE_UP,GAMEPAD_BUTTON_RIGHT_FACE_RIGHT,GAMEPAD_BUTTON_RIGHT_FACE_DOWN,GAMEPAD_BUTTON_RIGHT_FACE_LEFT};
+        for(int i=0;i<16;++i)if(IsGamepadButtonDown(slot,keys[i]))pad|=uint64_t(1)<<i;
+        if(GetGamepadAxisMovement(slot,GAMEPAD_AXIS_LEFT_TRIGGER)>.1f)pad|=0x100;
+        if(GetGamepadAxisMovement(slot,GAMEPAD_AXIS_RIGHT_TRIGGER)>.1f)pad|=0x200;
+        constexpr int axes[]{GAMEPAD_AXIS_RIGHT_X,GAMEPAD_AXIS_RIGHT_Y,GAMEPAD_AXIS_LEFT_X,GAMEPAD_AXIS_LEFT_Y};
+        for(int i=0;i<4;++i){const int shift=16+8*i;pad=(pad&~(uint64_t(255)<<shift))|(uint64_t(axis(GetGamepadAxisMovement(slot,axes[i])))<<shift);}
+    }
+    const auto oldPad=physicalInput.exchange(pad);
+    physicalPress.fetch_or(static_cast<uint16_t>(pad&~oldPad));
+    for (int key=GetKeyPressed();key!=0;key=GetKeyPressed())
+        if(key==KEY_BACK || key==KEY_ESCAPE)backRequested.store(true);
     SetExitKey(KEY_NULL);
 }
 extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivity_nativeConfigure(JNIEnv *env,jclass,jstring path,jint scale) {
+    input.store(0x808080800000ULL);physicalInput.store(0x808080800000ULL);
+    pendingPress.store(0);physicalPress.store(0);paused.store(false);backRequested.store(false);
+    controllerConnected.store(false);controllerReady.store(false);movieActive.store(false);movieFrames.store(0);
     const char *p=env->GetStringUTFChars(path,nullptr);
     std::filesystem::create_directories(std::string(p)+"/memcards"); chdir(p);
     const std::string boot=std::string(p)+"/game/SCUS_974.81";
@@ -53,7 +87,7 @@ extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivit
     setenv("GOW_PERF_FRAME_PC","0x14E380",1);
     const bool diagnostic=std::filesystem::exists(std::string(p)+"/perf-diagnostics");
     setenv("GOW_PERF_DIAG",diagnostic?"1":"frames",1);
-    if(diagnostic){setenv("GOW_GS_HW_STATS","1",1);setenv("GOW_VU1_STATS","1",1);}
+    if(diagnostic){setenv("GOW_GS_HW_STATS","1",1);setenv("GOW_VU1_STATS","1",1);setenv("GOW_VBLANK_DIAG","1",1);setenv("GOW_MPEG_DIAG","1",1);}
     env->ReleaseStringUTFChars(path,p);
 }
 extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivity_nativeInput(JNIEnv *,jclass,jint buttons,jfloat lx,jfloat ly,jfloat rx,jfloat ry) {
@@ -63,7 +97,7 @@ extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivit
     const auto previous=input.exchange(state);
     pendingPress.fetch_or(static_cast<uint16_t>(state & ~previous));
 }
-extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivity_nativePause(JNIEnv *,jclass,jboolean value) { paused.store(value); input.store(0x808080800000ULL); pendingPress.store(0); if (IsAudioDeviceReady()) SetMasterVolume(value?0.0f:volume.load()/100.0f); }
+extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivity_nativePause(JNIEnv *,jclass,jboolean value) { paused.store(value); input.store(0x808080800000ULL); pendingPress.store(0); physicalPress.store(0); if (IsAudioDeviceReady()) SetMasterVolume(value?0.0f:volume.load()/100.0f); }
 extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivity_nativeSettings(JNIEnv *,jclass,jint vol,jint fps,jfloat dz,jfloat gain) {
     volume.store(std::clamp(int(vol),0,100)); frameLimit.store(fps==30?30:60);
     deadzone.store(std::clamp(dz,0.0f,0.5f)); sensitivity.store(std::clamp(gain,0.1f,3.0f));
@@ -77,6 +111,11 @@ extern "C" void glDrawBuffersEXT(GLsizei count,const GLenum *buffers) { glDrawBu
 
 extern "C" JNIEXPORT jboolean JNICALL Java_io_github_genissonemilio_gow2_GameActivity_nativeConsumeBack(JNIEnv *,jclass) { return backRequested.exchange(false); }
 
-void gowAndroidMovieFrame() { movieActive.store(true);movieFrames.fetch_add(1); }
+void gowAndroidMovieFrame() { if(!movieActive.exchange(true))pendingPress.store(0);movieFrames.fetch_add(1); }
 void gowAndroidMovieEnd() { movieActive.store(false); }
 extern "C" JNIEXPORT jlong JNICALL Java_io_github_genissonemilio_gow2_GameActivity_nativeMovieFrames(JNIEnv *,jclass) { return movieActive.load()?static_cast<jlong>(movieFrames.load()):-1; }
+
+extern "C" JNIEXPORT jboolean JNICALL Java_io_github_genissonemilio_gow2_GameActivity_nativeGamepadReady(JNIEnv *,jclass) { return controllerConnected.load() && controllerReady.load(); }
+extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivity_nativeControllerConnection(JNIEnv *,jclass,jboolean connected) {
+    if(controllerConnected.exchange(connected) && !connected){physicalInput.store(0x808080800000ULL);physicalPress.store(0);}
+}

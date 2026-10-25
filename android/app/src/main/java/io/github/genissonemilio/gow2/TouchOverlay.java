@@ -32,11 +32,10 @@ final class TouchOverlay extends View {
     private float radius(Control c){return getHeight()*(c.name.equals("MOVER")||c.name.equals("ESQUIVA")?.12f:.065f)*game.prefs().getInt("size",100)/100f*c.r;}
     @Override protected void onDraw(Canvas canvas){super.onDraw(canvas);float w=getWidth(),h=getHeight();
         p.setStyle(Paint.Style.FILL);p.setColor(0xAA191313);canvas.drawRoundRect(w/2-45,12,w/2+45,64,16,16,p);p.setColor(MobileUi.GOLD);p.setTextSize(30);p.setTextAlign(Paint.Align.CENTER);canvas.drawText("Ⅱ",w/2,49,p);
-        p.setColor(MobileUi.GOLD);p.setTextSize(20);canvas.drawText(String.format(java.util.Locale.ROOT,"%s: %.1f FPS",movie?"Vídeo":"Jogo",gameFps),getWidth()-105,35,p);
-        if(movie && !editing)return;
+        p.setColor(MobileUi.GOLD);p.setTextSize(20);canvas.drawText(movie && gameFps<.5f?"Vídeo":String.format(java.util.Locale.ROOT,"%s: %.1f FPS",movie?"Vídeo":"Jogo",gameFps),getWidth()-105,35,p);
         if(controller && game.prefs().getBoolean("autohide",true) && !editing)return;
         int alpha=game.prefs().getInt("opacity",65)*255/100;
-        for(Control c:controls){float x=c.x*w,y=c.y*h,r=radius(c);p.setColor((alpha<<24)|0x221718);p.setStyle(Paint.Style.FILL);canvas.drawCircle(x,y,r,p);p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(2);p.setColor(c==selected&&editing?Color.WHITE:(alpha<<24)|0xDCB870);canvas.drawCircle(x,y,r,p);p.setStyle(Paint.Style.FILL);p.setTextSize(r*(c.name.length()>2?.34f:.75f));canvas.drawText(c.name,x,y+r*.23f,p);
+        for(Control c:controls){if(movie && !editing && c.mask!=8)continue;float x=c.x*w,y=c.y*h,r=radius(c);p.setColor((alpha<<24)|0x221718);p.setStyle(Paint.Style.FILL);canvas.drawCircle(x,y,r,p);p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(2);p.setColor(c==selected&&editing?Color.WHITE:(alpha<<24)|0xDCB870);canvas.drawCircle(x,y,r,p);p.setStyle(Paint.Style.FILL);p.setTextSize(r*(c.name.length()>2?.34f:.75f));canvas.drawText(c.name,x,y+r*.23f,p);
             if(c.mask==0)for(Map.Entry<Integer,Control> owner:owners.entrySet())if(owner.getValue()==c){PointF point=points.get(owner.getKey());if(point!=null){float dx=point.x-x,dy=point.y-y,len=(float)Math.hypot(dx,dy),k=len>r?r/len:1;p.setColor((alpha<<24)|0xC2A271);canvas.drawCircle(x+dx*k,y+dy*k,r*.35f,p);}}
         }
         if(editing){p.setColor(MobileUi.GOLD);p.setTextSize(24);canvas.drawText("Arraste os controles • − / + redimensiona • Voltar salva",w/2,100,p);canvas.drawText("−",w/2-70,160,p);canvas.drawText("+",w/2+70,160,p);}
@@ -47,7 +46,7 @@ final class TouchOverlay extends View {
             if(y<75 && Math.abs(x-getWidth()/2f)<65){game.pauseMenu();return true;}
             if(editing && y>110 && y<190 && selected!=null && Math.abs(x-getWidth()/2f)<120){selected.r=clamp(selected.r+(x<getWidth()/2f?-.1f:.1f),.5f,2);invalidate();return true;}
             Control best=null;float distance=Float.MAX_VALUE;
-            for(Control c:controls){float d=(float)Math.hypot(x-c.x*getWidth(),y-c.y*getHeight());if(d<radius(c)*1.15f && d<distance && !owners.containsValue(c)){best=c;distance=d;}}
+            for(Control c:controls){if(movie && !editing && c.mask!=8)continue;float d=(float)Math.hypot(x-c.x*getWidth(),y-c.y*getHeight());if(d<radius(c)*1.15f && d<distance && !owners.containsValue(c)){best=c;distance=d;}}
             if(best!=null){owners.put(id,best);points.put(id,new PointF(x,y));selected=best;}
         } else if(action==MotionEvent.ACTION_MOVE){
             for(int i=0;i<e.getPointerCount();i++){int pointer=e.getPointerId(i);Control c=owners.get(pointer);if(c==null)continue;float px=e.getX(i),py=e.getY(i);points.put(pointer,new PointF(px,py));if(editing){c.x=clamp(px/getWidth(),.03f,.97f);c.y=clamp(py/getHeight(),.05f,.95f);}}

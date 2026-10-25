@@ -391,7 +391,13 @@ namespace vu1n
         const __m128i lim = _mm_set1_epi32(0x7F7FFFFE);
         const __m128i hot = _mm_or_si128(_mm_cmpgt_epi32(_mm_and_si128(_mm_castps_si128(p), _mm_set1_epi32(0x7FFFFFFF)), lim),
                                          _mm_cmpgt_epi32(_mm_and_si128(_mm_castps_si128(r), _mm_set1_epi32(0x7FFFFFFF)), lim));
+#if defined(USE_SSE2NEON) && defined(__aarch64__)
+        // hot contains only all-zero/all-one comparison lanes. Reduce directly
+        // rather than emulate SSE's sixteen-bit mask to test whether it is zero.
+        if (vmaxvq_u32(vreinterpretq_u32_s64(hot)) == 0)
+#else
         if (_mm_movemask_epi8(hot) == 0)
+#endif
             return r;
         return maddWide<Sub>(acc, a, b);
     }

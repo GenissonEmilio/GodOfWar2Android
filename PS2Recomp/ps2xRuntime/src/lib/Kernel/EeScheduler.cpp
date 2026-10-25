@@ -1943,6 +1943,15 @@ void EeScheduler::processDueDeadlines()
         {
             if (scheduled.event.type == EeEventType::VBlankStart)
             {
+#if defined(__ANDROID__)
+                // A slow scene or a suspended Activity must not accumulate host
+                // pacing debt: the next cheap scene (notably FMV) would consume
+                // that debt by playing faster than real time. Re-anchor the
+                // field grid after a missed field; guest cycles stay unchanged.
+                const auto wallNow = std::chrono::steady_clock::now();
+                if (wallNow - scheduled.hostDeadline > kVBlankPeriod * 2)
+                    scheduled.hostDeadline = wallNow;
+#endif
                 // GOW-Port: GOW_VBLANK_DIAG=1 prints the guest VBlank rate and how far the host deadline lags
                 // behind the wall clock (a lag means VBlanks are cycle-paced and can run faster than 60 Hz).
                 static const bool vblankDiag = std::getenv("GOW_VBLANK_DIAG") != nullptr;

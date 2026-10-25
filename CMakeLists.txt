@@ -41,3 +41,6 @@ set_source_files_properties(${GOW_NATIVE_SOURCES} overrides/gow2_overrides.cpp n
 # Preserve the VU multiply/add rounding boundaries when translating SSE to NEON.
 set_source_files_properties(${GOW_NATIVE_SOURCES} TARGET_DIRECTORY ps2EntryRunner
     PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
+
+# All game/runtime calls resolve inside this self-contained native library.
+target_link_options(ps2EntryRunner PRIVATE "-Wl,-Bsymbolic-functions")

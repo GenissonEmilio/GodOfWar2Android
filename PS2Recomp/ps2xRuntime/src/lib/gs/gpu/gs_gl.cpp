@@ -210,7 +210,7 @@ namespace
         load(a.DepthFunc, "glDepthFunc", hwMissing);
         load(a.ClearColor, "glClearColor", hwMissing);
 #if defined(__ANDROID__)
-        a.ClearDepth = [](double depth) { auto fn = reinterpret_cast<void (*)(float)>(eglGetProcAddress("glClearDepthf")); fn(static_cast<float>(depth)); };
+        a.ClearDepth = [](double depth) { static const auto fn = reinterpret_cast<void (*)(float)>(eglGetProcAddress("glClearDepthf")); fn(static_cast<float>(depth)); };
 #else
         load(a.ClearDepth, "glClearDepth", hwMissing);
 #endif
