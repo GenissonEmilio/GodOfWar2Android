@@ -405,6 +405,20 @@ e reutilizadas. Reabra o processo ao alterá-lo e remova-o ao terminar os testes
   na apresentação. Os três ciclos EGL passaram com fetch e com cópias, nos
   modos rápido, genérico e com descarte: 18 execuções, sem erros GL.
 
+## Caminho sem textura sem framebuffer fetch
+
+- Foi adicionado um programa simples de cor para lotes sem textura que não
+  precisam ler o destino nem descartar fragmentos. Não declara entrada de
+  framebuffer fetch. O shader geral continua atendendo texturas, blend por
+  shader, DATE, Z alias e testes de alfa que descartam fragmentos.
+- Os pixels passaram com o programa simples e com o geral, nos dois caminhos
+  GLES e em três ciclos EGL. O teste inclui cinco incrementos e três decrementos
+  de contagem de sombra (G=127 → 129), rejeição por Alpha NEVER e DATE, além das
+  regressões de paleta, inicialização, profundidade e repetição de texturas.
+- Os contadores não calculam o recorte de triângulos quando o experimento está
+  desligado. O arquivo `perf-simple-off` seleciona somente o programa geral na
+  próxima abertura, para comparação. A medição no jogo ainda está em andamento.
+
 ## Critérios restantes
 
 - Desempenho de combate estável e correção visual em outras áreas e shaders.

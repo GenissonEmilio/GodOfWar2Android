@@ -278,6 +278,22 @@ static int runEpoch(int epoch){
         return true;
     };
     ok=checkRepeated(rawRepeat,false)&&checkRepeated(rawFiltered,true)&&ok;
+    auto counting=batch;counting.state.context.frame.fbp=32;
+    counting.state.context.frame.fbmsk=0xffff00ff;counting.state.context.test=0;
+    counting.state.prim.abe=true;counting.state.colclamp=0;
+    counting.state.context.alpha=0x8000000068ULL;
+    backend.ClearFramebuffer(counting.state.context,0x807f7f7f);
+    for(auto &v:counting.vertices){v.r=0;v.g=1;v.b=0;v.a=128;}
+    for(unsigned i=0;i<5;++i)backend.Submit(counting);backend.Flush();
+    for(auto &v:counting.vertices)v.g=255;
+    for(unsigned i=0;i<3;++i)backend.Submit(counting);backend.Flush();
+    request.dispfb1=32|(1ULL<<9);
+    ok=pixel(backend.Present(request),127,129,127)&&ok;
+    counting.state.context.test=1; // Alpha NEVER must retain the general discard path.
+    backend.Submit(counting);backend.Flush();ok=pixel(backend.Present(request),127,129,127)&&ok;
+    counting.state.context.test=1ULL<<14; // DATE=1, DATM=0 rejects stored alpha >=128.
+    backend.Submit(counting);backend.Flush();ok=pixel(backend.Present(request),127,129,127)&&ok;
+    request.dispfb1=16|(1ULL<<9);
     GSPrimitiveBatch triangles=batch;triangles.vertexCount=3;
     triangles.state.prim.type=GS_PRIM_TRIANGLE;triangles.state.prim.tme=false;
     for(unsigned i=0;i<3;++i){triangles.vertices[i].x=-128.0f+(i==1?16.0f:0.0f);triangles.vertices[i].y=-128.0f+(i==2?16.0f:0.0f);triangles.vertices[i].z=123456;}

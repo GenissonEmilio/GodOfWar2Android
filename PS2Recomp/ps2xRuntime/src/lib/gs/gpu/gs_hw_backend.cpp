@@ -389,6 +389,23 @@ void main()
 }
 )";
 
+    // No framebuffer-fetch input or discard. Fixed-function colour/depth/blend
+    // passes can use the ordinary early-test pipeline instead of the full GS shader.
+    const char *kSimpleFs = R"(#version 430 core
+noperspective in vec4 vCol;
+flat in vec4 vColFlat;
+uniform int uIip;
+uniform float uBlendScale;
+layout(location = 0, index = 0) out vec4 oSimpleColor;
+layout(location = 0, index = 1) out vec4 oBlend;
+void main()
+{
+    vec4 c = uIip != 0 ? vCol : vColFlat;
+    oSimpleColor = c / 255.0;
+    oBlend = vec4(min(c.a * uBlendScale, 1.0));
+}
+)";
+
     // Channel shuffle: the game moves bytes between the colour channels of a 32 bit target (or out of the Z buffer) by drawing
     // 8 px sprites through a 16 bit view of that memory. In a 16 bit view, the two 8 px halves of each 16 px column group are
     // the low and high halfwords of the same 8 owner pixels, so every such sprite is a halfword move between owner pixels:
@@ -548,6 +565,8 @@ struct GSHwBackend::Impl
 
     float scale = 2.0f;
     GLuint program = 0, vao = 0, vbo = 0;
+    GLuint simpleProgram = 0;
+    std::array<GLint,4> simpleLoc{-1,-1,-1,-1};
     GLint locInvSize = -1, locTex = -1, locTexSize = -1, locTexDim = -1, locTme = -1, locFst = -1, locTfx = -1, locTcc = -1, locIip = -1,
           locAte = -1, locFailTint = -1, locAtst = -1, locAref = -1, locPass = -1, locBlendScale = -1, locRtTex24 = -1, locRtClamp = -1, locPxScale = -1, locTa0 = -1, locTa1 = -1, locReinterp = -1, locDate = -1, locDatm = -1, locDest = -1, locZTex = -1, locZMax = -1, locTables = -1, locRtColor = -1, locPalette = -1, locTexFmt = -1, locTexFmt2 = -1,
           locRtFmt = -1, locRtFmt2 = -1, locTex0 = -1, locRtPx = -1, locAem = -1;
@@ -641,6 +660,7 @@ struct GSHwBackend::Impl
     struct Stats
     {
         uint64_t triangles = 0, outsideTriangles = 0, degenerateTriangles = 0;
+        uint64_t simpleBatches = 0;
         uint64_t shuffles = 0;
         uint64_t presents = 0, reusedPresents = 0;
         uint64_t draws = 0, batches = 0, skippedPsm = 0, unsupportedBlend = 0, texDecodes = 0, texHits = 0, skippedPrim = 0;
@@ -789,6 +809,24 @@ struct GSHwBackend::Impl
         locSwBlend = loc("uSwBlend"); locColClamp = loc("uColClamp"); locAbcd = loc("uAbcd"); locFix = loc("uFix");
         locZAlias = loc("uZAlias"); locZAliasWrite = loc("uZAliasWrite"); locZAliasMax = loc("uZAliasMax");
         locRtTex24 = loc("uRtTex24"); locRtClamp = loc("uRtClamp"); locPxScale = loc("uPxScale"); locTa0 = loc("uTa0"); locTa1 = loc("uTa1"); locAem = loc("uAem");
+
+        if(!std::getenv("GOW_GLES_SIMPLE_OFF")){
+            const GLuint sf=compile(GSGL::kFragmentShader,kSimpleFs);
+            if(sf){
+                simpleProgram=g.CreateProgram();g.AttachShader(simpleProgram,v);g.AttachShader(simpleProgram,sf);g.LinkProgram(simpleProgram);
+                GLint linked=0;g.GetProgramiv(simpleProgram,kLinkStatus,&linked);
+                if(linked){
+                    const char *names[]{"uInvSize","uZInverted","uIip","uBlendScale"};
+                    for(unsigned i=0;i<4;++i)simpleLoc[i]=g.GetUniformLocation(simpleProgram,names[i]);
+                }else{
+                    char log[1024];GLsizei count=0;g.GetProgramInfoLog(simpleProgram,sizeof(log),&count,log);
+                    std::fprintf(stderr,"[gs-simple] link failed, retaining general shader: %s\n",log);
+                    g.DeleteProgram(simpleProgram);simpleProgram=0;
+                }
+                g.DeleteShader(sf);
+            }
+            std::fprintf(stderr,"[gs-simple] untextured fixed-function path: %s\n",simpleProgram?"active":"unavailable");
+        }
 
         g.GenVertexArrays(1, &vao);
         g.BindVertexArray(vao);
@@ -1839,10 +1877,12 @@ struct GSHwBackend::Impl
         const bool line = type == GS_PRIM_LINE || type == GS_PRIM_LINESTRIP;
         if(tri && b.vertexCount==3 && (triangleCulling || statsEnabled)){
             ++stats.triangles;
-            const auto clipped=gsTriangleCull(s,b.vertices);
-            stats.outsideTriangles+=clipped==GSTriangleCull::Outside;
-            stats.degenerateTriangles+=clipped==GSTriangleCull::Degenerate;
-            if(triangleCulling && clipped!=GSTriangleCull::Keep){++stats.draws;return;}
+            if(triangleCulling){
+                const auto clipped=gsTriangleCull(s,b.vertices);
+                stats.outsideTriangles+=clipped==GSTriangleCull::Outside;
+                stats.degenerateTriangles+=clipped==GSTriangleCull::Degenerate;
+                if(clipped!=GSTriangleCull::Keep){++stats.draws;return;}
+            }
         }
         if (!tri && !sprite && !line)
         {
@@ -2252,9 +2292,21 @@ struct GSHwBackend::Impl
         else
             g.Disable(kBlend);
 
+        const bool date = ((c.test >> 14) & 1u) != 0u && c.frame.psm != GS_PSM_CT24;
+        const bool ate = (c.test & 1u) != 0u;
+        const uint32_t atst = static_cast<uint32_t>((c.test >> 1) & 7u), aref = static_cast<uint32_t>((c.test >> 4) & 0xFFu);
+        const uint32_t afail = static_cast<uint32_t>((c.test >> 12) & 3u);
+        const bool simple = simpleProgram && !s.prim.tme && !s.prim.fge && !s.pabe && !softBlend && !zAlias && !date &&
+                            (!ate || (atst==1u && afail==0u));
+        if(simple){
+            g.UseProgram(simpleProgram);
+            g.Uniform2f(simpleLoc[0],1.0f/rt.pxW,1.0f/rt.pxH);
+            g.Uniform1i(simpleLoc[1],zInv?1:0);g.Uniform1i(simpleLoc[2],s.prim.iip?1:0);
+            g.Uniform1f(simpleLoc[3],1.0f/128.0f);
+            ++stats.simpleBatches;
+        }else{
         g.UseProgram(program);
         {
-            const bool date = ((c.test >> 14) & 1u) != 0u && c.frame.psm != GS_PSM_CT24;
             g.Uniform1i(locDate, date ? 1 : 0);
             g.Uniform1i(locDatm, ((c.test >> 15) & 1u) != 0u ? 1 : 0);
             const uint64_t al = c.alpha;
@@ -2360,19 +2412,19 @@ struct GSHwBackend::Impl
             else
                 g.Uniform2f(locTexSize, static_cast<float>(tex.width), static_cast<float>(tex.height));
         }
+        }
         g.BindVertexArray(vao);
         g.BindBuffer(kArrayBuffer, vbo);
         g.BufferData(kArrayBuffer, static_cast<GLsizeiptr>(dverts.size() * sizeof(HwVertex)), dverts.data(), kStreamDraw);
 
-        const bool ate = (c.test & 1u) != 0u;
-        const uint32_t atst = static_cast<uint32_t>((c.test >> 1) & 7u), aref = static_cast<uint32_t>((c.test >> 4) & 0xFFu);
-        const uint32_t afail = static_cast<uint32_t>((c.test >> 12) & 3u);
+        if(!simple){
         g.Uniform1i(locAte, ate ? 1 : 0);
         g.Uniform1i(locAtst, static_cast<GLint>(atst));
         g.Uniform1i(locAref, static_cast<GLint>(aref));
         static const bool forceNoTest = std::getenv("GOW_GS_HW_NOATEST") != nullptr;
         g.Uniform1i(locPass, (ate && !forceNoTest) ? 1 : 0);
         g.Uniform1i(locFailTint, 0);
+        }
         static const int traceAt = std::getenv("GOW_GS_HW_DEPTHTRACE") ? std::atoi(std::getenv("GOW_GS_HW_DEPTHTRACE")) : -1;
         const bool tracing = traceAt >= 0 && presentCount >= traceAt && presentCount < traceAt + 1 && rt.depth && rt.fbp == 0;
         const auto depthStats = [&](const char *when)
@@ -2576,11 +2628,12 @@ struct GSHwBackend::Impl
         if (now - stats.last < std::chrono::seconds(5))
             return;
         stats.last = now;
-        std::fprintf(stderr, "[gs-hw] shuffles=%llu draws=%llu batches=%llu texDecodes=%llu texHits=%llu skippedPsm=%llu skippedPrim=%llu unsupportedBlend=%llu textures=%zu presents=%llu reusedPresents=%llu triangles=%llu outside=%llu degenerate=%llu\n",
+        std::fprintf(stderr, "[gs-hw] shuffles=%llu draws=%llu batches=%llu texDecodes=%llu texHits=%llu skippedPsm=%llu skippedPrim=%llu unsupportedBlend=%llu textures=%zu presents=%llu reusedPresents=%llu triangles=%llu outside=%llu degenerate=%llu simple=%llu\n",
                      (unsigned long long)stats.shuffles, (unsigned long long)stats.draws, (unsigned long long)stats.batches, (unsigned long long)stats.texDecodes,
                      (unsigned long long)stats.texHits, (unsigned long long)stats.skippedPsm, (unsigned long long)stats.skippedPrim,
                      (unsigned long long)stats.unsupportedBlend, textures.size(),(unsigned long long)stats.presents,(unsigned long long)stats.reusedPresents,
-                     (unsigned long long)stats.triangles,(unsigned long long)stats.outsideTriangles,(unsigned long long)stats.degenerateTriangles);
+                     (unsigned long long)stats.triangles,(unsigned long long)stats.outsideTriangles,(unsigned long long)stats.degenerateTriangles,(unsigned long long)stats.simpleBatches);
+        stats.simpleBatches=0;
         stats.triangles=stats.outsideTriangles=stats.degenerateTriangles=0;
         stats.presents=stats.reusedPresents=0;
         stats.shuffles = stats.draws = stats.batches = stats.texDecodes = stats.texHits = stats.skippedPsm = stats.skippedPrim = stats.unsupportedBlend = 0;
