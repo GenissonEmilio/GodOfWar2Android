@@ -16,6 +16,9 @@ static bool gowUsePcsx2Vu1(); // GOW_VU1_PCSX2=1, defined before PS2Runtime::ini
 #include "runtime/ee_scheduler.h"
 #include "ThreadNaming.h"
 #include "ThreadPriority.h"
+#if defined(__ANDROID__)
+#include "android_bridge.h"
+#endif
 #include "Kernel/Stubs/Audio.h"
 #include "Kernel/Stubs/GS.h"
 #include "Kernel/Stubs/MPEG.h"
@@ -67,6 +70,11 @@ namespace
     void spu2AudioCallback(void *buffer, unsigned int frames)
     {
         int16_t *out = static_cast<int16_t *>(buffer);
+#if defined(__ANDROID__)
+        // Freeze the audio queue with the guest clock; muting alone consumes
+        // queued movie samples while its video is paused.
+        if(gowAndroidPaused()) { std::fill_n(out,static_cast<size_t>(frames)*2u,int16_t{0}); return; }
+#endif
         size_t produced = 0u;
         if (ps2x::iop::IopSubsystem *source = g_spu2AudioSource.load(std::memory_order_acquire))
             produced = source->drainAudio(out, frames, kSpu2MaxLatencyFrames);

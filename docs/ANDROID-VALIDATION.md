@@ -3,7 +3,7 @@
 Status: em desenvolvimento. Nenhuma declaração de campanha completa ou de
 paridade de experiência com Black Android foi estabelecida.
 
-Data dos testes: 24 de outubro de 2026 (America/Fortaleza).
+Data dos testes: 24 e 25 de outubro de 2026 (America/Fortaleza).
 
 ## Ambiente observado
 
@@ -124,6 +124,27 @@ Data dos testes: 24 de outubro de 2026 (America/Fortaleza).
   foi desativada novamente. No vídeo, o contador manteve 30 FPS.
 - Em um snapshot durante o vídeo, dumpsys registrou aproximadamente 309 MiB PSS,
   372 MiB RSS e 71 MiB de swap. Não são medidas de pico nem de uma sessão longa.
+
+## Encerramento e novas sessões
+
+- O teste de sair pelo menu revelou uma espera infinita do loop raylib após
+  APP_CMD_DESTROY. A espera durante o encerramento agora tem limite; o bloqueio
+  normal de segundo plano foi preservado.
+- O caminho Android retorna de main, permitindo o retorno ao launcher. O logger
+  é reutilizado entre sessões, e o limite de FPS é reaplicado na nova janela.
+- Foi corrigida a ordem de encerramento de áudio do raylib 5.5 em uma cópia no
+  diretório de build: o dispositivo AAudio para antes da destruição do mutex.
+  O checkout raylib compartilhado com a base PC não foi alterado.
+- Os recursos de apresentação compartilhada são destruídos com o contexto EGL;
+  isso corrigiu a imagem magenta na segunda abertura.
+- Três aberturas sucessivas no mesmo processo exibiram o menu original com imagem.
+  As duas saídas intermediárias retornaram ao launcher, e o áudio foi fechado sem
+  o erro de mutex destruído observado antes da correção.
+- O teste de pixels de produção agora recria três grupos EGL completos e verifica
+  também os pixels da textura compartilhada. Os três ciclos passaram tanto com
+  EXT framebuffer fetch quanto no fallback por cópias, sem erros GL.
+- A pausa agora deixa de consumir a fila de áudio, além de silenciar a saída;
+  isso mantém a fila junto do relógio congelado do jogo.
 
 ## Critérios restantes
 

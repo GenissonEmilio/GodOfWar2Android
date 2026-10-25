@@ -70,6 +70,11 @@ void Context::DestroyWorker(void *ptr) {
     eglDestroySurface(w->display,w->surface); eglDestroyContext(w->display,w->context); delete w;
 }
 void Context::Destroy() {
+    if(m_window && m_api.DeleteSync && m_api.DeleteTextures && m_api.DeleteBuffers) {
+        auto *worker=static_cast<EglWorker *>(m_window);
+        if(eglGetCurrentContext()==worker->context || MakeWorkerCurrent(worker))
+            DestroyShared(m_api); // Fences and texture IDs belong to this EGL share group.
+    }
     DestroyWorker(m_window); m_window=nullptr; m_context=nullptr; m_api={}; m_shared=false;
 }
 }

@@ -9,15 +9,16 @@
 #include <cstdlib>
 #include <filesystem>
 #include <unistd.h>
+#include <android/looper.h>
 namespace {
 std::atomic<uint64_t> input{0x808080800000ULL};
 std::atomic<uint16_t> pendingPress{0}, physicalPress{0};
 std::atomic<uint64_t> physicalInput{0x808080800000ULL};
-std::atomic<bool> paused{false},backRequested{false},asyncFinish{false};
+std::atomic<bool> paused{false},backRequested{false},asyncFinish{false},shuttingDown{false};
 std::atomic<bool> controllerConnected{false},controllerReady{false};
 std::atomic<bool> movieActive{false};
 std::atomic<uint64_t> movieFrames{0};
-std::atomic<int> volume{80}, frameLimit{60};
+std::atomic<int> volume{80}, frameLimit{60}, appliedLimit{-1};
 std::atomic<int> screenMode{0};
 std::atomic<float> deadzone{0.14f}, sensitivity{1.0f};
 uint8_t axis(float v) {
@@ -27,7 +28,7 @@ uint8_t axis(float v) {
     return static_cast<uint8_t>(std::clamp(128+int(v*127),1,255));
 }
 }
-bool gowAndroidPaused() { return paused.load(); }
+bool gowAndroidPaused() { return paused.load() || shuttingDown.load(); }
 bool gowAndroidAsyncFinish() { return asyncFinish.load(); }
 void gowAndroidReadPad(uint8_t *data) {
     uint64_t state=input.load()|pendingPress.exchange(0);
@@ -49,10 +50,9 @@ void gowAndroidReadPad(uint8_t *data) {
     for (int i=0;i<12;++i) data[8+i]=(~buttons&bits[i])?255:0;
 }
 void gowAndroidFrame() {
-    SetMasterVolume(paused.load()?0.0f:volume.load()/100.0f);
-    static int appliedLimit=-1;
+    SetMasterVolume(gowAndroidPaused()?0.0f:volume.load()/100.0f);
     const int wanted=frameLimit.load();
-    if (wanted!=appliedLimit) {SetTargetFPS(wanted);appliedLimit=wanted;}
+    if (appliedLimit.exchange(wanted)!=wanted)SetTargetFPS(wanted);
     // Read raylib only on its host/input thread. The EE thread consumes an
     // atomic DualShock snapshot, including short press edges and pressure bytes.
     int slot=-1;for(int i=0;i<4;++i)if(IsGamepadAvailable(i)){slot=i;break;}
@@ -77,7 +77,7 @@ void gowAndroidFrame() {
 }
 extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivity_nativeConfigure(JNIEnv *env,jclass,jstring path,jint scale) {
     input.store(0x808080800000ULL);physicalInput.store(0x808080800000ULL);
-    pendingPress.store(0);physicalPress.store(0);paused.store(false);backRequested.store(false);
+    pendingPress.store(0);physicalPress.store(0);paused.store(false);backRequested.store(false);shuttingDown.store(false);appliedLimit.store(-1);
     controllerConnected.store(false);controllerReady.store(false);movieActive.store(false);movieFrames.store(0);
     const char *p=env->GetStringUTFChars(path,nullptr);
     std::filesystem::create_directories(std::string(p)+"/memcards"); chdir(p);
@@ -98,7 +98,7 @@ extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivit
     const auto previous=input.exchange(state);
     pendingPress.fetch_or(static_cast<uint16_t>(state & ~previous));
 }
-extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivity_nativePause(JNIEnv *,jclass,jboolean value) { paused.store(value); input.store(0x808080800000ULL); pendingPress.store(0); physicalPress.store(0); if (IsAudioDeviceReady()) SetMasterVolume(value?0.0f:volume.load()/100.0f); }
+extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivity_nativePause(JNIEnv *,jclass,jboolean value) { paused.store(value); input.store(0x808080800000ULL); pendingPress.store(0); physicalPress.store(0); if (IsAudioDeviceReady()) SetMasterVolume(gowAndroidPaused()?0.0f:volume.load()/100.0f); }
 extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivity_nativeSettings(JNIEnv *,jclass,jint vol,jint fps,jfloat dz,jfloat gain,jboolean graphicsAsync) {
     volume.store(std::clamp(int(vol),0,100)); frameLimit.store(fps==30?30:60);asyncFinish.store(graphicsAsync);
     deadzone.store(std::clamp(dz,0.0f,0.5f)); sensitivity.store(std::clamp(gain,0.1f,3.0f));
@@ -120,3 +120,14 @@ extern "C" JNIEXPORT jboolean JNICALL Java_io_github_genissonemilio_gow2_GameAct
 extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivity_nativeControllerConnection(JNIEnv *,jclass,jboolean connected) {
     if(controllerConnected.exchange(connected) && !connected){physicalInput.store(0x808080800000ULL);physicalPress.store(0);}
 }
+
+// raylib 5.5 sets Window.shouldClose on APP_CMD_DESTROY, but then polls
+// indefinitely once more while unfocused. NativeActivity.onDestroy waits for
+// that native thread. Bound only shutdown waits so normal background blocking
+// remains intact. --wrap applies this adapter only inside our library.
+extern "C" int __real_ALooper_pollOnce(int,int*,int*,void**);
+extern "C" int __wrap_ALooper_pollOnce(int timeout,int *fd,int *events,void **data) {
+    if(shuttingDown.load() && timeout<0)timeout=16;
+    return __real_ALooper_pollOnce(timeout,fd,events,data);
+}
+extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivity_nativeBeginShutdown(JNIEnv*,jclass) { shuttingDown.store(true); }

@@ -52,6 +52,9 @@ namespace
 
     void redirectStdioToLogcat()
     {
+        // The logger belongs to the process, which can host several game
+        // Activities. Assigning a new thread over the live logger terminates.
+        if (g_logcatThread.joinable()) return;
         if (pipe(g_logcatPipeFds) != 0)
         {
             return;
@@ -244,7 +247,11 @@ int main(int argc, char *argv[])
 #endif
         std::cout.flush();
         std::cerr.flush();
+#if defined(__ANDROID__)
+        return 0; // NativeActivity must unwind and return to its Java launcher.
+#else
         std::_Exit(0);
+#endif
     }
     catch (const std::exception &e)
     {
@@ -257,5 +264,9 @@ int main(int argc, char *argv[])
 
     std::cout.flush();
     std::cerr.flush();
+#if defined(__ANDROID__)
+    return 1;
+#else
     std::_Exit(1);
+#endif
 }

@@ -13,7 +13,8 @@ static bool pixel(const PresentationFrame &frame,int r,int g,int b,unsigned x=16
     std::printf("pixel %u,%u,%u expected %d,%d,%d; %ux%u\n",frame.pixels[at],frame.pixels[at+1],frame.pixels[at+2],r,g,b,frame.width,frame.height);
     return std::abs(int(frame.pixels[at])-r)<=2 && std::abs(int(frame.pixels[at+1])-g)<=2 && std::abs(int(frame.pixels[at+2])-b)<=2;
 }
-int main(){
+static int runEpoch(int epoch){
+    std::printf("EGL lifetime %d\n",epoch);
     setenv("PS2X_GS_HW_SCALE","1",1);
     EGLDisplay display=eglGetDisplay(EGL_DEFAULT_DISPLAY);EGLint count=0;
     if(!eglInitialize(display,nullptr,nullptr))return 10;
@@ -24,7 +25,8 @@ int main(){
     if(!eglMakeCurrent(display,surface,surface,ctx))return 12;
     std::printf("%s / %s\n",glGetString(GL_RENDERER),glGetString(GL_VERSION));
     GSSharedPresent::CaptureHostContext();
-    std::vector<uint8_t> vram(4u*1024u*1024u);GSHwBackend backend;backend.Initialize(vram.data(),vram.size());
+    std::vector<uint8_t> vram(4u*1024u*1024u);bool ok=true;
+    { GSHwBackend backend;backend.Initialize(vram.data(),vram.size());
     if(!backend.UsesSharedPresentation())return 13;
     GSPrimitiveBatch batch;batch.vertexCount=2;batch.state.prim.type=GS_PRIM_SPRITE;batch.state.colclamp=1;
     batch.state.context.frame.fbw=1;batch.state.context.scissor={0,63,0,63};batch.state.context.zbuf.zbp=64;batch.state.context.zbuf.zmask=true;
@@ -36,7 +38,7 @@ int main(){
     auto frame=backend.Present(request);
     size_t nonzero=0;for(size_t i=0;i<frame.pixels.size();i+=4)nonzero+=frame.pixels[i]>0;
     printf("nonzero red %zu/%zu\n",nonzero,frame.pixels.size()/4);
-    bool ok=pixel(frame,200,100,40);
+    ok=pixel(frame,200,100,40);
     batch.state.prim.abe=true;batch.state.context.alpha=0 | (1ULL<<2) | (0ULL<<4) | (1ULL<<6);
     for(auto &v:batch.vertices){v.r=100;v.g=200;v.b=80;v.a=64;}
     backend.Submit(batch);backend.Flush();
@@ -48,6 +50,23 @@ int main(){
     shuffle.vertices[0].u=0;shuffle.vertices[0].v=0;shuffle.vertices[1].u=128;shuffle.vertices[1].v=128;
     backend.Submit(shuffle);backend.Flush();
     ok=pixel(backend.Present(request),150,150,150,4,4)&&ok;
-    std::printf("Production GLES raster, shader blend and channel shuffle: %s (GL error %x)\n",ok?"PASS":"FAIL",glGetError());
+    request.forceReadback=false;backend.Present(request);glFinish();
+    GSSharedPresent::Frame shared;
+    if(!GSSharedPresent::Acquire(shared) || !shared.texture)ok=false;
+    else {
+        GLuint fbo=0;glGenFramebuffers(1,&fbo);glBindFramebuffer(GL_FRAMEBUFFER,fbo);
+        glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,shared.texture,0);
+        unsigned char px[4]{};glReadPixels(4,4,1,1,GL_RGBA,GL_UNSIGNED_BYTE,px);
+        std::printf("shared pixel %u,%u,%u\n",px[0],px[1],px[2]);
+        for(int i=0;i<3;++i)ok=std::abs(int(px[i])-150)<=2 && ok;
+        glDeleteFramebuffers(1,&fbo);
+    }
+    const auto error=glGetError();ok=(error==GL_NO_ERROR)&&ok;
+    std::printf("Production GLES raster, blend, shuffle and shared presentation: %s (GL error %x)\n",ok?"PASS":"FAIL",error);
+    } // Destroy shared textures/fences before terminating this EGL share group.
+    GSSharedPresent::RestoreHostContext();GSSharedPresent::ShutdownHost();
+    eglMakeCurrent(display,EGL_NO_SURFACE,EGL_NO_SURFACE,EGL_NO_CONTEXT);
+    eglDestroyContext(display,ctx);eglDestroySurface(display,surface);eglTerminate(display);
     return ok?0:20;
 }
+int main(){for(int epoch=1;epoch<=3;++epoch){const int code=runEpoch(epoch);if(code)return code;}return 0;}
