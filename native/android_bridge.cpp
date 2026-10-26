@@ -118,7 +118,7 @@ void gowAndroidFrame() {
         if(key==KEY_BACK || key==KEY_ESCAPE)backRequested.store(true);
     SetExitKey(KEY_NULL);
 }
-extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivity_nativeConfigure(JNIEnv *env,jclass,jstring path,jint scale,jboolean parallel) {
+extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivity_nativeConfigure(JNIEnv *env,jclass,jstring path,jint scale,jboolean parallel,jboolean presentation720) {
     input.store(0x808080800000ULL);physicalInput.store(0x808080800000ULL);
     pendingPress.store(0);physicalPress.store(0);paused.store(false);backRequested.store(false);shuttingDown.store(false);appliedLimit.store(-1);
     controllerConnected.store(false);controllerReady.store(false);movieActive.store(false);movieFrames.store(0);
@@ -133,6 +133,7 @@ extern "C" JNIEXPORT void JNICALL Java_io_github_genissonemilio_gow2_GameActivit
     setenv("PS2X_GS_PIPELINE",parallel?"1":"0",1);
     setenv("GOW_PERF_FRAME_PC","0x14E380",1);
     const bool diagnostic=std::filesystem::exists(std::string(p)+"/perf-diagnostics");
+    if(presentation720 || std::filesystem::exists(std::string(p)+"/perf-present-720"))setenv("GOW_WINDOW","1280x720",1);else unsetenv("GOW_WINDOW");
     const bool counters=std::filesystem::exists(std::string(p)+"/perf-counters");
     if(std::filesystem::exists(std::string(p)+"/perf-vif-quad-off"))setenv("GOW_VIF_QUAD_OFF","1",1);else unsetenv("GOW_VIF_QUAD_OFF");
     if(std::filesystem::exists(std::string(p)+"/perf-vif-only"))setenv("GOW_VIF_STATS","1",1);else unsetenv("GOW_VIF_STATS");

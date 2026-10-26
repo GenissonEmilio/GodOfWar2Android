@@ -36,6 +36,8 @@ estão em [docs/VU-PROFILE.md](docs/VU-PROFILE.md).
 - Opção experimental para priorizar quatro núcleos de desempenho quando disponíveis,
   com restauração da afinidade anterior ao desativá-la. Vem desativada.
 - Resolução interna 1×, 2× ou 3× aplicada ao reiniciar o jogo.
+- Apresentação opcional em 720p, aplicada ao reabrir o jogo, com controles touch
+  na resolução da interface Android. A resolução interna do PS2 é independente.
 - Entrada de controles Android por eixos, gatilhos e botões; ocultação automática
   do touch. Contador baseado nos frames do jogo.
 - Saves em cartão virtual dentro da pasta do app e pausa ao ir para segundo plano.

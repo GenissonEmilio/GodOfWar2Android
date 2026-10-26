@@ -6,7 +6,7 @@ import android.view.*;
 import android.widget.*;
 public final class GameActivity extends NativeActivity {
     static { System.loadLibrary("ps2EntryRunner"); }
-    static native void nativeConfigure(String directory,int scale,boolean parallel);
+    static native void nativeConfigure(String directory,int scale,boolean parallel,boolean presentation720);
     static native void nativeInput(int buttons,float lx,float ly,float rx,float ry);
     static native void nativePause(boolean paused);
     static native void nativeBeginShutdown();
@@ -39,7 +39,7 @@ public final class GameActivity extends NativeActivity {
     private int padButtons; private float lx,ly,rx,ry; private boolean controller;
     android.content.SharedPreferences prefs(){return getSharedPreferences("mobile",0);}
     @Override public void onCreate(Bundle state){
-        nativeConfigure(getExternalFilesDir(null).getAbsolutePath(),prefs().getInt("scale",1),prefs().getBoolean("graphicsParallel",false));
+        nativeConfigure(getExternalFilesDir(null).getAbsolutePath(),prefs().getInt("scale",1),prefs().getBoolean("graphicsParallel",false),prefs().getBoolean("presentation720",false));
         super.onCreate(state);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN|View.SYSTEM_UI_FLAG_HIDE_NAVIGATION|View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY|View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN|View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION|View.SYSTEM_UI_FLAG_LAYOUT_STABLE);

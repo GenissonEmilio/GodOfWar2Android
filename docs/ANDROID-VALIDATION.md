@@ -3,13 +3,15 @@
 Status: em desenvolvimento. Nenhuma declaração de campanha completa ou de
 paridade de experiência com Black Android foi estabelecida.
 
-Data dos testes: 24 e 25 de outubro de 2026 (America/Fortaleza).
+Data dos testes: 24 a 26 de outubro de 2026 (America/Fortaleza).
 
 O opt40 reduziu a retenção de memória e incorporou IR-PGO na VU. Na primeira
 luta, duas rodadas de cinco minutos tiveram medianas **24,537** e **22,389 FPS**,
 com mínimos de **19,428** e **20,772 FPS**, respectivamente. Ainda há quedas
 abaixo de 22 FPS com o aparelho aquecido; a faixa de 22–24 sustentados não está
-comprovada. Também não há comprovação de 30 FPS sustentados nem de campanha sem
+comprovada em combate com ataques. Uma rodada posterior em 720p manteve
+22,373–24,000 FPS por cinco minutos defendendo, mas voltou a cair durante golpes.
+Também não há comprovação de 25/30 FPS sustentados nem de campanha sem
 defeitos visuais. Os detalhes das rodadas estão no final deste documento.
 
 ## Ambiente observado
@@ -792,3 +794,44 @@ streaming GLES já haviam passado com o mesmo renderizador. As capturas da sala
 foram inspecionadas sem nova corrupção observada em modelos/texturas; sombras
 escuras preexistentes ainda precisam de comparação com uma referência PS2.
 Não há declaração de ausência de defeitos na campanha.
+
+
+### Limite de 24 FPS e apresentação 720p (opt41–opt45)
+
+O limitador passou a oferecer 24/30/60 FPS, com 30 como padrão. Em 24 FPS,
+o relógio do jogo usa 41,667 ms e a apresentação dos vídeos conserva a meta de
+30 FPS. O probe verificou 200.000 prazos em 24/30 FPS, transições, quadros lentos
+e pausa/retomada. O vídeo manteve apresentação de aproximadamente 30 Hz no aparelho.
+Os 24 testes Python e o importador Java passaram; o CI de `916ca6d` passou.
+
+O limite de 24 sozinho não comprovou estabilidade: 60 janelas de aproximadamente
+5 s tiveram mediana 23,213, faixa 20,472–23,971 FPS e 12 janelas abaixo de 22.
+Fixar cada worker em um núcleo também falhou: em 11 janelas válidas antes de
+encerrar esse ensaio, houve 21,431–23,779 FPS, mediana 22,974 e duas abaixo de 22.
+Não se trata de uma rodada de cinco minutos nesse segundo caso.
+
+O runtime herdava uma janela lógica de 1920×1080 no Android. A configuração
+`GOW_WINDOW=1280x720` reduz a superfície de apresentação, preservando o renderer
+GS 1× e a interface touch Android. Os logs confirmaram a resolução lógica
+1280×720; SurfaceFlinger reportou buffer 1559×720, incluindo as barras laterais,
+contra 2339×1080 anteriormente. A proporção da imagem foi preservada.
+
+Uma rodada com 24 FPS, 720p, processamento paralelo e conjunto de núcleos de
+desempenho coletou 62 janelas. Excluindo as duas de transição, as 60 restantes
+(aproximadamente cinco minutos) tiveram **22,373–24,000 FPS**, mediana **23,770**,
+sem janelas abaixo de 22. Kratos permaneceu vivo defendendo. O p95 das janelas
+variou de 41,706 a 58,213 ms, e houve um intervalo máximo de 91,215 ms: as médias
+de cinco segundos não significam ausência de engasgos individuais.
+
+Os testes seguintes com ataques ficaram abaixo de 22 FPS. A repetição com entrada
+contínua também apresentou quedas. Portanto, o resultado de defesa não comprova
+estabilidade durante golpes, efeitos ou campanha. Os inimigos e a câmera mudam
+entre execuções, e não foi estabelecida causalidade isolada entre 720p e o ganho.
+
+O caminho final usa a configuração de janela existente no runtime. O ensaio
+anterior com SurfaceHolder foi descartado porque NativeActivity rejeitou o ajuste;
+o ajuste direto de buffers foi substituído pela raylib. Esses protótipos não
+fazem parte do código final. A preferência 720p foi adicionada ao menu, vem
+desativada e exige reabrir o jogo. No POCO, foi ativada pela interface no opt45;
+o marcador de diagnóstico foi removido e a janela 1280×720 foi confirmada.
+A nova rodada de 26/10 usa limite 30 para avaliar a meta de pelo menos 25 FPS.

@@ -32,6 +32,8 @@ final class MobileUi {
         body.addView(text(a,"IMAGEM E DESEMPENHO",18));
         body.addView(text(a,"Resolução interna: 1×, 2× ou 3×. A mudança vale na próxima abertura do jogo.",14));
         slider(body,p,"scale","Resolução interna",1,3,1,changed);
+        Switch presentation=new Switch(a);presentation.setText("Apresentação em 720p (próxima abertura)");presentation.setTextColor(TEXT);presentation.setChecked(p.getBoolean("presentation720",false));presentation.setOnCheckedChangeListener((v,b)->{p.edit().putBoolean("presentation720",b).apply();changed.run();});body.addView(presentation);
+        body.addView(text(a,"Reduz a resolução da imagem apresentada na tela. A resolução interna do PS2 e os controles touch são configurados separadamente.",14));
         body.addView(text(a,"Limite de quadros do jogo",16));
         Spinner fps=new Spinner(a);
         final int[] limits={24,30,60};
